@@ -85,7 +85,7 @@ algname(int a, const struct alg algs[], int nalgs)
  * Little program to dump the statistics block for fast ipsec.
  */
 int
-main(int argc, char *argv[])
+main(void)
 {
 #define	STAT(x,fmt)	if (x) printf(fmt "\n", (uintmax_t)x)
 	struct ipsecstat ips;

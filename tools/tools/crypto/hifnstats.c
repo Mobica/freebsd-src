@@ -38,7 +38,7 @@
  * Little program to dump the statistics block for the hifn driver.
  */
 int
-main(int argc, char *argv[])
+main(void)
 {
 	struct hifn_stats stats;
 	size_t slen;
@@ -47,9 +47,9 @@ main(int argc, char *argv[])
 	if (sysctlbyname("hw.hifn.stats", &stats, &slen, NULL, 0) < 0)
 		err(1, "kern.hifn.stats");
 
-	printf("input %llu bytes %u packets\n",
+	printf("input %lu bytes %u packets\n",
 		stats.hst_ibytes, stats.hst_ipackets);
-	printf("output %llu bytes %u packets\n",
+	printf("output %lu bytes %u packets\n",
 		stats.hst_obytes, stats.hst_opackets);
 	printf("invalid %u nomem %u abort %u\n",
 		stats.hst_invalid, stats.hst_nomem, stats.hst_abort);

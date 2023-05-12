@@ -46,7 +46,7 @@
 static void
 printt(const char* tag, struct cryptotstat *ts)
 {
-	uint64_t avg, min, max;
+	unsigned long long avg, min, max;
 
 	if (ts->count == 0)
 		return;
@@ -92,12 +92,12 @@ main(int argc, char *argv[])
 	}
 
 
-	printf("%u symmetric crypto ops (%u errors, %u times driver blocked)\n"
+	printf("%lu symmetric crypto ops (%lu errors, %lu times driver blocked)\n"
 		, stats.cs_ops, stats.cs_errs, stats.cs_blocks);
-	printf("%u key ops (%u errors, %u times driver blocked)\n"
+	printf("%lu key ops (%lu errors, %lu times driver blocked)\n"
 		, stats.cs_kops, stats.cs_kerrs, stats.cs_kblocks);
-	printf("%u crypto dispatch thread activations\n", stats.cs_intrs);
-	printf("%u crypto return thread activations\n", stats.cs_rets);
+	printf("%lu crypto dispatch thread activations\n", stats.cs_intrs);
+	printf("%lu crypto return thread activations\n", stats.cs_rets);
 	if (stats.cs_invoke.count) {
 		printf("\n");
 		printt("dispatch->invoke", &stats.cs_invoke);

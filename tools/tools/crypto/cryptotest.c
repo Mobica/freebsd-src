@@ -108,14 +108,12 @@
 #define	CHUNK	64	/* how much to display */
 #define	streq(a,b)	(strcasecmp(a,b) == 0)
 
-void	hexdump(char *, int);
+static int	verbose = 0;
+static int	opflags = 0;
+static int	verify = 0;
+static int	crid = CRYPTO_FLAG_HARDWARE;
 
-int	verbose = 0;
-int	opflags = 0;
-int	verify = 0;
-int	crid = CRYPTO_FLAG_HARDWARE;
-
-struct alg {
+static struct alg {
 	const char* name;
 	int	ishash;
 	int	blocksize;
@@ -145,6 +143,19 @@ struct alg {
 	{ "sha512",	1,	8,	64,	64,	CRYPTO_SHA2_512_HMAC },
 };
 
+struct alg* getalgbycode(int);
+static void	usage(const char*);
+static struct alg* getalgbyname(const char*);
+static int devcrypto(void);
+static int crlookup(const char *);
+static const char * crfind(int);
+static char rdigit(void);
+static void runtest(struct alg *, struct alg *, int, int, u_long, struct timeval *);
+static void printt(const char *, struct cryptotstat *);
+static void runtests(struct alg *, struct alg *, int, int, u_long, int, int);
+static void resetstats(void);
+static void	hexdump(char *, int);
+
 void
 usage(const char* cmd)
 {
@@ -173,7 +184,7 @@ usage(const char* cmd)
 struct alg*
 getalgbycode(int cipher)
 {
-	int i;
+	uint64_t i;
 
 	for (i = 0; i < nitems(algorithms); i++)
 		if (cipher == algorithms[i].code)
@@ -184,7 +195,7 @@ getalgbycode(int cipher)
 struct alg*
 getalgbyname(const char* name)
 {
-	int i;
+	uint64_t i;
 
 	for (i = 0; i < nitems(algorithms); i++)
 		if (streq(name, algorithms[i].name))
@@ -223,12 +234,12 @@ crlookup(const char *devname)
 }
 
 const char *
-crfind(int crid)
+crfind(int id)
 {
 	static struct crypt_find_op find;
 
 	bzero(&find, sizeof(find));
-	find.crid = crid;
+	find.crid = id;
 	if (ioctl(devcrypto(), CIOCFINDDEV, &find) == -1)
 		err(1, "ioctl(CIOCFINDDEV): crid %d", crid);
 	return find.name;
@@ -247,8 +258,10 @@ rdigit(void)
 void
 runtest(struct alg *ealg, struct alg *alg, int count, int size, u_long cmd, struct timeval *tv)
 {
+	uint32_t j;
+	uint64_t k;
 	int i, fd = devcrypto();
-	struct timeval start, stop, dt;
+	struct timeval start, stop;
 	char *cleartext, *ciphertext, *originaltext, *key;
 	struct session2_op sop;
 	struct crypt_op cop;
@@ -267,8 +280,8 @@ runtest(struct alg *ealg, struct alg *alg, int count, int size, u_long cmd, stru
 		key = (char *) malloc(sop.keylen);
 		if (key == NULL)
 			err(1, "malloc (key)");
-		for (i = 0; i < sop.keylen; i++)
-			key[i] = rdigit();
+		for (j = 0; j < sop.keylen; j++)
+			key[j] = rdigit();
 		sop.key = key;
 		sop.cipher = ealg->code;
 	}
@@ -315,8 +328,8 @@ runtest(struct alg *ealg, struct alg *alg, int count, int size, u_long cmd, stru
 	for (i = 0; i < size; i++)
 		cleartext[i] = rdigit();
 	memcpy(originaltext, cleartext, size);
-	for (i = 0; i < nitems(iv); i++)
-		iv[i] = rdigit();
+	for (k = 0; k < nitems(iv); k++)
+		iv[k] = rdigit();
 
 	if (verbose) {
 		printf("session = 0x%x\n", sop.ses);
@@ -410,7 +423,7 @@ runtest(struct alg *ealg, struct alg *alg, int count, int size, u_long cmd, stru
 
 #ifdef __FreeBSD__
 void
-resetstats()
+resetstats(void)
 {
 	struct cryptostats stats;
 	size_t slen;
@@ -435,7 +448,7 @@ resetstats()
 void
 printt(const char* tag, struct cryptotstat *ts)
 {
-	uint64_t avg, min, max;
+	unsigned long long avg, min, max;
 
 	if (ts->count == 0)
 		return;
@@ -454,7 +467,6 @@ runtests(struct alg *ealg, struct alg *alg, int count, int size, u_long cmd, int
 	double t;
 	void *region;
 	struct timeval *tvp;
-	struct timeval total;
 	int otiming;
 
 	if (size % alg->blocksize || (ealg && size % ealg->blocksize)) {
@@ -541,12 +553,14 @@ main(int argc, char **argv)
 	struct alg *alg = NULL, *ealg = NULL;
 	char *tmp;
 	int count = 1;
-	int sizes[128], nsizes = 0;
+	int sizes[128];
+	uint64_t nsizes = 0;
 	u_long cmd = CIOCGSESSION2;
 	int testall = 0;
 	int maxthreads = 1;
 	int profile = 0;
-	int i, ch;
+	int ch;
+	uint64_t i;
 
 	while ((ch = getopt(argc, argv, "cpzsva:bd:t:")) != -1) {
 		switch (ch) {
@@ -629,7 +643,7 @@ main(int argc, char **argv)
 
 	if (testall) {
 		for (i = 0; i < nitems(algorithms); i++) {
-			int j;
+			uint64_t j;
 			alg = &algorithms[i];
 			for (j = 0; j < nsizes; j++)
 				runtests(ealg, alg, count, sizes[j], cmd, maxthreads, profile);

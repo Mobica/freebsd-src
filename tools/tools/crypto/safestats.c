@@ -38,7 +38,7 @@
  * Little program to dump the statistics block for the safe driver.
  */
 int
-main(int argc, char *argv[])
+main(void)
 {
 	struct safe_stats stats;
 	size_t slen;
@@ -47,9 +47,9 @@ main(int argc, char *argv[])
 	if (sysctlbyname("hw.safe.stats", &stats, &slen, NULL, 0) < 0)
 		err(1, "hw.safe.stats");
 
-	printf("input %llu bytes %u packets\n",
+	printf("input %lu bytes %u packets\n",
 		stats.st_ibytes, stats.st_ipackets);
-	printf("output %llu bytes %u packets\n",
+	printf("output %lu bytes %u packets\n",
 		stats.st_obytes, stats.st_opackets);
 	printf("invalid %u badsession %u badflags %u\n",
 		stats.st_invalid, stats.st_badsession, stats.st_badflags);
