@@ -2304,7 +2304,6 @@ athn_usb_txeof(struct usbd_xfer *xfer, void *priv,
 		DPRINTF(("TX status=%d\n", status));
 		if (status == USBD_STALLED)
 			usbd_clear_endpoint_stall_async(usc->tx_data_pipe);
-		ifp->if_oerrors++;
 		splx(s);
 		/* XXX Why return? */
 		return;
@@ -2499,7 +2498,6 @@ athn_usb_start(struct ifnet *ifp)
 #endif
 		if (athn_usb_tx(sc, m, ni) != 0) {
 			ieee80211_release_node(ic, ni);
-			ifp->if_oerrors++;
 			continue;
 		}
 
@@ -2516,7 +2514,6 @@ athn_usb_watchdog(struct ifnet *ifp)
 		if (--sc->sc_tx_timer == 0) {
 			printf("%s: device timeout\n", sc->sc_dev.dv_xname);
 			/* athn_usb_init(ifp); XXX needs a process context! */
-			ifp->if_oerrors++;
 			return;
 		}
 	}
