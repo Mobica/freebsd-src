@@ -2504,7 +2504,6 @@ athn_usb_start(struct ifnet *ifp)
 		}
 
 		sc->sc_tx_timer = 5;
-		ifp->if_timer = 1;
 	}
 }
 
@@ -2513,8 +2512,6 @@ athn_usb_watchdog(struct ifnet *ifp)
 {
 	struct athn_softc *sc = ifp->if_softc;
 
-	ifp->if_timer = 0;
-
 	if (sc->sc_tx_timer > 0) {
 		if (--sc->sc_tx_timer == 0) {
 			printf("%s: device timeout\n", sc->sc_dev.dv_xname);
@@ -2522,7 +2519,6 @@ athn_usb_watchdog(struct ifnet *ifp)
 			ifp->if_oerrors++;
 			return;
 		}
-		ifp->if_timer = 1;
 	}
 	ieee80211_watchdog(ifp);
 }
@@ -2751,7 +2747,6 @@ athn_usb_stop(struct ifnet *ifp)
 	int s;
 
 	sc->sc_tx_timer = 0;
-	ifp->if_timer = 0;
 	ifp->if_flags &= ~IFF_RUNNING;
 	ifq_clr_oactive(&ifp->if_snd);
 
