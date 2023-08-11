@@ -2118,7 +2118,6 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m,
 	if (rs->rs_status != 0) {
 		if (rs->rs_status & AR_RXS_RXERR_DECRYPT)
 			ic->ic_stats.is_ccmp_dec_errs++;
-		ifp->if_ierrors++;
 		goto skip;
 	}
 	m_adj(m, sizeof(*rs));	/* Strip Rx status. */
@@ -2157,7 +2156,6 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m,
 	    (IEEE80211_IS_MULTICAST(wh->i_addr1) &&
 	    ni->ni_rsngroupcipher == IEEE80211_CIPHER_CCMP))) {
 		if (ar5008_ccmp_decap(sc, m, ni) != 0) {
-			ifp->if_ierrors++;
 			ieee80211_release_node(ic, ni);
 			splx(s);
 			goto skip;
@@ -2252,9 +2250,6 @@ athn_usb_rxeof(struct usbd_xfer *xfer, void *priv,
 			}
 		} else	/* Drop frames larger than MCLBYTES. */
 			m = NULL;
-
-		if (m == NULL)
-			ifp->if_ierrors++;
 
 		/*
 		 * NB: m can be NULL, in which case the next pktlen bytes
