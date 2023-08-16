@@ -2281,7 +2281,7 @@ athn_usb_rxeof(struct usbd_xfer *xfer, void *priv,
 		buf += off;
 		len -= off;
 	}
-	if_input(ifp, &ml);
+	if_input(ifp, m);
 
  resubmit:
 	/* Setup a new transfer. */
