@@ -2612,7 +2612,7 @@ athn_usb_init(struct ifnet *ifp)
 	extc = NULL;
 
 	/* In case a new MAC address has been configured. */
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
+	IEEE80211_ADDR_COPY(ic->ic_myaddr, IF_LLADDR(ifp));
 
 	error = athn_set_power_awake(sc);
 	if (error != 0)
