@@ -61,6 +61,7 @@
 // #include <dev/ic/athnvar.h>
 #include "athnreg.h"
 #include "athnvar.h"
+#include "openbsd_adapt.h"
 
 // TODO missing macro def
 #define NATHN_USB 0
@@ -2917,12 +2918,12 @@ athn_start(struct ifnet *ifp)
 	struct ieee80211_node *ni;
 	struct mbuf *m;
 
-	if (!(ifp->if_flags & IFF_DRV_RUNNING) || ifq_is_oactive(&ifp->if_snd))
+	if (!(ifp->if_flags & IFF_DRV_RUNNING) || ifq_is_oactive())
 		return;
 
 	for (;;) {
 		if (SIMPLEQ_EMPTY(&sc->txbufs)) {
-			ifq_set_oactive(&ifp->if_snd);
+			ifq_set_oactive();
 			break;
 		}
 		/* Send pending management frames first. */
@@ -3175,7 +3176,7 @@ athn_init(struct ifnet *ifp)
 		athn_btcoex_enable(sc);
 #endif
 
-	ifq_clr_oactive(&ifp->if_snd);
+	ifq_clr_oactive();
 	ifp->if_flags |= IFF_DRV_RUNNING;
 
 #ifdef notyet
@@ -3205,7 +3206,7 @@ athn_stop(struct ifnet *ifp, int disable)
 
 	ifp->if_timer = sc->sc_tx_timer = 0;
 	ifp->if_flags &= ~IFF_DRV_RUNNING;
-	ifq_clr_oactive(&ifp->if_snd);
+	ifq_clr_oactive();
 
 	timeout_del(&sc->scan_to);
 
