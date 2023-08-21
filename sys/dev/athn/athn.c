@@ -32,14 +32,14 @@
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/queue.h>
-#include <sys/timeout.h>
+//#include <sys/timeout.h>
 #include <sys/conf.h>
 #include <linux/device.h>
 #include <sys/stdint.h>	/* uintptr_t */
 #include <sys/endian.h>
 
 #include <machine/bus.h>
-#include <machine/intr.h>
+//#include <machine/intr.h>
 
 // #if NBPFILTER > 0
 // #include <net/bpf.h>
