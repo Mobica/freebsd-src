@@ -3113,7 +3113,7 @@ athn_init(struct ifnet *ifp)
 	extc = NULL;
 
 	/* In case a new MAC address has been configured. */
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
+	IEEE80211_ADDR_COPY(ic->ic_myaddr, IF_LLADDR(ifp));
 
 	/* For CardBus, power on the socket. */
 	if (sc->sc_enable != NULL) {
