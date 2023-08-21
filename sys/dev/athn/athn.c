@@ -2960,12 +2960,10 @@ athn_start(struct ifnet *ifp)
 #endif
 		if (sc->ops.tx(sc, m, ni, 0) != 0) {
 			ieee80211_release_node(ic, ni);
-			ifp->if_oerrors++;
 			continue;
 		}
 
 		sc->sc_tx_timer = 5;
-		ifp->if_timer = 1;
 	}
 }
 
@@ -2974,7 +2972,6 @@ athn_watchdog(struct ifnet *ifp)
 {
 	struct athn_softc *sc = ifp->if_softc;
 
-	ifp->if_timer = 0;
 
 	if (sc->sc_tx_timer > 0) {
 		if (--sc->sc_tx_timer == 0) {
@@ -2982,10 +2979,8 @@ athn_watchdog(struct ifnet *ifp)
 			// printf("%s: device timeout\n", sc->sc_dev.dv_xname);
 			athn_stop(ifp, 1);
 			(void)athn_init(ifp);
-			ifp->if_oerrors++;
 			return;
 		}
-		ifp->if_timer = 1;
 	}
 
 	ieee80211_watchdog(ifp);
@@ -3204,7 +3199,6 @@ athn_stop(struct ifnet *ifp, int disable)
 	__attribute__((unused)) struct ieee80211com *ic = &sc->sc_ic;
 	int qid, i;
 
-	ifp->if_timer = sc->sc_tx_timer = 0;
 	ifp->if_flags &= ~IFF_DRV_RUNNING;
 	ifq_clr_oactive();
 
