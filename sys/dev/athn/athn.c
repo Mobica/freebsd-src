@@ -34,7 +34,7 @@
 #include <sys/queue.h>
 //#include <sys/timeout.h>
 #include <sys/conf.h>
-#include <linux/device.h>
+//#include <linux/device.h>
 #include <sys/stdint.h>	/* uintptr_t */
 #include <sys/endian.h>
 
