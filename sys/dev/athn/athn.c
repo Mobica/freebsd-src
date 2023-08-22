@@ -26,7 +26,7 @@
 
 #include <sys/param.h>
 #include <sys/sockio.h>
-#include <sys/mbuf.h>
+//#include <sys/mbuf.h>
 #include <sys/kernel.h>
 #include <sys/socket.h>
 #include <sys/systm.h>
@@ -37,7 +37,7 @@
 //#include <linux/device.h>
 #include <sys/stdint.h>	/* uintptr_t */
 #include <sys/endian.h>
-
+#include <openbsd/openbsd_mbuf.h>
 #include <machine/bus.h>
 //#include <machine/intr.h>
 
@@ -49,9 +49,14 @@
 #include <net/if_media.h>
 
 #include <netinet/in.h>
-#include <netinet/if_ether.h>
+//#include <netinet/if_ether.h>
 
 // #include <linux/ieee80211.h>
+#include <net/if_arp.h>
+
+
+
+//#include <net/route/route_var.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_ra.h>
@@ -2581,8 +2586,8 @@ athn_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni, int isnew)
 	int ridx, i, j;
 
 	// TODO implicit declaration of function 'ieee80211_amrr_node_init'
-	// if ((ni->ni_flags & IEEE80211_NODE_HT) == 0)
-	// 	ieee80211_amrr_node_init(&sc->amrr, &an->amn);
+	 if ((ni->ni_flags & IEEE80211_NODE_HT) == 0)
+	 	ieee80211_amrr_node_init(&sc->amrr, &an->amn);
 	else if (ic->ic_opmode == IEEE80211_M_STA)
 		ieee80211_ra_node_init(&an->rn);
 
@@ -2927,7 +2932,8 @@ athn_start(struct ifnet *ifp)
 			break;
 		}
 		/* Send pending management frames first. */
-		m = mq_dequeue(&ic->ic_mgtq);
+		//m = mq_dequeue(&ic->ic_mgtq);
+		m = ml_dequeue(&ic->ic_mgtq.mq_list);
 		if (m != NULL) {
 			ni = m->m_pkthdr.ph_cookie;
 			goto sendit;
@@ -2935,7 +2941,8 @@ athn_start(struct ifnet *ifp)
 		if (ic->ic_state != IEEE80211_S_RUN)
 			break;
 
-		m = mq_dequeue(&ic->ic_pwrsaveq);
+		//m = mq_dequeue(&ic->ic_pwrsaveq);
+		m = ml_dequeue(&ic->ic_pwrsaveq.mq_list);
 		if (m != NULL) {
 			ni = m->m_pkthdr.ph_cookie;
 			goto sendit;
@@ -2944,7 +2951,7 @@ athn_start(struct ifnet *ifp)
 			break;
 
 		/* Encapsulate and send data frames. */
-		m = ifq_dequeue(&ifp->if_snd);
+		ALTQ_DEQUEUE(&ifp->if_snd, m);
 		if (m == NULL)
 			break;
 #if NBPFILTER > 0
