@@ -53,10 +53,6 @@
 
 // #include <linux/ieee80211.h>
 #include <net/if_arp.h>
-
-
-
-//#include <net/route/route_var.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_ra.h>
@@ -2932,6 +2928,7 @@ athn_start(struct ifnet *ifp)
 			break;
 		}
 		/* Send pending management frames first. */
+		//OpenBSD->FreeBSD prev code:
 		//m = mq_dequeue(&ic->ic_mgtq);
 		m = ml_dequeue(&ic->ic_mgtq.mq_list);
 		if (m != NULL) {
@@ -2941,6 +2938,7 @@ athn_start(struct ifnet *ifp)
 		if (ic->ic_state != IEEE80211_S_RUN)
 			break;
 
+		//OpenBSD->FreeBSD prev code:
 		//m = mq_dequeue(&ic->ic_pwrsaveq);
 		m = ml_dequeue(&ic->ic_pwrsaveq.mq_list);
 		if (m != NULL) {

@@ -47,7 +47,7 @@
 #define	IFF_RUNNING	IFF_DRV_RUNNING
 
 // map 3-argument OpenBSD free function to 2-argument FreeBSD one
-// if the number of arguments is 2, do nothing
+// if the number of arguments is 2 - do nothing
 #define free(addr,type,...)	free(addr,type)
 
 static inline uint64_t
