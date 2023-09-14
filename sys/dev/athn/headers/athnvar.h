@@ -17,8 +17,9 @@
  */
 
 #include <openbsd/openbsd_queue.h>
+#include <sys/bus_dma.h>
 #include "../../../../crypto/openssh/openbsd-compat/sys-queue.h"
-#include <openbsd_device.h>
+//#include <openbsd_device.h>
 
 #define NBPFILTER 0
 
@@ -435,7 +436,7 @@ struct athn_ops {
 };
 
 struct athn_softc {
-	struct device			sc_dev;
+	device_t	    sc_dev;
 	struct ieee80211com		sc_ic;
 
 	int				(*sc_enable)(struct athn_softc *);
