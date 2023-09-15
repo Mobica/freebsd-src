@@ -119,6 +119,24 @@ static device_probe_t	athn_usb_match;
 static device_attach_t	athn_usb_attach;
 static device_detach_t	athn_usb_detach;
 
+// Temp
+static void
+ar9271_load_ani(struct athn_softc *sc)
+{
+#if NATHN_USB > 0
+	/* Write ANI registers. */
+	AR_WRITE(sc, AR_PHY_DESIRED_SZ, 0x6d4000e2);
+	AR_WRITE(sc, AR_PHY_AGC_CTL1,   0x3139605e);
+	AR_WRITE(sc, AR_PHY_FIND_SIG,   0x7ec84d2e);
+	AR_WRITE(sc, AR_PHY_SFCORR_LOW, 0x06903881);
+	AR_WRITE(sc, AR_PHY_SFCORR,     0x5ac640d0);
+	AR_WRITE(sc, AR_PHY_CCK_DETECT, 0x803e68c8);
+	AR_WRITE(sc, AR_PHY_TIMING5,    0xd00a8007);
+	AR_WRITE(sc, AR_PHY_SFCORR_EXT, 0x05eea6d4);
+	AR_WRITE_BARRIER(sc);
+#endif	/* NATHN_USB */
+}
+
 // Might be needed some devices have this defined in FreeBSD and Linux version
 //static device_suspend_t	rtwn_usb_suspend;
 //static device_resume_t	rtwn_usb_resume;
@@ -378,9 +396,10 @@ athn_usb_match(device_t self)
 
 	if (result == 0) {
 		printf("serial: %s \n", usb_get_serial(uaa->device));
-		printf("product: %s \n", usb_get_product(uaa->device));
-		printf("ProductID: %d \n", uaa->info.idProduct);
-		printf("VendorID: %d \n", uaa->info.idVendor);
+		printf("product: %s-%s \n", usb_get_manufacturer(uaa->device),
+		    usb_get_product(uaa->device));
+		printf("ProductID: 0x%x \n", uaa->info.idProduct);
+		printf("VendorID: 0x%x \n", uaa->info.idVendor);
 	}
 
 	return result;
@@ -419,7 +438,7 @@ athn_usb_attach(device_t self)
 //
 //	config_mountroot(self, athn_usb_attachhook);
 
-	printf("athn_usb_attach called");
+	printf("athn_usb_attach called \n");
 	return 0;
 }
 
@@ -445,7 +464,7 @@ athn_usb_detach(device_t self)
 //	athn_usb_free_tx_list(usc);
 //	athn_usb_free_rx_list(usc);
 
-	printf("athn_usb_detach called");
+	printf("athn_usb_detach called \n");
 	return (0);
 }
 
