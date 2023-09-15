@@ -42,6 +42,9 @@
 #include <sys/bus.h>
 //#include <machine/bus.h>
 //#include <machine/intr.h>
+#include <sys/endian.h>
+#include <sys/linker.h>
+#include <sys/kdb.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -57,10 +60,10 @@
 #include <netinet/in.h>
 //#include <netinet/if_ether.h>
 
-//#include <openbsd/net80211/ieee80211_var.h>
-//#include <openbsd/net80211/ieee80211_amrr.h>
-//#include <openbsd/net80211/ieee80211_ra.h>
-//#include <openbsd/net80211/ieee80211_radiotap.h>
+#include <openbsd/net80211/ieee80211_var.h>
+#include <openbsd/net80211/ieee80211_amrr.h>
+#include <openbsd/net80211/ieee80211_ra.h>
+#include <openbsd/net80211/ieee80211_radiotap.h>
 
 // #include <dev/ic/athnreg.h>
 // #include <dev/ic/ar5008reg.h>
@@ -77,9 +80,9 @@
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
-#include <net80211/ieee80211_node.h>
-#include <net80211/ieee80211_proto.h>
-#include <net80211/ieee80211_var.h>
+//#include <net80211/ieee80211_node.h>
+//#include <net80211/ieee80211_proto.h>
+//#include <net80211/ieee80211_var.h>
 
 #include "openbsd_adapt.h"
 #include "if_athn_usb.h"
@@ -331,13 +334,13 @@ static moduledata_t athn_usb_module = {
 	NULL
 };
 
-DECLARE_MODULE(athn_mod, athn_usb_module, SI_SUB_KLD, SI_ORDER_ANY);
+DECLARE_MODULE(athn_mod, athn_usb_module, SI_SUB_DRIVERS, SI_ORDER_ANY);
 
 static device_method_t athn_usb_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,		athn_usb_match),
 	DEVMETHOD(device_attach,	athn_usb_attach),
-	//DEVMETHOD(device_detach,	athn_usb_detach),
+	DEVMETHOD(device_detach,	athn_usb_detach),
 	//DEVMETHOD(device_suspend,	athn_usb_suspend), <-- missing in OpenBSD could be needed
 	//DEVMETHOD(device_resume,	athn_usb_resume), <-- missing in OpenBSD could be needed
 
@@ -361,6 +364,7 @@ static int
 athn_usb_match(device_t self)
 {
 	struct usb_attach_arg *uaa =  device_get_ivars(self);
+	int result = 0;
 
 	if (uaa->usb_mode != USB_MODE_HOST)
 		return (ENXIO);
@@ -369,9 +373,17 @@ athn_usb_match(device_t self)
 	if (uaa->info.bIfaceIndex != 0)
 		return (ENXIO);
 
-	printf("athn_usb_match called");
+	result = athn_usb_lookup(uaa);
+	printf("athn_usb_match called with result %d \n", result);
 
-	return athn_usb_lookup(uaa);
+	if (result == 0) {
+		printf("serial: %s \n", usb_get_serial(uaa->device));
+		printf("product: %s \n", usb_get_product(uaa->device));
+		printf("ProductID: %d \n", uaa->info.idProduct);
+		printf("VendorID: %d \n", uaa->info.idVendor);
+	}
+
+	return result;
 }
 
 static int
@@ -1141,7 +1153,7 @@ athn_usb_media_change(struct ifnet *ifp)
 //	if (usbd_is_dying(usc->sc_udev))
 //		return ENXIO;
 
-	error = ieee80211_media_change(ifp);
+//	error = ieee80211_media_change(ifp);
 	if (error != ENETRESET)
 		return (error);
 
@@ -1168,7 +1180,7 @@ athn_usb_next_scan(void *arg)
 
 	s = splnet();
 	if (ic->ic_state == IEEE80211_S_SCAN)
-		ieee80211_next_scan(&ic->ic_if);
+//		ieee80211_next_scan(&ic->ic_if);
 	splx(s);
 
 //	usbd_ref_decr(usc->sc_udev);
@@ -1221,8 +1233,8 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 		error = athn_usb_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
 		if (error)
 			printf("%s: could not switch to channel %d\n",
-			    device_get_name(usc->usb_dev),
-			    ieee80211_chan2ieee(ic, ic->ic_bss->ni_chan));
+			    device_get_name(usc->usb_dev), 0);
+//			    ieee80211_chan2ieee(ic, ic->ic_bss->ni_chan));
 //		if (!usbd_is_dying(usc->sc_udev))
 //			timeout_add_msec(&sc->scan_to, 200);
 		break;
@@ -1231,8 +1243,8 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 		error = athn_usb_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
 		if (error)
 			printf("%s: could not switch to channel %d\n",
-			    device_get_name(usc->usb_dev),
-			    ieee80211_chan2ieee(ic, ic->ic_bss->ni_chan));
+			    device_get_name(usc->usb_dev), 0);
+//			    ieee80211_chan2ieee(ic, ic->ic_bss->ni_chan));
 		break;
 	case IEEE80211_S_ASSOC:
 		break;
@@ -1291,7 +1303,7 @@ athn_usb_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni,
 		return;
 
 	/* Update the node's supported rates in a process context. */
-	ieee80211_ref_node(ni);
+//	ieee80211_ref_node(ni);
 	athn_usb_do_async(usc, athn_usb_newassoc_cb, &ni, sizeof(ni));
 #endif
 }
@@ -1312,7 +1324,7 @@ athn_usb_newassoc_cb(struct athn_usb_softc *usc, void *arg)
 	/* NB: Node may have left before we got scheduled. */
 	if (an->sta_index != 0)
 		(void)athn_usb_node_set_rates(usc, ni);
-	ieee80211_release_node(ic, ni);
+//	ieee80211_release_node(ic, ni);
 	splx(s);
 }
 #endif
@@ -1370,8 +1382,8 @@ athn_usb_newauth_cb(struct athn_usb_softc *usc, void *arg)
 			    ether_sprintf(ni->ni_macaddr));
 	}
 	if (error == 0)
-		ieee80211_auth_open_confirm(ic, ni, seq);
-	ieee80211_unref_node(&ni);
+//		ieee80211_auth_open_confirm(ic, ni, seq);
+//	ieee80211_unref_node(&ni);
 	splx(s);
 }
 #endif
@@ -1395,7 +1407,7 @@ athn_usb_newauth(struct ieee80211com *ic, struct ieee80211_node *ni,
 
 	/* Check if we have room in the firmware table. */
 	nsta = 1; /* Account for default node. */
-	ieee80211_iterate_nodes(ic, athn_usb_count_active_sta, &nsta);
+//	ieee80211_iterate_nodes(ic, athn_usb_count_active_sta, &nsta);
 	if (nsta >= AR_USB_MAX_STA) {
 		if (ifp->if_flags & IFF_DEBUG)
 			printf("%s: cannot authenticate station %s: firmware "
@@ -1408,7 +1420,7 @@ athn_usb_newauth(struct ieee80211com *ic, struct ieee80211_node *ni,
 	 * In a process context, try to add this node to the
 	 * firmware table and confirm the AUTH request.
 	 */
-	arg.ni = ieee80211_ref_node(ni);
+//	arg.ni = ieee80211_ref_node(ni);
 	arg.seq = seq;
 	athn_usb_do_async(usc, athn_usb_newauth_cb, &arg, sizeof(arg));
 	return EBUSY;
@@ -1543,7 +1555,7 @@ athn_usb_clean_nodes(void *arg, struct ieee80211_node *ni)
 	if (ni->ni_inact >= IEEE80211_INACT_MAX) {
 		IEEE80211_SEND_MGMT(ic, ni, IEEE80211_FC0_SUBTYPE_DEAUTH,
 		    IEEE80211_REASON_AUTH_EXPIRE);
-		ieee80211_node_leave(ic, ni);
+//		ieee80211_node_leave(ic, ni);
 	}
 }
 #endif
@@ -1560,7 +1572,7 @@ athn_usb_create_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 
 	/* Firmware cannot handle more than 8 STAs. Try to make room first. */
 	if (ic->ic_opmode == IEEE80211_M_HOSTAP)
-		ieee80211_iterate_nodes(ic, athn_usb_clean_nodes, usc);
+//		ieee80211_iterate_nodes(ic, athn_usb_clean_nodes, usc);
 #endif
 	if (usc->free_node_slots == 0x00)
 		return ENOBUFS;
@@ -1789,7 +1801,7 @@ athn_usb_set_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 		return (0);
 
 	/* Do it in a process context. */
-	cmd.ni = (ni != NULL) ? ieee80211_ref_node(ni) : NULL;
+//	cmd.ni = (ni != NULL) ? ieee80211_ref_node(ni) : NULL;
 	cmd.key = k;
 	athn_usb_do_async(usc, athn_usb_set_key_cb, &cmd, sizeof(cmd));
 	usc->sc_key_tasks++;
@@ -1812,10 +1824,10 @@ athn_usb_set_key_cb(struct athn_usb_softc *usc, void *arg)
 		DPRINTF(("marking port %s valid\n",
 		    ether_sprintf(cmd->ni->ni_macaddr)));
 		cmd->ni->ni_port_valid = 1;
-		ieee80211_set_link_state(ic, LINK_STATE_UP);
+//		ieee80211_set_link_state(ic, LINK_STATE_UP);
 	}
 	if (cmd->ni != NULL)
-		ieee80211_release_node(ic, cmd->ni);
+//		ieee80211_release_node(ic, cmd->ni);
 	splx(s);
 }
 
@@ -1831,7 +1843,7 @@ athn_usb_delete_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 		return;	/* Nothing to do. */
 
 	/* Do it in a process context. */
-	cmd.ni = (ni != NULL) ? ieee80211_ref_node(ni) : NULL;
+//	cmd.ni = (ni != NULL) ? ieee80211_ref_node(ni) : NULL;
 	cmd.key = k;
 	athn_usb_do_async(usc, athn_usb_delete_key_cb, &cmd, sizeof(cmd));
 }
@@ -1846,7 +1858,7 @@ athn_usb_delete_key_cb(struct athn_usb_softc *usc, void *arg)
 	s = splnet();
 	athn_delete_key(ic, cmd->ni, cmd->key);
 	if (cmd->ni != NULL)
-		ieee80211_release_node(ic, cmd->ni);
+//		ieee80211_release_node(ic, cmd->ni);
 	splx(s);
 }
 
@@ -1890,11 +1902,11 @@ athn_usb_swba(struct athn_usb_softc *usc)
 	data = usc->tx_bcn;
 
 	/* Get new beacon. */
-	m = ieee80211_beacon_alloc(ic, ic->ic_bss);
+//	m = ieee80211_beacon_alloc(ic, ic->ic_bss);
 	if (__predict_false(m == NULL))
 		return;
 	/* Assign sequence number. */
-	wh = mtod(m, struct ieee80211_frame *);
+//	wh = mtod(m, struct ieee80211_frame *);
 	*(uint16_t *)&wh->i_seq[0] =
 	    htole16(ic->ic_bss->ni_txseq << IEEE80211_SEQ_SEQ_SHIFT);
 	ic->ic_bss->ni_txseq++;
@@ -1999,9 +2011,9 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 
 			if (ts->cookie == an->sta_index)
 				athn_usb_tx_status(ts, ic->ic_bss);
-			else
-				ieee80211_iterate_nodes(ic, athn_usb_tx_status,
-				    ts);
+//			else
+//				ieee80211_iterate_nodes(ic, athn_usb_tx_status,
+//				    ts);
 		}
 		break;
 	}
@@ -2211,15 +2223,15 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m,
 
 	/* Grab a reference to the source node. */
 	wh = mtod(m, struct ieee80211_frame *);
-	ni = ieee80211_find_rxnode(ic, wh);
+//	ni = ieee80211_find_rxnode(ic, wh);
 
 	/* Remove any HW padding after the 802.11 header. */
 	if (!(wh->i_fc[0] & IEEE80211_FC0_TYPE_CTL)) {
-		u_int hdrlen = ieee80211_get_hdrlen(wh);
-		if (hdrlen & 3) {
-			memmove((caddr_t)wh + 2, wh, hdrlen);
-			m_adj(m, 2);
-		}
+//		u_int hdrlen = ieee80211_get_hdrlen(wh);
+//		if (hdrlen & 3) {
+//			memmove((caddr_t)wh + 2, wh, hdrlen);
+//			m_adj(m, 2);
+//		}
 		wh = mtod(m, struct ieee80211_frame *);
 	}
 #if NBPFILTER > 0
@@ -2241,16 +2253,16 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m,
 	    (IEEE80211_IS_MULTICAST(wh->i_addr1) &&
 	    ni->ni_rsngroupcipher == IEEE80211_CIPHER_CCMP))) {
 		if (ar5008_ccmp_decap(sc, m, ni) != 0) {
-			ieee80211_release_node(ic, ni);
+//			ieee80211_release_node(ic, ni);
 			splx(s);
 			goto skip;
 		}
 		rxi.rxi_flags |= IEEE80211_RXI_HWDEC;
 	}
-	ieee80211_inputm(ifp, m, ni, &rxi, ml);
+//	ieee80211_inputm(ifp, m, ni, &rxi, ml);
 
 	/* Node is no longer needed. */
-	ieee80211_release_node(ic, ni);
+//	ieee80211_release_node(ic, ni);
 	splx(s);
 	return;
  skip:
@@ -2424,24 +2436,24 @@ athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	uint8_t qid, tid = 0;
 	int hasqos, xferlen, error;
 
-	wh = mtod(m, struct ieee80211_frame *);
+//	wh = mtod(m, struct ieee80211_frame *);
 	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
-		k = ieee80211_get_txkey(ic, wh, ni);
+//		k = ieee80211_get_txkey(ic, wh, ni);
 		if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
-			u_int hdrlen = ieee80211_get_hdrlen(wh);
-			if (ar5008_ccmp_encap(m, hdrlen, k) != 0)
-				return (ENOBUFS);
+//			u_int hdrlen = ieee80211_get_hdrlen(wh);
+//			if (ar5008_ccmp_encap(m, hdrlen, k) != 0)
+//				return (ENOBUFS);
 		} else {
-			if ((m = ieee80211_encrypt(ic, m, k)) == NULL)
-				return (ENOBUFS);
-			k = NULL; /* skip hardware crypto further below */
+//			if ((m = ieee80211_encrypt(ic, m, k)) == NULL)
+//				return (ENOBUFS);
+//			k = NULL; /* skip hardware crypto further below */
 		}
 		wh = mtod(m, struct ieee80211_frame *);
 	}
 	if ((hasqos = ieee80211_has_qos(wh))) {
-		qos = ieee80211_get_qos(wh);
+//		qos = ieee80211_get_qos(wh);
 		tid = qos & IEEE80211_QOS_TID;
-		qid = ieee80211_up_to_ac(ic, tid);
+//		qid = ieee80211_up_to_ac(ic, tid);
 	} else
 		qid = EDCA_AC_BE;
 
@@ -2539,7 +2551,7 @@ athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 //		TAILQ_INSERT_TAIL(&usc->tx_free_list, data, next);
 //		return (error);
 //	}
-	ieee80211_release_node(ic, ni);
+//	ieee80211_release_node(ic, ni);
 	return (0);
 }
 
@@ -2561,7 +2573,7 @@ athn_usb_start(struct ifnet *ifp)
 			break;
 		}
 		/* Send pending management frames first. */
-		m = mq_dequeue(&ic->ic_mgtq);
+//		m = mq_dequeue(&ic->ic_mgtq);
 		if (m != NULL) {
 			ni = m->m_pkthdr.ph_cookie;
 			goto sendit;
@@ -2577,15 +2589,15 @@ athn_usb_start(struct ifnet *ifp)
 		f (ifp->if_bpf != NULL)
 			bpf_mtap(ifp->if_bpf, m, BPF_DIRECTION_OUT);
 #endif
-		if ((m = ieee80211_encap(ifp, m, &ni)) == NULL)
-			continue;
+//		if ((m = ieee80211_encap(ifp, m, &ni)) == NULL)
+//			continue;
  sendit:
 #if NBPFILTER > 0
 		if (ic->ic_rawbpf != NULL)
 			bpf_mtap(ic->ic_rawbpf, m, BPF_DIRECTION_OUT);
 #endif
 		if (athn_usb_tx(sc, m, ni) != 0) {
-			ieee80211_release_node(ic, ni);
+//			ieee80211_release_node(ic, ni);
 			continue;
 		}
 
@@ -2605,7 +2617,7 @@ athn_usb_watchdog(struct ifnet *ifp)
 			return;
 		}
 	}
-	ieee80211_watchdog(ifp);
+//	ieee80211_watchdog(ifp);
 }
 
 int
@@ -2637,7 +2649,7 @@ athn_usb_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 		break;
 	case SIOCS80211CHANNEL:
-		error = ieee80211_ioctl(ifp, cmd, data);
+//		error = ieee80211_ioctl(ifp, cmd, data);
 		if (error == ENETRESET &&
 		    ic->ic_opmode == IEEE80211_M_MONITOR) {
 			if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) ==
@@ -2648,8 +2660,8 @@ athn_usb_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			error = 0;
 		}
 		break;
-	default:
-		error = ieee80211_ioctl(ifp, cmd, data);
+//	default:
+//		error = ieee80211_ioctl(ifp, cmd, data);
 	}
 
 	if (error == ENETRESET) {
@@ -2810,10 +2822,10 @@ athn_usb_init(struct ifnet *ifp)
 			athn_usb_set_key(ic, NULL, &ic->ic_nw_keys[i]);
 	}
 #endif
-	if (ic->ic_opmode == IEEE80211_M_MONITOR)
-		ieee80211_new_state(ic, IEEE80211_S_RUN, -1);
-	else
-		ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
+//	if (ic->ic_opmode == IEEE80211_M_MONITOR)
+//		ieee80211_new_state(ic, IEEE80211_S_RUN, -1);
+//	else
+//		ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
 	athn_usb_wait_async(usc);
 	return (0);
  fail:
@@ -2836,7 +2848,7 @@ athn_usb_stop(struct ifnet *ifp)
 	ifq_clr_oactive();
 
 //	s = splusb();
-	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
+//	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
 
 	/* Wait for all async commands to complete. */
 	athn_usb_wait_async(usc);

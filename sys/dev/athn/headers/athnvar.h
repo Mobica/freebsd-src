@@ -17,6 +17,7 @@
  */
 
 #include <openbsd/openbsd_queue.h>
+#include <sys/bus.h>
 #include <sys/bus_dma.h>
 #include "../../../../crypto/openssh/openbsd-compat/sys-queue.h"
 //#include <openbsd_device.h>
