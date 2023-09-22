@@ -42,6 +42,7 @@ athn_usb_unload_firmware()
 {
 	if (fware == NULL) {
 		printf("Fail: null firmware handler\n");
+		return;
 	}
 
 	firmware_put(fware, FIRMWARE_UNLOAD);

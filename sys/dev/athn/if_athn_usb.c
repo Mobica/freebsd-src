@@ -159,7 +159,6 @@ void		athn_usb_task(void *);
 void		athn_usb_do_async(struct athn_usb_softc *,
 		    void (*)(struct athn_usb_softc *, void *), void *, int);
 void		athn_usb_wait_async(struct athn_usb_softc *);
-int		athn_usb_load_firmware(struct athn_usb_softc *);
 int		athn_usb_htc_msg(struct athn_usb_softc *, uint16_t, void *,
 		    int);
 int		athn_usb_htc_setup(struct athn_usb_softc *);
