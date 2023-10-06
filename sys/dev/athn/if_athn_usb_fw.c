@@ -93,6 +93,9 @@ athn_usb_transfer_firmware(struct athn_usb_softc *usc)
 	uint32_t addr;
 	int s, mlen;
 	int error = 0;
+
+	mtx_lock(&usc->sc_sc.sc_mtx);
+
 /* Load firmware image. */
 	ptr = (void *)fware->data;
 	addr = AR9271_FIRMWARE >> 8;
@@ -107,7 +110,7 @@ athn_usb_transfer_firmware(struct athn_usb_softc *usc)
 		USETW(req.wValue, addr);
 		USETW(req.wLength, mlen);
 
-		error = usbd_do_request(usc->sc_udev, NULL, &req, ptr);
+		error = usbd_do_request(usc->sc_udev, &usc->sc_sc.sc_mtx, &req, ptr);
 		if (error != 0) {
 			athn_usb_unload_firmware();
 			return (error);
@@ -135,14 +138,12 @@ athn_usb_transfer_firmware(struct athn_usb_softc *usc)
 	/* TODO:
 	 * splnet / splx is deprecated, use mutexes
 	 */
-	s = splnet();
+//	s = splnet();
 	usc->wait_msg_id = AR_HTC_MSG_READY;
 	
 	printf("Send AR_HTC_MSG_READY message\n");
 
-	mtx_lock(&usc->sc_sc.sc_mtx);
 	error = usbd_do_request(usc->sc_udev, &usc->sc_sc.sc_mtx, &req, NULL);
-	mtx_unlock(&usc->sc_sc.sc_mtx);
 
 	/* Wait at most 1 second for firmware to boot. */
 	if (error == 0 && usc->wait_msg_id != 0) {
@@ -150,7 +151,8 @@ athn_usb_transfer_firmware(struct athn_usb_softc *usc)
 		    SEC_TO_NSEC(1));
 	}
 	usc->wait_msg_id = 0;
-	splx(s);
+	mtx_unlock(&usc->sc_sc.sc_mtx);
+//	splx(s);
 	if (error) {
 		printf("Error waiting message, errno: %d\n", error);
 	} else {
