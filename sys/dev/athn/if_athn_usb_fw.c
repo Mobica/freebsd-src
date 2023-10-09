@@ -145,20 +145,8 @@ athn_usb_transfer_firmware(struct athn_usb_softc *usc)
 
 	error = usbd_do_request(usc->sc_udev, &usc->sc_sc.sc_mtx, &req, NULL);
 
-	/* Wait at most 1 second for firmware to boot. */
-	if (error == 0 && usc->wait_msg_id != 0) {
-		error = tsleep_nsec(&usc->wait_msg_id, 0, "athnfw",
-		    SEC_TO_NSEC(1));
-	}
-	usc->wait_msg_id = 0;
 	mtx_unlock(&usc->sc_sc.sc_mtx);
 //	splx(s);
-	if (error) {
-		printf("Error waiting message, errno: %d\n", error);
-	} else {
-		printf("Successfully transfered firmware, errno: %d\n", error);
-	}
-	
 	return (error);
 }
 
