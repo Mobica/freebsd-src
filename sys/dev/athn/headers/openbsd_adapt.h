@@ -162,4 +162,6 @@ ifq_set_oactive()
 	ifq_oactive = 1;
 }
 
+static __inline intrmask_t	splusb(void)		{ return 0; }
+
 #endif /* _OPENBSD_ADAPT_H_ */

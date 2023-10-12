@@ -646,25 +646,15 @@ athn_usb_attach(device_t self)
 
 	mtx_init(&sc->sc_mtx, "mtx_name", MTX_NETWORK_LOCK, MTX_DEF);
 
-	}
+#if OpenBSD_USB_API
+	sc->ops.read = athn_usb_read;
+	sc->ops.write = athn_usb_write;
+	sc->ops.write_barrier = athn_usb_write_barrier;
 
-//	usc->ep_ctrl = 0;
-//	usc->ep_bcn = 0;
-//	usc->ep_cab = 0;
-//	usc->ep_uapsd = 0;
-//	usc->ep_mgmt = 0;
-//	usc->ep_data[EDCA_NUM_AC] = {};
-
-	// need to configure endpoints, match types and directions, other ?
-	// athn_if_config[0].endpoint = usc->sc_udev->endpoints[0].edesc->bEndpointAddress;
-//	athn_if_config[1].endpoint = usc->sc_udev->endpoints[2].edesc->bEndpointAddress;
-//	athn_if_config[2].endpoint = usc->sc_udev->endpoints[3].edesc->bEndpointAddress;
+	usb_init_task(&usc->sc_task, athn_usb_task, sc, USB_TASK_TYPE_GENERIC);
 
 	if (athn_usb_open_pipes(usc) != 0)
 		return;
-
-
-	
 
 	usc->flags = uaa->driver_info;
 	sc->flags |= ATHN_FLAG_USB;
