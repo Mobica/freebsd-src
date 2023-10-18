@@ -138,7 +138,7 @@ athn_usb_transfer_firmware(struct athn_usb_softc *usc)
 	/* Wait at most 1 second for firmware to boot. */
 	device_printf(usc->sc_sc.sc_dev, "%s: Waiting for firmware to boot\n", __func__);
 	if (error == 0 && usc->wait_msg_id != 0)
-		error = msleep(&usc->wait_msg_id, &usc->sc_sc.sc_mtx, PCATCH, "athnfw", ATHN_USB_CMD_TIMEOUT * hz);
+		error = msleep(&usc->wait_msg_id, &usc->sc_sc.sc_mtx, PCATCH, "athnfw", hz);
 
 	if (usc->wait_msg_id == 0) {
 		device_printf(usc->sc_sc.sc_dev, "%s: Firmware booted successfully!\n", __func__);

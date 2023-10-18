@@ -48,6 +48,8 @@ __FBSDID("$FreeBSD$");
 #if NBPFILTER > 0
 #include <net/bpf.h>
 #endif
+#include <machine/bus.h>
+#include <machine/resource.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
@@ -66,7 +68,8 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
-#include <dev/usb/usb_core.h>
+#include <dev/usb/usb_device.h>
+//#include <dev/usb/usb_core.h>
 #include <dev/usb/usbdi_util.h>
 
 #include "openbsd_adapt.h"
@@ -258,7 +261,7 @@ static struct usb_config athn_if_config[ATHN_N_XFER] = {
                 .type = UE_BULK,
                 .endpoint = AR_PIPE_TX_DATA,
                 .direction = UE_DIR_OUT,
-                .bufsize = ATHN_USB_TXBUFSZ,
+                .bufsize = 512,
                 .flags = {.pipe_bof = 1,.force_short_xfer = 1,},
                 .callback = athn_if_bulk_tx_callback,
 				.timeout = ATHN_USB_TX_TIMEOUT
@@ -267,10 +270,9 @@ static struct usb_config athn_if_config[ATHN_N_XFER] = {
                 .type = UE_BULK,
                 .endpoint = AR_PIPE_RX_DATA,
                 .direction = UE_DIR_IN, // .direction = UE_DIR_IN,
-                .bufsize = ATHN_USB_RXBUFSZ,
+                .bufsize = 512,
                 .flags = {.ext_buffer=1,.pipe_bof = 1,.short_xfer_ok = 1,},
                 .callback = athn_if_bulk_rx_callback,
-				.if_index = 1,
         }, // MichalP: what the device sends to us (CMD replies)
         [ATHN_BULK_IRQ] = {
                 .type = UE_INTERRUPT,
@@ -279,16 +281,17 @@ static struct usb_config athn_if_config[ATHN_N_XFER] = {
                 .bufsize = 64,
                 .flags = {.pipe_bof = 1,.short_xfer_ok = 1,},
                 .callback = athn_if_intr_rx_callback,
-				.if_index = 1,
+				.interval = 1
         }, // MichalP: what we are sending to the device (CMDs)
 		[ATHN_BULK_CMD] = {
                 .type = UE_INTERRUPT,
                 .endpoint = AR_PIPE_TX_INTR,
                 .direction = UE_DIR_OUT,
-                .bufsize = ATHN_USB_TXCMDSZ,
+                .bufsize = 64,
                 .flags = {.pipe_bof = 1,.force_short_xfer = 1,},
                 .callback = athn_if_intr_tx_callback,
-			    .timeout = ATHN_USB_CMD_TIMEOUT,	/* ms */
+			    .timeout = 5000,	/* ms */
+				.interval = 1
         }
 };
 
@@ -418,6 +421,7 @@ athn_usb_attach(device_t self)
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	usb_error_t error;
+	struct usb_endpoint *ep, *ep_end;
 
 	device_set_usb_desc(self);
 	usc->sc_udev = uaa->device;
@@ -443,8 +447,7 @@ athn_usb_attach(device_t self)
 	TASK_INIT(&sc->sc_task, 0, athn_usb_task, sc);
 	mbufq_init(&sc->sc_snd, ifqmaxlen);
 
-	error = usbd_transfer_setup(uaa->device,
-                              &uaa->info.bIfaceIndex, usc->sc_xfer, athn_if_config,
+	error = usbd_transfer_setup(uaa->device, &uaa->info.bIfaceIndex, usc->sc_xfer, athn_if_config,
 								ATHN_N_XFER, usc, &sc->sc_mtx);
 	if (error) {
 		device_printf(sc->sc_dev,
@@ -452,6 +455,17 @@ athn_usb_attach(device_t self)
 					  usbd_errstr(error));
 		mtx_destroy(&sc->sc_mtx);
 		return error;
+	}
+
+	// TODO MichalP just for debug purposes can be removed
+	ep = usc->sc_udev->endpoints;
+	ep_end = usc->sc_udev->endpoints + usc->sc_udev->endpoints_max;
+	for (; ep != ep_end; ep++) {
+		uint8_t eaddr;
+
+		eaddr = ep->edesc->bEndpointAddress;
+		device_printf(sc->sc_dev, "%s: endpoint: addr %u, direction %s, endpoint: %p \n", __func__,
+					 UE_GET_ADDR(eaddr), UE_GET_DIR(eaddr) == UE_DIR_OUT ?  "output" : "input", ep);
 	}
 
 	if (athn_usb_open_pipes(usc) != 0)
@@ -513,15 +527,16 @@ athn_usb_attachhook(device_t self)
 		return;
 	}
 
-	mtx_lock(&usc->sc_sc.sc_mtx);
-	device_printf(sc->sc_dev, " %s:val = %d\n", __func__, val);
-	val = athn_usb_read(sc, AR_WMI_CMD_ECHO);
-	device_printf(sc->sc_dev, "%s: returned val = %d\n", __func__, val);
-	val = *(uint32_t*)usc->obuf;
-	device_printf(sc->sc_dev, "%s: casted val = %d\n", __func__, val);
-	mtx_unlock(&usc->sc_sc.sc_mtx);
-
-	return;
+	// TODO MichalP: this can be used as a starting point for echo command or firmware command
+//	mtx_lock(&usc->sc_sc.sc_mtx);
+//	device_printf(sc->sc_dev, " %s:val = %d\n", __func__, val);
+//	val = athn_usb_read(sc, AR_WMI_CMD_ECHO);
+//	device_printf(sc->sc_dev, "%s: returned val = %d\n", __func__, val);
+//	val = *(uint32_t*)usc->obuf;
+//	device_printf(sc->sc_dev, "%s: casted val = %d\n", __func__, val);
+//	mtx_unlock(&usc->sc_sc.sc_mtx);
+//
+//	return;
 
 	/* Setup the host transport communication interface. */
 	error = athn_usb_htc_setup(usc);
@@ -529,10 +544,14 @@ athn_usb_attachhook(device_t self)
 		return;
 
 	/* We're now ready to attach the bus agnostic driver. */
+#if OpenBSD_IEEE80211_API
+	// TODO: MichalP needs proper FreeBSD adaptation because this uses code that is
+	//  stubbed and/or commented
 	error = athn_attach(sc);
 	if (error != 0) {
 		return;
 	}
+#endif
 
 	usc->sc_athn_attached = 1;
 #if OpenBSD_IEEE80211_API
@@ -611,7 +630,8 @@ athn_usb_open_pipes(struct athn_usb_softc *usc)
 	mtx_unlock(&sc->sc_mtx);
 	return 0;
 
- fail:	athn_usb_close_pipes(usc);
+ fail:
+	athn_usb_close_pipes(usc);
 	return (error);
 }
 
@@ -637,6 +657,7 @@ athn_alloc_list(struct athn_usb_softc *usc, struct athn_usb_data data[],
 	for (i = 0; i < ndata; i++) {
 		struct athn_usb_data *dp = &data[i];
 		dp->usc = usc;
+		// TODO MichalP might be needed not sure
 //		dp->m = NULL;
 		dp->buf = malloc(maxsz, M_USBDEV, M_NOWAIT | M_ZERO);
 		if (dp->buf == NULL) {
@@ -646,6 +667,7 @@ athn_alloc_list(struct athn_usb_softc *usc, struct athn_usb_data data[],
 			goto fail;
 		}
 
+		// TODO MichalP need IEEE80211 api implemented
 		//dp->ni = NULL;
 	}
 
@@ -667,7 +689,7 @@ athn_free_list(struct athn_usb_softc *usc, struct athn_usb_data data[], int ndat
 			free(dp->buf, M_USBDEV);
 			dp->buf = NULL;
 		}
-
+// TODO MichalP need IEEE80211 api implemented
 //		if (dp->ni != NULL) {
 //			ieee80211_free_node(dp->ni);
 //			dp->ni = NULL;
@@ -814,14 +836,15 @@ athn_if_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 	uint16_t msg_id;
 	uint8_t *buf;
 
-	int actlen;
+	int actlen, sumlen;
 	int state = USB_GET_STATE(xfer);
 	char *state_str = state2Str(state);
 
-	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
+	usbd_xfer_status(xfer, &actlen, &sumlen, NULL, NULL);
 
-	printf("TTTT: INTR RX Xfer callback: error = %s, state = %s, actlen = %d, endpoint = 0x%lx\n",
-		   usbd_errstr(error), state_str, actlen, (long)xfer->endpoint);
+	printf("TTTT: INTR RX Xfer callback: error = %s, state = %s, actlen = %d, "
+		   "sumlen = %d, endpoint = 0x%lx\n",
+		   usbd_errstr(error), state_str, actlen, sumlen, (long)xfer->endpoint);
 
 	switch(state) {
 	case USB_ST_TRANSFERRED:
@@ -829,7 +852,6 @@ athn_if_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 		printf("TTTT: INTR RX Xfer state USB_ST_TRANSFERRED\n");
 
 		buf = usbd_xfer_get_frame_buffer(xfer, 0);
-
 		if (actlen >= 4 && *(uint32_t *)buf == htobe32(0x00c60000)) {
 			buf += 4;
 			actlen -= 4;
@@ -871,7 +893,7 @@ athn_if_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 		msg = (struct ar_htc_msg_hdr *)buf;
 		msg_id = betoh16(msg->msg_id);
-		printf("TTTT: Rx HTC message %d\n", msg_id);
+		printf("TTTT: Rx HTC msg_id %d, wait_msg_id %d \n", msg_id, usc->wait_msg_id);
 		switch (msg_id) {
 		case AR_HTC_MSG_READY:
 			if (usc->wait_msg_id != msg_id)
@@ -922,6 +944,8 @@ athn_if_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	int state = USB_GET_STATE(xfer);
 	char *state_str = state2Str(state);
 
+	mtx_assert(&(sc)->sc_mtx, MA_OWNED);
+
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	// MichalP: Debuginfo
@@ -930,27 +954,19 @@ athn_if_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 	switch(state) {
 	case USB_ST_TRANSFERRED:
-		device_printf(sc->sc_dev, "%s: continue with USB_ST_TRANSFERRED %p\n", __func__, usc);
 		cmd = STAILQ_FIRST(&usc->sc_cmd_active);
+		device_printf(sc->sc_dev, "%s: continue with USB_ST_TRANSFERRED cmd: %p\n", __func__, cmd);
 		if (cmd == NULL)
 			goto tr_setup;
-		device_printf(sc->sc_dev, "%s: transfer done %p\n", __func__, cmd);
+		device_printf(sc->sc_dev, "%s: transfer done cmd: %p\n", __func__, cmd);
 		STAILQ_REMOVE_HEAD(&usc->sc_cmd_active, next);
-		/*
-		 * Non-response commands still need wakeup so the caller
-		 * knows it was submitted and completed OK; response commands should
-		 * wait until they're ACKed by the firmware with a response.
-		 */
-		if (actlen>0) {
-			if (usc->wait_msg_id == AR_HTC_MSG_CONN_SVC_RSP) {
-				usc->msg_conn_svc_rsp = (struct ar_htc_msg_conn_svc_rsp *)cmd->buf;
-			}
-
-			device_printf(sc->sc_dev, "%s: we have some data msg_id %d\n", __func__, usc->wait_msg_id);
-			wakeup(&usc->wait_msg_id);
+		// MichalP TODO: this still needs some thinking maybe separate function
+		// different object that the thread sleeps on (cmd?)
+		if (usc->wait_msg_id == AR_HTC_MSG_CONN_SVC_RSP) {
+			device_printf(sc->sc_dev, "%s: we are waiting for a response cmd: %p\n", __func__, cmd);
 			STAILQ_INSERT_TAIL(&usc->sc_cmd_waiting, cmd, next);
 		} else {
-			device_printf(sc->sc_dev, "%s: we DONT have any data msg_id %d\n", __func__, usc->wait_msg_id);
+			device_printf(sc->sc_dev, "%s: we DONT wait for response cmd: %p\n", __func__, cmd);
 			wakeup(&usc->wait_msg_id);
 			STAILQ_INSERT_TAIL(&usc->sc_cmd_inactive, cmd, next);
 		}
@@ -959,13 +975,15 @@ athn_if_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 tr_setup:
 		cmd = STAILQ_FIRST(&usc->sc_cmd_pending);
 		if (cmd == NULL) {
-			device_printf(sc->sc_dev, "%s: empty pending queue sc %p\n", __func__, usc);
+			device_printf(sc->sc_dev, "%s: empty pending queue cmd: %p\n", __func__, cmd);
 			return;
 		}
-		device_printf(sc->sc_dev, "%s: continue with USB_ST_SETUP %p\n", __func__, usc);
+		device_printf(sc->sc_dev, "%s: continue with USB_ST_SETUP cmd: %p\n", __func__, cmd);
 		STAILQ_REMOVE_HEAD(&usc->sc_cmd_pending, next);
 		STAILQ_INSERT_TAIL(&usc->sc_cmd_active, cmd, next);
 		usbd_xfer_set_frame_data(xfer, 0, cmd->buf, cmd->buflen);
+		device_printf(sc->sc_dev, "%s: submitting transfer %p; buf=%p, buflen=%d\n",
+					  __func__, cmd, cmd->buf, cmd->buflen);
 		usbd_transfer_submit(xfer);
 		break;
 	default:
@@ -1002,6 +1020,8 @@ athn_if_bulk_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 	int actlen;
 	int state = USB_GET_STATE(xfer);
 	char *state_str = state2Str(state);
+
+	mtx_assert(&(sc)->sc_mtx, MA_OWNED);
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
@@ -1059,6 +1079,8 @@ athn_if_bulk_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct athn_usb_data *data;
+
+	mtx_assert(&(sc)->sc_mtx, MA_OWNED);
 
 	int actlen;
 	int state = USB_GET_STATE(xfer);
@@ -1192,36 +1214,38 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
     int len)
 {
 	struct athn_softc *sc = &usc->sc_sc;
-	struct athn_usb_data *data;
+	struct athn_usb_data *cmd;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_htc_msg_hdr *msg;
 	int error = 0;
 
-	device_printf(sc->sc_dev, "%s: %d\n",  __func__, msg_id);
+	device_printf(sc->sc_dev, "%s: message id: %d\n",  __func__, msg_id);
 
 	mtx_assert(&(sc)->sc_mtx, MA_OWNED);
 
-	data = STAILQ_FIRST(&usc->sc_cmd_inactive);
-	if (data == NULL) {
+	cmd = STAILQ_FIRST(&usc->sc_cmd_inactive);
+	if (cmd == NULL) {
 		device_printf(sc->sc_dev, "%s: no tx cmd buffers\n",
 					  __func__);
 		return -1;
 	}
 	STAILQ_REMOVE_HEAD(&usc->sc_cmd_inactive, next);
 
-	htc = (struct ar_htc_frame_hdr *)data->buf;
+	htc = (struct ar_htc_frame_hdr *)cmd->buf;
 	memset(htc, 0, sizeof(*htc));
 	htc->endpoint_id = 0;
 	htc->payload_len = htobe16(sizeof(*msg) + len);
 
 	msg = (struct ar_htc_msg_hdr *)&htc[1];
-	msg->msg_id = msg_id;
+	msg->msg_id = htobe16(msg_id);
 
 	memcpy(&msg[1], buf, len);
 
-	data->buflen = sizeof(*htc) + sizeof(*msg) + len;
+	cmd->buflen = sizeof(*htc) + sizeof(*msg) + len;
+	device_printf(sc->sc_dev, "%s: prepare transfer %p; buf=%p, buflen=%d\n",
+				  __func__, cmd, cmd->buf, cmd->buflen);
 
-	STAILQ_INSERT_TAIL(&usc->sc_cmd_pending, data, next);
+	STAILQ_INSERT_TAIL(&usc->sc_cmd_pending, cmd, next);
 	usbd_transfer_start(usc->sc_xfer[ATHN_BULK_CMD]);
 
 	return error;
@@ -1284,7 +1308,7 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
 	if (error == 0 && usc->wait_msg_id != 0)
 		error = msleep(&usc->wait_msg_id, &usc->sc_sc.sc_mtx, PCATCH, "athnhtc",
-					   ATHN_USB_CMD_TIMEOUT * hz);
+					   hz);
 	usc->wait_msg_id = 0;
 
 	mtx_unlock(&usc->sc_sc.sc_mtx);
@@ -1295,12 +1319,17 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 		return (error);
 	}
 
+	mtx_lock(&usc->sc_sc.sc_mtx);
+
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_SETUP_COMPLETE, NULL, 0);
 	if (error != 0) {
 		printf("%s: could not complete setup\n",
 		    device_get_name(usc->usb_dev));
 		return (error);
 	}
+
+	mtx_unlock(&usc->sc_sc.sc_mtx);
+
 	return (0);
 }
 
@@ -1313,7 +1342,7 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 	int s, error;
 
 	struct athn_softc *sc = &usc->sc_sc;
-	device_printf(sc->sc_dev, "%s: configuring svc_id %d \n", __func__, htobe16(svc_id));
+	device_printf(sc->sc_dev, "%s: configuring svc_id %d \n", __func__, svc_id);
 
 	memset(&msg, 0, sizeof(msg));
 	msg.svc_id = htobe16(svc_id);
@@ -1327,24 +1356,24 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONN_SVC, &msg, sizeof(msg));
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0)
-		error = msleep(&usc->wait_msg_id, &usc->sc_sc.sc_mtx, PCATCH, "athnhtc",
-					   ATHN_USB_CMD_TIMEOUT * hz);
+		error = msleep(&usc->wait_msg_id, &usc->sc_sc.sc_mtx, PCATCH, "athnhtc", hz * 2);
 	usc->wait_msg_id = 0;
 
 	mtx_unlock(&usc->sc_sc.sc_mtx);
 
 	if (error != 0) {
-		printf("%s: error waiting for service %d connection\n",
-		    device_get_name(usc->usb_dev), svc_id);
+		device_printf(sc->sc_dev, "%s: error waiting for service %d connection "
+								  "error: %d \n", __func__, htobe16(svc_id), error);
 		return (error);
 	}
 	if (rsp.status != AR_HTC_SVC_SUCCESS) {
-		printf("%s: service %d connection failed, error %d\n",
-		    device_get_name(usc->usb_dev), htobe16(svc_id), rsp.status);
+		device_printf(sc->sc_dev, "%s: service %d connection failed, "
+								  "error: %d\n", __func__, htobe16(svc_id), rsp.status);
 		return (EIO);
 	}
-	DPRINTF(("service %d successfully connected to endpoint %d\n",
-	    svc_id, rsp.endpoint_id));
+
+	device_printf(sc->sc_dev, "%s: service %d successfully connected to endpoint %d\n",
+				  __func__, svc_id, rsp.endpoint_id);
 
 	/* Return endpoint id. */
 	*endpoint_id = rsp.endpoint_id;
@@ -1379,8 +1408,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		 * data->xfer until it is done or we'll cause major confusion
 		 * in the USB stack.
 		 */
-		msleep(&usc->wait_msg_id, &usc->sc_sc.sc_mtx, PCATCH, "athnwmx",
-					   ATHN_USB_CMD_TIMEOUT * hz);
+		msleep(&usc->wait_msg_id, &usc->sc_sc.sc_mtx, PCATCH, "athnwmx", hz);
 	}
 	xferlen = sizeof(*htc) + sizeof(*wmi) + ilen;
 	data->buflen = xferlen;
@@ -1405,8 +1433,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 * Wait for WMI command complete interrupt. In case it does not fire
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
-	error = msleep(&usc->wait_cmd_id, &usc->sc_sc.sc_mtx, PCATCH, "athnwmi",
-				  ATHN_USB_CMD_TIMEOUT * hz);
+	error = msleep(&usc->wait_cmd_id, &usc->sc_sc.sc_mtx, PCATCH, "athnwmi", hz);
 	if (error == EWOULDBLOCK) {
 		printf("%s: firmware command 0x%x timed out\n",
 			device_get_name(usc->usb_dev), cmd_id);
