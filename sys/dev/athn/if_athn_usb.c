@@ -1611,28 +1611,27 @@ athn_usb_next_scan(void *arg, int pending)
 #endif
 }
 
-#if 0
-int
-athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
-    int arg)
-{
-	struct ieee80211com *ic = vap->iv_ic;
-	struct athn_usb_softc *usc = ic->ic_softc;
-	struct athn_vap *uvp = ATHN_VAP(vap);
-	struct athn_usb_cmd_newstate cmd;
+// uncomment after investigation if it is needed to be async
+// int
+// athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
+//     int arg)
+// {
+// 	struct ieee80211com *ic = vap->iv_ic;
+// 	struct athn_usb_softc *usc = ic->ic_softc;
+// 	struct athn_vap *uvp = ATHN_VAP(vap);
+// 	struct athn_usb_cmd_newstate cmd;
 
-	/* Do it in a process context. */
-	cmd.state = nstate;
-	cmd.arg = arg;
-	athn_usb_do_async(usc, athn_usb_newstate_cb, &cmd, sizeof(cmd));
-	return (0);
-}
-#endif
+// 	/* Do it in a process context. */
+// 	cmd.state = nstate;
+// 	cmd.arg = arg;
+// 	athn_usb_do_async(usc, athn_usb_newstate_cb, &cmd, sizeof(cmd));
+// 	return (0);
+// }
+
 int
 athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
     int arg)
 {
-	//struct athn_usb_cmd_newstate *cmd = arg;
 	struct athn_vap *uvp = ATHN_VAP(vap);
 	struct ieee80211com *ic = vap->iv_ic;
 	struct athn_usb_softc *usc = ic->ic_softc;
@@ -1644,7 +1643,6 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 #if OpenBSD_ONLY
 	timeout_del(&sc->calib_to);
 #endif
-	//s = splnet();
 	IEEE80211_UNLOCK(ic);
 	mtx_lock(&sc->sc_mtx);
 	ostate = vap->iv_state;
@@ -1670,6 +1668,7 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 			printf("%s: could not switch to channel %d\n",
 			    device_get_name(usc->usb_dev), 0);
 			    ieee80211_chan2ieee(ic, ni->ni_chan);
+		// uncomment after investigation if it is needed to be async
 		// if (!usbd_is_dying(usc->sc_udev))
 		// 	timeout_add_msec(&sc->scan_to, 200);
 		break;
