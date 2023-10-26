@@ -155,13 +155,8 @@ uint32_t	athn_usb_read(struct athn_softc *, uint32_t);
 void		athn_usb_write(struct athn_softc *, uint32_t, uint32_t);
 void		athn_usb_write_barrier(struct athn_softc *);
 int		athn_usb_media_change(struct ifnet *);
-<<<<<<< HEAD
-void		athn_usb_next_scan(void *);
-int		athn_usb_newstate(struct ieee80211vap *, enum ieee80211_state,
-=======
 void		athn_usb_next_scan(void *, int);
-int		athn_usb_newstate(struct ieee80211com *, enum ieee80211_state,
->>>>>>> mobica_dev_14
+int		athn_usb_newstate(struct ieee80211vap *, enum ieee80211_state,
 		    int);
 //void		athn_usb_newstate_cb(struct athn_usb_softc *, void *);
 void		athn_usb_newassoc(struct ieee80211com *,
