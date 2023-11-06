@@ -117,8 +117,9 @@ void		athn_disable_interrupts(struct athn_softc *);
 void		athn_init_qos(struct athn_softc *);
 int		athn_hw_reset(struct athn_softc *, struct ieee80211_channel *,
 		    struct ieee80211_channel *, int);
-struct		ieee80211_node *athn_node_alloc(struct ieee80211com *);
-void		athn_newassoc(struct ieee80211com *, struct ieee80211_node *,
+struct		ieee80211_node *athn_node_alloc(struct ieee80211vap *vap,
+    const uint8_t mac[IEEE80211_ADDR_LEN]);
+void		athn_newassoc(struct ieee80211_node *,
 		    int);
 int		athn_media_change(struct ifnet *);
 void		athn_next_scan(void *);
@@ -422,13 +423,13 @@ athn_attach(struct athn_softc *sc)
 
 	// TODO missing members in 'struct ieee80211com'
 	// if_attach(ifp);
-	// ieee80211_ifattach(ifp);
-	// ic->ic_node_alloc = athn_node_alloc;
-	// ic->ic_newassoc = athn_newassoc;
+	ieee80211_ifattach(ic);
+	ic->ic_node_alloc = athn_node_alloc;
+	ic->ic_newassoc = athn_newassoc;
 	ic->ic_updateslot = athn_updateslot;
-	// ic->ic_updateedca = athn_updateedca;
-	// ic->ic_set_key = athn_set_key;
-	// ic->ic_delete_key = athn_delete_key;
+	//ic->ic_updateedca = athn_updateedca;
+	//ic->ic_set_key = athn_set_key;
+	//ic->ic_delete_key = athn_delete_key;
 
 	/* Override 802.11 state transition machine. */
 	// sc->sc_newstate = ic->ic_newstate;
@@ -2549,7 +2550,8 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 }
 
 struct ieee80211_node *
-athn_node_alloc(struct ieee80211com *ic)
+athn_node_alloc(struct ieee80211vap *vap,
+    const uint8_t mac[IEEE80211_ADDR_LEN])
 {
 	struct athn_node *an;
 
@@ -2561,13 +2563,16 @@ athn_node_alloc(struct ieee80211com *ic)
 		ieee80211_ra_node_init(&an->rn);
 	return (struct ieee80211_node *)an;
 #endif
-	return NULL;
+	an = malloc(sizeof(struct athn_node), M_80211_NODE, M_NOWAIT | M_ZERO);
+	if (an == NULL)
+		return NULL;
+	return (struct ieee80211_node *)an;
 }
 
 void
-athn_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni, int isnew)
+athn_newassoc(struct ieee80211_node *ni, int isnew)
 {
-	struct athn_softc *sc = ic->ic_softc;
+	struct athn_softc *sc = ni->ni_ic->ic_softc;
 	struct athn_node *an = (void *)ni;
 	struct ieee80211_rateset *rs = &ni->ni_rates;
 	uint8_t rate;
@@ -2735,7 +2740,7 @@ athn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 
 		/* Fake a join to initialize the Tx rate. */
 		// TODO no member named 'ic_bss' in 'struct ieee80211com'
-		 athn_newassoc(ic, ic->ic_bss, 1);
+		 athn_newassoc(ic->ic_bss, 1);
 
 		 athn_set_bss(sc, ic->ic_bss);
 		athn_disable_interrupts(sc);
@@ -2906,12 +2911,11 @@ athn_updateslot(struct ieee80211com *ic)
 	struct athn_softc *sc = ic->ic_softc;
 	int slot;
 
-#if OpenBSD_IEEE80211_API
-	slot = (ic->ic_flags & IEEE80211_F_SHSLOT) ?
-	    IEEE80211_DUR_DS_SHSLOT : IEEE80211_DUR_DS_SLOT;
+
+	slot = IEEE80211_GET_SLOTTIME(ic);
 	AR_WRITE(sc, AR_D_GBL_IFS_SLOT, slot * athn_clock_rate(sc));
 	AR_WRITE_BARRIER(sc);
-
+#if OpenBSD_IEEE80211_API
 	// TODO no member named 'ic_bss' in 'struct ieee80211com'
 	// athn_setacktimeout(sc, ic->ic_bss->ni_chan, slot);
 	// athn_setctstimeout(sc, ic->ic_bss->ni_chan, slot);
