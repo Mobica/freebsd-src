@@ -485,8 +485,8 @@ athn_usb_detach(device_t self)
 {
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
-
-	if (usc->sc_athn_attached)
+//mtx_lock(&sc->sc_mtx);
+	 if (usc->sc_athn_attached)
 		athn_detach(sc);
 
 	/* Wait for all async commands to complete. */
@@ -503,6 +503,7 @@ athn_usb_detach(device_t self)
 	athn_usb_free_rx_list(usc);
 
 	athn_usb_unload_firmware();
+	//mtx_unlock(&sc->sc_mtx);
 	printf("athn_usb_detach called \n");
 	return (0);
 }
@@ -544,14 +545,12 @@ athn_usb_attachhook(device_t self)
 		return;
 
 	/* We're now ready to attach the bus agnostic driver. */
-#if OpenBSD_IEEE80211_API
 	// TODO: MichalP needs proper FreeBSD adaptation because this uses code that is
 	//  stubbed and/or commented
 	error = athn_attach(sc);
 	if (error != 0) {
 		return;
 	}
-#endif
 
 	usc->sc_athn_attached = 1;
 #if OpenBSD_IEEE80211_API
@@ -1204,9 +1203,11 @@ athn_usb_verify_fw(struct athn_usb_softc *usc)
 	if (data == NULL) {
 		device_printf(sc->sc_dev, "%s: no tx cmd buffers\n",
 					  __func__);
+		mtx_unlock(&usc->sc_sc.sc_mtx);
 		return;
 	}
 	STAILQ_REMOVE_HEAD(&usc->sc_cmd_inactive, next);
+	mtx_unlock(&usc->sc_sc.sc_mtx);
 }
 
 int
@@ -1392,7 +1393,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	device_printf(sc->sc_dev, "%s: called \n", __func__);
 
-	mtx_assert(&(sc)->sc_mtx, MA_OWNED);
+	//mtx_assert(&(sc)->sc_mtx, MA_OWNED);
 
 	data = STAILQ_FIRST(&usc->sc_cmd_inactive);
 	if (data == NULL) {
@@ -1427,8 +1428,9 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	usc->wait_cmd_id = htobe16(cmd_id);
 	STAILQ_INSERT_TAIL(&usc->sc_cmd_pending, data, next);
+	mtx_lock(&usc->sc_sc.sc_mtx);
 	usbd_transfer_start(usc->sc_xfer[ATHN_BULK_CMD]);
-
+	mtx_unlock(&usc->sc_sc.sc_mtx);
 	/*
 	 * Wait for WMI command complete interrupt. In case it does not fire
 	 * wait until the USB transfer times out to avoid racing the transfer.

@@ -250,47 +250,52 @@ athn_attach(struct athn_softc *sc)
 	// struct ifnet *ifp = &ic->ic_if;
 	struct ifnet *ifp = NULL;
 	int error;
+	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+	//mtx_lock(&sc->sc_mtx);
+// 	/* Read hardware revision. */
+	printf("przed chipid \n");
+	//athn_get_chipid(sc);
+printf("po chipid \n");
+	// if ((error = athn_reset_power_on(sc)) != 0) {
+	// 	// TOTO missing field 'dv_xname' in 'struct device'
+	// 	// printf("%s: could not reset chip\n", sc->sc_dev.dv_xname);
+	// 	return (error);
+	// }
 
-	/* Read hardware revision. */
-	athn_get_chipid(sc);
+	// if ((error = athn_set_power_awake(sc)) != 0) {
+	// 	// TOTO missing field 'dv_xname' in 'struct device'
+	// 	// printf("%s: could not wakeup chip\n", sc->sc_dev.dv_xname);
+	// 	return (error);
+	// }
 
-	if ((error = athn_reset_power_on(sc)) != 0) {
-		// TOTO missing field 'dv_xname' in 'struct device'
-		// printf("%s: could not reset chip\n", sc->sc_dev.dv_xname);
-		return (error);
-	}
-
-	if ((error = athn_set_power_awake(sc)) != 0) {
-		// TOTO missing field 'dv_xname' in 'struct device'
-		// printf("%s: could not wakeup chip\n", sc->sc_dev.dv_xname);
-		return (error);
-	}
-
-	if (AR_SREV_5416(sc) || AR_SREV_9160(sc))
-		error = ar5416_attach(sc);
-	else if (AR_SREV_9280(sc))
-		error = ar9280_attach(sc);
-	else if (AR_SREV_9285(sc))
-		error = ar9285_attach(sc);
-#if NATHN_USB > 0
-	else if (AR_SREV_9271(sc))
-		error = ar9285_attach(sc);
-#endif
-	else if (AR_SREV_9287(sc))
-		error = ar9287_attach(sc);
-	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc))
-		error = ar9380_attach(sc);
-	else
-		error = ENOTSUP;
+// 	if (AR_SREV_5416(sc) || AR_SREV_9160(sc))
+// 		error = ar5416_attach(sc);
+// 	else if (AR_SREV_9280(sc))
+// 		error = ar9280_attach(sc);
+// 	else if (AR_SREV_9285(sc))
+// 		error = ar9285_attach(sc);
+// #if NATHN_USB > 0
+// 	else if (AR_SREV_9271(sc))
+// 		error = ar9285_attach(sc);
+// #endif
+// 	else if (AR_SREV_9287(sc))
+// 		error = ar9287_attach(sc);
+// 	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc))
+// 		error = ar9380_attach(sc);
+// 	else
+// 		error = ENOTSUP;
+// 	if (error != 0) {
+// 		// TOTO missing field 'dv_xname' in 'struct device'
+// 		// printf("%s: could not attach chip\n", sc->sc_dev.dv_xname);
+// 		return (error);
+// 	}
+	error = ar9285_attach(sc);
 	if (error != 0) {
-		// TOTO missing field 'dv_xname' in 'struct device'
-		// printf("%s: could not attach chip\n", sc->sc_dev.dv_xname);
 		return (error);
 	}
-
 	/* We can put the chip in sleep state now. */
-	athn_set_power_sleep(sc);
-
+	// athn_set_power_sleep(sc);
+//mtx_unlock(&sc->sc_mtx);
 	if (!(sc->flags & ATHN_FLAG_USB)) {
 		error = sc->ops.dma_alloc(sc);
 		if (error != 0) {
@@ -390,22 +395,36 @@ athn_attach(struct athn_softc *sc)
 	    IEEE80211_C_PMGT;		/* Power saving supported. */
 
 	athn_config_ht(sc);
-
+	uint8_t bands[IEEE80211_MODE_BYTES];
+	memset(bands, 0, sizeof(bands));
 	/* Set supported rates. */
 	if (sc->flags & ATHN_FLAG_11G) {
+		printf("ATHN_FLAG_11G");
 		// TODO missing ieee80211_std_rateset_11b in ieee80211.c
 		// ic->ic_sup_rates[IEEE80211_MODE_11B] =
 		//     ieee80211_std_rateset_11b;
 		// ic->ic_sup_rates[IEEE80211_MODE_11G] =
 		//     ieee80211_std_rateset_11g;
+		setbit(bands, IEEE80211_MODE_11B);
+		setbit(bands, IEEE80211_MODE_11G);
+		setbit(bands, IEEE80211_MODE_11NG);
+		ieee80211_add_channel_list_2ghz(ic->ic_channels, IEEE80211_CHAN_MAX, &ic->ic_nchans,
+		    athn_5ghz_chans, 14, bands, 0);
 	}
 	if (sc->flags & ATHN_FLAG_11A) {
+		printf("ATHN_FLAG_11A");
+		setbit(bands, IEEE80211_MODE_11A);
+		setbit(bands, IEEE80211_MODE_11NA);
+		ieee80211_add_channel_list_5ghz(ic->ic_channels, IEEE80211_CHAN_MAX, &ic->ic_nchans,
+		    athn_5ghz_chans, nitems(athn_5ghz_chans), bands, 0);
 		// ic->ic_sup_rates[IEEE80211_MODE_11A] =
 		//     ieee80211_std_rateset_11a;
 	}
 
+	
+
 	/* Get the list of authorized/supported channels. */
-	athn_get_chanlist(sc);
+	//athn_get_chanlist(sc);
 
 	/* IBSS channel undefined for now. */
 	// TODO missing 'ic_ibss_chan' in 'struct ieee80211com'
@@ -423,6 +442,7 @@ athn_attach(struct athn_softc *sc)
 
 	// TODO missing members in 'struct ieee80211com'
 	// if_attach(ifp);
+	printf("to tutaj");
 	ieee80211_ifattach(ic);
 	ic->ic_node_alloc = athn_node_alloc;
 	ic->ic_newassoc = athn_newassoc;
@@ -450,6 +470,7 @@ athn_detach(struct athn_softc *sc)
 	// struct ifnet *ifp = &sc->sc_ic.ic_if;
 	struct ifnet *ifp = NULL;
 	int qid;
+	struct ieee80211com *ic = &sc->sc_ic;
 #if OpenBSD_ONLY
 	timeout_del(&sc->scan_to);
 	timeout_del(&sc->calib_to);
@@ -467,7 +488,7 @@ athn_detach(struct athn_softc *sc)
 		free(sc->eep, M_DEVBUF);
 
 	// TODO
-	// ieee80211_ifdetach(ifp);
+	ieee80211_ifdetach(ic);
 #if OpenBSD_IEEE80211_API
 	if_detach(ifp);
 #endif
