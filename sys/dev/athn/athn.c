@@ -409,12 +409,10 @@ athn_attach(struct athn_softc *sc)
 	/* IBSS channel undefined for now. */
 	// TODO missing 'ic_ibss_chan' in 'struct ieee80211com'
 	// ic->ic_ibss_chan = &ic->ic_channels[0];
-#if OpenBSD_IEEE80211_API
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = athn_ioctl;
 	ifp->if_start = athn_start;
-#endif
 	// TODO
 	// ifp->if_watchdog = athn_watchdog;
 	// TOTO missing field 'dv_xname' in 'struct device'
@@ -467,9 +465,9 @@ athn_detach(struct athn_softc *sc)
 
 	// TODO
 	// ieee80211_ifdetach(ifp);
-#if OpenBSD_IEEE80211_API
+//#if OpenBSD_IEEE80211_API
 	if_detach(ifp);
-#endif
+//#endif
 }
 
 #if NBPFILTER > 0
@@ -607,11 +605,11 @@ athn_intr(void *xsc)
 	// TODO no member named 'ic_if' in 'struct ieee80211com'
 	// struct ifnet *ifp = &sc->sc_ic.ic_if;
 	struct ifnet *ifp = NULL;
-#if OpenBSD_IEEE80211_API
+//#if OpenBSD_IEEE80211_API
 	if ((ifp->if_flags & (IFF_UP | IFF_DRV_RUNNING)) !=
 	    (IFF_UP | IFF_DRV_RUNNING))
 		return (0);
-#endif
+//#endif
 	return (sc->ops.intr(sc));
 }
 
@@ -2548,6 +2546,12 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 	return (0);
 }
 
+void
+ieee80211_ra_node_init(struct ieee80211_ra_node *rn)
+{
+	memset(rn, 0, sizeof(*rn));
+}
+
 struct ieee80211_node *
 athn_node_alloc(struct ieee80211com *ic)
 {
@@ -2555,12 +2559,12 @@ athn_node_alloc(struct ieee80211com *ic)
 
 	// TODO missing macro in ieee80211_var.h
 	#define    IEEE80211_F_HTON        0x02000000      /* CONF: HT enabled */
-#if OpenBSD_IEEE80211_API
+//#if OpenBSD_IEEE80211_API
 	an = malloc(sizeof(struct athn_node), M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (an && (ic->ic_flags & IEEE80211_F_HTON))
 		ieee80211_ra_node_init(&an->rn);
 	return (struct ieee80211_node *)an;
-#endif
+//#endif
 	return NULL;
 }
 
@@ -2574,12 +2578,12 @@ athn_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni, int isnew)
 	int ridx, i, j;
 
 	// TODO implicit declaration of function 'ieee80211_amrr_node_init'
-#if OpenBSD_IEEE80211_API
+//#if OpenBSD_IEEE80211_API
 	 if ((ni->ni_flags & IEEE80211_NODE_HT) == 0)
 	 	ieee80211_amrr_node_init(&sc->amrr, &an->amn);
 	else if (ic->ic_opmode == IEEE80211_M_STA)
 		ieee80211_ra_node_init(&an->rn);
-#endif
+//#endif
 
 	/* Start at lowest available bit-rate, AMRR will raise. */
 	ni->ni_txrate = 0;
@@ -2627,10 +2631,10 @@ athn_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni, int isnew)
 			/* Other MCS fall back to next supported lower MCS. */
 			an->fallback[ridx] = ATHN_NUM_LEGACY_RATES + i;
 			for (j = i - 1; j >= 0; j--) {
-#if OpenBSD_IEEE80211_API
+//#if OpenBSD_IEEE80211_API
 				if (!isset(ni->ni_rxmcs, j))
 					continue;
-#endif
+//#endif
 				an->fallback[ridx] = ATHN_NUM_LEGACY_RATES + j;
 				break;
 			}
@@ -2650,7 +2654,7 @@ athn_media_change(struct ifnet *ifp)
 	error = ieee80211_media_change(ifp);
 	if (error != ENETRESET)
 		return (error);
-#if OpenBSD_IEEE80211_API
+//#if OpenBSD_IEEE80211_API
 	if (ic->ic_fixed_rate != -1) {
 		rate = ic->ic_sup_rates[ic->ic_curmode].
 		    rs_rates[ic->ic_fixed_rate] & IEEE80211_RATE_VAL;
@@ -2660,7 +2664,7 @@ athn_media_change(struct ifnet *ifp)
 				break;
 		sc->fixed_ridx = ridx;
 	}
-#endif
+//#endif
 	if ((ifp->if_flags & (IFF_UP | IFF_DRV_RUNNING)) ==
 	    (IFF_UP | IFF_DRV_RUNNING)) {
 		athn_stop(ifp, 0);
@@ -2677,10 +2681,14 @@ athn_next_scan(void *arg)
 	int s;
 
 	s = splnet();
-#if OpenBSD_IEEE80211_API
+//#if OpenBSD_IEEE80211_API
 	if (ic->ic_state == IEEE80211_S_SCAN)
-		ieee80211_next_scan(&ic->ic_if);
-#endif
+	{
+		struct ifnet *ic_if = &ic->ic_if;
+		ieee80211_next_scan(ic_if);
+	}
+
+//#endif
 	splx(s);
 }
 

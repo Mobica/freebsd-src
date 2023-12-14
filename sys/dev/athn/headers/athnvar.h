@@ -312,12 +312,55 @@ static const uint16_t ar_mcs_ndbps[][2] = {
 #define ATHN_POWER_OFDM_EXT	67
 #define ATHN_POWER_COUNT	68
 
+/* Number of MCS indices represented by struct ieee80211_ht_rateset. */
+#define IEEE80211_HT_RATESET_NUM_MCS 32
+
+/*
+ * Goodput statistics struct. Measures the effective data rate of an MCS.
+ * All uint64_t numbers in this struct use fixed-point arithmetic.
+ */
+struct ieee80211_ra_goodput_stats {
+	uint64_t measured;	/* Most recently measured goodput. */
+	uint64_t average;	/* Average measured goodput. */
+	uint64_t stddeviation;	/* Goodput standard deviation. */
+ 	uint64_t loss;		/* This rate's loss percentage SFER. */
+	uint32_t nprobe_pkts;	/* Number of packets in current probe. */
+	uint32_t nprobe_fail;	/* Number of failed packets. */
+};
+
+/*
+ * Rate adaptation state.
+ *
+ * Drivers should not modify any fields of this structure directly.
+ * Use ieee80211_ra_init() and ieee80211_ra_add_stats() only.
+ */
+struct ieee80211_ra_node {
+	/* Bitmaps MCS 0-31. */
+	uint32_t valid_probes;
+	uint32_t valid_rates;
+	uint32_t candidate_rates;
+	uint32_t probed_rates;
+
+	/* Probing state. */
+	int probing;
+#define IEEE80211_RA_NOT_PROBING	0x0
+#define IEEE80211_RA_PROBING_DOWN	0x1
+#define IEEE80211_RA_PROBING_UP		0x2
+#define IEEE80211_RA_PROBING_INTER	0x4 /* combined with UP or DOWN */
+
+	/* The current best MCS found by probing. */
+	int best_mcs;
+
+	/* Goodput statistics for each MCS. */
+	struct ieee80211_ra_goodput_stats g[IEEE80211_HT_RATESET_NUM_MCS];
+};
+
 #define ATHN_NUM_LEGACY_RATES	IEEE80211_RATE_MAXSIZE
 #define ATHN_NUM_RATES		(ATHN_NUM_LEGACY_RATES + ATHN_NUM_MCS)
 struct athn_node {
 	struct ieee80211_node		ni;
 	struct ieee80211_amrr_node	amn;
-//	struct ieee80211_ra_node	rn;
+	struct ieee80211_ra_node	rn;
 	uint8_t				ridx[ATHN_NUM_RATES];
 	uint8_t				fallback[ATHN_NUM_RATES];
 	uint8_t				sta_index;

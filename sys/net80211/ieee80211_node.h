@@ -219,6 +219,7 @@ struct ieee80211_node {
 
 	/* 11n state */
 	uint16_t		ni_htcap;	/* HT capabilities */
+	uint8_t			ni_rxmcs[howmany(80,NBBY)];
 	uint8_t			ni_htparam;	/* HT params */
 	uint8_t			ni_htctlchan;	/* HT control channel */
 	uint8_t			ni_ht2ndchan;	/* HT 2nd channel */
@@ -364,6 +365,7 @@ void	ieee80211_update_chw(struct ieee80211com *);
 int	ieee80211_ibss_merge_check(struct ieee80211_node *);
 int	ieee80211_ibss_node_check_new(struct ieee80211_node *ni,
 	    const struct ieee80211_scanparams *);
+void ieee80211_next_scan(struct ifnet *);
 int	ieee80211_ibss_merge(struct ieee80211_node *);
 struct ieee80211_scan_entry;
 int	ieee80211_sta_join(struct ieee80211vap *, struct ieee80211_channel *,

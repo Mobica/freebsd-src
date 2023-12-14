@@ -58,4 +58,7 @@ struct ieee80211_amrr_node {
 	u_int	amn_retrycnt;
 };
 
+void ieee80211_amrr_node_init(const struct ieee80211_amrr *amrr,
+		struct ieee80211_amrr_node *amn);
+
 #endif /* _NET80211_IEEE80211_AMRR_H_ */
