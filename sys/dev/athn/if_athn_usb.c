@@ -641,9 +641,16 @@ athn_usb_attachhook(device_t self)
 	if (error != 0)
 		return;
 
+// TODO: MikolajF:I couldn't read a FW version before the firmware upload because 
+// the module never responded to the WMI request, even if I moved the htc setup 
+// before loading the FW. I don't know why, but checking it at this point is not
+//  useful and adds to the initialization time. It's not critical and can be
+// investigated or ignored in the future.
+#if 0
 	error = athn_usb_verify_fw_ver(sc, &img_ver);
 	if (error != 0)
 		return;
+#endif
 
 	/* We're now ready to attach the bus agnostic driver. */
 #if OpenBSD_IEEE80211_API
