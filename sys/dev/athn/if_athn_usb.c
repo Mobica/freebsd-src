@@ -59,6 +59,7 @@ __FBSDID("$FreeBSD$");
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_ratectl.h>
 
 #include "athnreg.h"
 #include "ar5008reg.h"
@@ -155,9 +156,9 @@ void		athn_usb_write(struct athn_softc *, uint32_t, uint32_t);
 void		athn_usb_write_barrier(struct athn_softc *);
 int		athn_usb_media_change(struct ifnet *);
 void		athn_usb_next_scan(void *, int);
-int		athn_usb_newstate(struct ieee80211com *, enum ieee80211_state,
+int		athn_usb_newstate(struct ieee80211vap *, enum ieee80211_state,
 		    int);
-void		athn_usb_newstate_cb(struct athn_usb_softc *, void *);
+//void		athn_usb_newstate_cb(struct athn_usb_softc *, void *);
 void		athn_usb_newassoc(struct ieee80211com *,
 		    struct ieee80211_node *, int);
 void		athn_usb_newassoc_cb(struct athn_usb_softc *, void *);
@@ -508,11 +509,107 @@ athn_usb_detach(device_t self)
 	return (0);
 }
 
+static struct ieee80211vap *
+athn_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
+    enum ieee80211_opmode opmode, int flags,
+    const uint8_t bssid[IEEE80211_ADDR_LEN],
+    const uint8_t mac[IEEE80211_ADDR_LEN])
+{
+	struct ieee80211vap *vap;
+	struct athn_vap     *uvp;
+
+	if (!TAILQ_EMPTY(&ic->ic_vaps))
+		return (NULL);
+
+	uvp =  malloc(sizeof(struct athn_vap), M_80211_VAP, M_WAITOK | M_ZERO);
+	vap = &uvp->vap;
+
+	if (ieee80211_vap_setup(ic, vap, name, unit, opmode,
+	    flags, bssid) != 0) {
+		/* out of memory */
+		free(uvp, M_80211_VAP);
+		return (NULL);
+	}
+
+		/* override state transition machine */
+	uvp->newstate = vap->iv_newstate;
+	vap->iv_newstate = athn_usb_newstate;
+
+	vap->iv_ampdu_density = IEEE80211_HTCAP_MPDUDENSITY_8;
+	vap->iv_ampdu_rxmax = IEEE80211_HTCAP_MAXRXAMPDU_64K;
+
+	ieee80211_ratectl_init(vap);
+
+	/* complete setup */
+	ieee80211_vap_attach(vap, ieee80211_media_change,
+	    ieee80211_media_status, mac);
+	ic->ic_opmode = opmode;
+
+	return (vap);
+}
+
+static void
+athn_vap_delete(struct ieee80211vap *vap)
+{
+	struct athn_vap *uvp = ATHN_VAP(vap);
+
+	ieee80211_ratectl_deinit(vap);
+	ieee80211_vap_detach(vap);
+	free(uvp, M_80211_VAP);
+}
+
+static int
+athn_usb_get_fw_ver(struct athn_softc *sc, struct ar_wmi_fw_version *version)
+{
+	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+	struct ar_wmi_fw_version cmd_rsp;
+	int error;
+
+	device_printf(sc->sc_dev, "%s: called \n", __func__);
+
+	ATHN_LOCK(&usc->sc_sc);
+	error = athn_usb_wmi_xcmd(usc, AR_WMI_GET_FW_VERSION, NULL, 0, version);
+	ATHN_UNLOCK(&usc->sc_sc);
+
+	version->major = bswap16(version->major);
+	version->minor = bswap16(version->minor);
+
+	if (error != 0) {
+		device_printf(sc->sc_dev,  "%s: error = %d\n", __func__, error);
+		version->major = 0;
+		version->minor = 0;
+	}
+
+	return error;
+}
+
+/* Read fw version from module and compare it with passed image version */
+static int
+athn_usb_verify_fw_ver(struct athn_softc *sc, struct ar_wmi_fw_version *img_ver)
+{
+	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+	struct ar_wmi_fw_version fw_ver;
+	int error;
+
+	device_printf(sc->sc_dev, "%s: called \n", __func__);
+
+	error = athn_usb_get_fw_ver(sc, &fw_ver);
+
+	if ((img_ver->major != fw_ver.major) ||
+	    (img_ver->minor != fw_ver.minor)) {
+		device_printf(sc->sc_dev, "%s: Image fw version %d.%d differs from module fw version %d.%d\n",
+			      __func__, img_ver->major, img_ver->minor, fw_ver.major, fw_ver.minor);
+		return -1;
+	}
+	return error;
+}
+
 void
 athn_usb_attachhook(device_t self)
 {
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
+	struct ar_wmi_fw_version img_ver;
 	struct athn_ops *ops = &sc->ops;
 	uint32_t val = 104;
 #ifdef notyet
@@ -522,20 +619,21 @@ athn_usb_attachhook(device_t self)
 	int s, i, error;
 
 	/* Load firmware. */
-	error = athn_usb_load_firmware(usc);
+	error = athn_usb_load_firmware(usc, &img_ver);
 	if (error != 0) {
 		printf("Could not load firmware\n");
 		return;
 	}
 
 	// TODO MichalP: this can be used as a starting point for echo command or firmware command
-//	mtx_lock(&usc->sc_sc.sc_mtx);
+//	ATHN_LOCK(&usc->sc_sc);
 //	device_printf(sc->sc_dev, " %s:val = %d\n", __func__, val);
+//  NOTE: command below is invalid because athn_usb_read has different arguments but let's keep that note about echo
 //	val = athn_usb_read(sc, AR_WMI_CMD_ECHO);
 //	device_printf(sc->sc_dev, "%s: returned val = %d\n", __func__, val);
 //	val = *(uint32_t*)usc->obuf;
 //	device_printf(sc->sc_dev, "%s: casted val = %d\n", __func__, val);
-//	mtx_unlock(&usc->sc_sc.sc_mtx);
+//	ATHN_UNLOCK(&usc->sc_sc);
 //
 //	return;
 
@@ -543,6 +641,17 @@ athn_usb_attachhook(device_t self)
 	error = athn_usb_htc_setup(usc);
 	if (error != 0)
 		return;
+
+// TODO: MikolajF:I couldn't read a FW version before the firmware upload because 
+// the module never responded to the WMI request, even if I moved the htc setup 
+// before loading the FW. I don't know why, but checking it at this point is not
+//  useful and adds to the initialization time. It's not critical and can be
+// investigated or ignored in the future.
+#if 0
+	error = athn_usb_verify_fw_ver(sc, &img_ver);
+	if (error != 0)
+		return;
+#endif
 
 	/* We're now ready to attach the bus agnostic driver. */
 	// TODO: MichalP needs proper FreeBSD adaptation because this uses code that is
@@ -570,7 +679,8 @@ athn_usb_attachhook(device_t self)
 	ic->ic_updateedca = athn_usb_updateedca;
 	ic->ic_set_key = athn_usb_set_key;
 	ic->ic_delete_key = athn_usb_delete_key;
-
+	ic->ic_vap_create = athn_vap_create;
+	ic->ic_vap_delete = athn_vap_delete;
 	ic->ic_ampdu_tx_start = athn_usb_ampdu_tx_start;
 	ic->ic_ampdu_tx_stop = athn_usb_ampdu_tx_stop;
 	ic->ic_newstate = athn_usb_newstate;
@@ -623,10 +733,10 @@ athn_usb_open_pipes(struct athn_usb_softc *usc)
 	TAILQ_REMOVE(&usc->tx_free_list, usc->tx_bcn, next);
 #endif
 
-	mtx_lock(&sc->sc_mtx);
+	ATHN_LOCK(sc);
 	usbd_transfer_start(usc->sc_xfer[ATHN_BULK_RX]);
 	usbd_transfer_start(usc->sc_xfer[ATHN_BULK_IRQ]);
-	mtx_unlock(&sc->sc_mtx);
+	ATHN_UNLOCK(sc);
 	return 0;
 
  fail:
@@ -639,11 +749,11 @@ athn_usb_close_pipes(struct athn_usb_softc *usc)
 {
 	struct athn_softc *sc = &usc->sc_sc;
 
-	mtx_lock(&sc->sc_mtx);
+	ATHN_LOCK(sc);
 	athn_usb_free_rx_list(usc);
 	athn_usb_free_tx_list(usc);
 	athn_usb_free_tx_cmd(usc);
-	mtx_unlock(&sc->sc_mtx);
+	ATHN_UNLOCK(sc);
 }
 
 static int
@@ -943,7 +1053,7 @@ athn_if_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	int state = USB_GET_STATE(xfer);
 	char *state_str = state2Str(state);
 
-	mtx_assert(&(sc)->sc_mtx, MA_OWNED);
+	ATHN_ASSERT_LOCKED(sc);
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
@@ -961,7 +1071,8 @@ athn_if_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 		STAILQ_REMOVE_HEAD(&usc->sc_cmd_active, next);
 		// MichalP TODO: this still needs some thinking maybe separate function
 		// different object that the thread sleeps on (cmd?)
-		if (usc->wait_msg_id == AR_HTC_MSG_CONN_SVC_RSP) {
+		if ((usc->wait_msg_id == AR_HTC_MSG_CONN_SVC_RSP) ||
+		    (usc->wait_msg_id == AR_WMI_CMD_MSG)) {
 			device_printf(sc->sc_dev, "%s: we are waiting for a response cmd: %p\n", __func__, cmd);
 			STAILQ_INSERT_TAIL(&usc->sc_cmd_waiting, cmd, next);
 		} else {
@@ -1020,7 +1131,7 @@ athn_if_bulk_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 	int state = USB_GET_STATE(xfer);
 	char *state_str = state2Str(state);
 
-	mtx_assert(&(sc)->sc_mtx, MA_OWNED);
+	ATHN_ASSERT_LOCKED(sc);
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
@@ -1079,7 +1190,7 @@ athn_if_bulk_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct athn_usb_data *data;
 
-	mtx_assert(&(sc)->sc_mtx, MA_OWNED);
+	ATHN_ASSERT_LOCKED(sc);
 
 	int actlen;
 	int state = USB_GET_STATE(xfer);
@@ -1197,7 +1308,7 @@ athn_usb_verify_fw(struct athn_usb_softc *usc)
 	struct athn_softc *sc = &usc->sc_sc;
 	struct athn_usb_data *data;
 
-	mtx_lock(&usc->sc_sc.sc_mtx);
+	ATHN_LOCK(sc);
 
 	data = STAILQ_FIRST(&usc->sc_cmd_inactive);
 	if (data == NULL) {
@@ -1222,7 +1333,7 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 
 	device_printf(sc->sc_dev, "%s: message id: %d\n",  __func__, msg_id);
 
-	mtx_assert(&(sc)->sc_mtx, MA_OWNED);
+	ATHN_ASSERT_LOCKED(sc);
 
 	cmd = STAILQ_FIRST(&usc->sc_cmd_inactive);
 	if (cmd == NULL) {
@@ -1303,7 +1414,7 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	cfg.pipe_id = UE_GET_ADDR(AR_PIPE_TX_DATA);
 	cfg.credits = (usc->flags & ATHN_USB_FLAG_AR7010) ? 45 : 33;
 
-	mtx_lock(&usc->sc_sc.sc_mtx);
+	ATHN_LOCK(&usc->sc_sc);
 
 	usc->wait_msg_id = AR_HTC_MSG_CONF_PIPE_RSP;
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
@@ -1312,7 +1423,7 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 					   hz);
 	usc->wait_msg_id = 0;
 
-	mtx_unlock(&usc->sc_sc.sc_mtx);
+	ATHN_UNLOCK(&usc->sc_sc);
 
 	if (error != 0) {
 		printf("%s: could not configure pipe\n",
@@ -1320,16 +1431,17 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 		return (error);
 	}
 
-	mtx_lock(&usc->sc_sc.sc_mtx);
+	ATHN_LOCK(&usc->sc_sc);
 
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_SETUP_COMPLETE, NULL, 0);
 	if (error != 0) {
+		ATHN_UNLOCK(&usc->sc_sc);
 		printf("%s: could not complete setup\n",
 		    device_get_name(usc->usb_dev));
 		return (error);
 	}
 
-	mtx_unlock(&usc->sc_sc.sc_mtx);
+	ATHN_UNLOCK(&usc->sc_sc);
 
 	return (0);
 }
@@ -1351,7 +1463,7 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 	msg.ul_pipeid = UE_GET_ADDR(ul_pipe);
 	usc->msg_conn_svc_rsp = &rsp;
 
-	mtx_lock(&usc->sc_sc.sc_mtx);
+	ATHN_LOCK(&usc->sc_sc);
 
 	usc->wait_msg_id = AR_HTC_MSG_CONN_SVC_RSP;
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONN_SVC, &msg, sizeof(msg));
@@ -1360,7 +1472,7 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 		error = msleep(&usc->wait_msg_id, &usc->sc_sc.sc_mtx, PCATCH, "athnhtc", hz * 2);
 	usc->wait_msg_id = 0;
 
-	mtx_unlock(&usc->sc_sc.sc_mtx);
+	ATHN_UNLOCK(&usc->sc_sc);
 
 	if (error != 0) {
 		device_printf(sc->sc_dev, "%s: error waiting for service %d connection "
@@ -1393,7 +1505,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	device_printf(sc->sc_dev, "%s: called \n", __func__);
 
-	//mtx_assert(&(sc)->sc_mtx, MA_OWNED);
+	ATHN_ASSERT_LOCKED(sc);
 
 	data = STAILQ_FIRST(&usc->sc_cmd_inactive);
 	if (data == NULL) {
@@ -1423,10 +1535,12 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	wmi->cmd_id = htobe16(cmd_id);
 	usc->wmi_seq_no++;
 	wmi->seq_no = usc->wmi_seq_no;
+	usc->wait_msg_id = AR_WMI_CMD_MSG;
 
 	memcpy(&wmi[1], ibuf, ilen);
 
-	usc->wait_cmd_id = htobe16(cmd_id);
+	usc->wait_cmd_id = cmd_id;
+	usc->obuf = obuf;
 	STAILQ_INSERT_TAIL(&usc->sc_cmd_pending, data, next);
 	mtx_lock(&usc->sc_sc.sc_mtx);
 	usbd_transfer_start(usc->sc_xfer[ATHN_BULK_CMD]);
@@ -1435,7 +1549,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 * Wait for WMI command complete interrupt. In case it does not fire
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
-	error = msleep(&usc->wait_cmd_id, &usc->sc_sc.sc_mtx, PCATCH, "athnwmi", hz);
+	error = msleep(&usc->wait_cmd_id, &usc->sc_sc.sc_mtx, PCATCH, "athnwmi", 2*hz);
 	if (error == EWOULDBLOCK) {
 		printf("%s: firmware command 0x%x timed out\n",
 			device_get_name(usc->usb_dev), cmd_id);
@@ -1443,12 +1557,13 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	}
 
 	device_printf(sc->sc_dev, "%s: aftersleep\n", __func__);
-	obuf = usc->obuf;
 
 	/*
 	 * Both the WMI command and transfer are done or have timed out.
 	 * Allow other threads to enter this function and use data->xfer.
 	 */
+	usc->obuf = NULL;
+	usc->wait_msg_id = 0;
 	usc->wait_cmd_id = 0;
 	wakeup(&usc->wait_cmd_id);
 
@@ -1557,66 +1672,74 @@ athn_usb_next_scan(void *arg, int pending)
 #endif
 }
 
+// uncomment after investigation if it is needed to be async
+// int
+// athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
+//     int arg)
+// {
+// 	struct ieee80211com *ic = vap->iv_ic;
+// 	struct athn_usb_softc *usc = ic->ic_softc;
+// 	struct athn_vap *uvp = ATHN_VAP(vap);
+// 	struct athn_usb_cmd_newstate cmd;
+
+// 	/* Do it in a process context. */
+// 	cmd.state = nstate;
+// 	cmd.arg = arg;
+// 	athn_usb_do_async(usc, athn_usb_newstate_cb, &cmd, sizeof(cmd));
+// 	return (0);
+// }
+
 int
-athn_usb_newstate(struct ieee80211com *ic, enum ieee80211_state nstate,
+athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
     int arg)
 {
+	struct athn_vap *uvp = ATHN_VAP(vap);
+	struct ieee80211com *ic = vap->iv_ic;
 	struct athn_usb_softc *usc = ic->ic_softc;
-	struct athn_usb_cmd_newstate cmd;
-
-	/* Do it in a process context. */
-	cmd.state = nstate;
-	cmd.arg = arg;
-	athn_usb_do_async(usc, athn_usb_newstate_cb, &cmd, sizeof(cmd));
-	return (0);
-}
-
-void
-athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
-{
-	struct athn_usb_cmd_newstate *cmd = arg;
 	struct athn_softc *sc = &usc->sc_sc;
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211_node *ni = ieee80211_ref_node(vap->iv_bss);
 	enum ieee80211_state ostate;
 	uint32_t reg, imask;
 	int s, error;
 #if OpenBSD_ONLY
 	timeout_del(&sc->calib_to);
 #endif
-
-#if OpenBSD_IEEE80211_API
-	ostate = ic->ic_state;
+	IEEE80211_UNLOCK(ic);
+	ATHN_LOCK(sc);
+	ostate = vap->iv_state;
 
 	if (ostate == IEEE80211_S_RUN && ic->ic_opmode == IEEE80211_M_STA) {
-		athn_usb_remove_node(usc, ic->ic_bss);
+		athn_usb_remove_node(usc, ni);
 		reg = AR_READ(sc, AR_RX_FILTER);
 		reg = (reg & ~AR_RX_FILTER_MYBEACON) |
 		    AR_RX_FILTER_BEACON;
 		AR_WRITE(sc, AR_RX_FILTER, reg);
 		AR_WRITE_BARRIER(sc);
 	}
-	switch (cmd->state) {
+
+	switch (nstate) {
 	case IEEE80211_S_INIT:
 		athn_set_led(sc, 0);
 		break;
 	case IEEE80211_S_SCAN:
 		/* Make the LED blink while scanning. */
 		athn_set_led(sc, !sc->led_state);
-		error = athn_usb_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
+		error = athn_usb_switch_chan(sc, ni->ni_chan, NULL);
 		if (error)
 			printf("%s: could not switch to channel %d\n",
 			    device_get_name(usc->usb_dev), 0);
-			    ieee80211_chan2ieee(ic, ic->ic_bss->ni_chan));
-		if (!usbd_is_dying(usc->sc_udev))
-			timeout_add_msec(&sc->scan_to, 200);
+			    ieee80211_chan2ieee(ic, ni->ni_chan);
+		// uncomment after investigation if it is needed to be async
+		// if (!usbd_is_dying(usc->sc_udev))
+		// 	timeout_add_msec(&sc->scan_to, 200);
 		break;
 	case IEEE80211_S_AUTH:
 		athn_set_led(sc, 0);
-		error = athn_usb_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
+		error = athn_usb_switch_chan(sc, ni->ni_chan, NULL);
 		if (error)
 			printf("%s: could not switch to channel %d\n",
 			    device_get_name(usc->usb_dev), 0);
-			    ieee80211_chan2ieee(ic, ic->ic_bss->ni_chan));
+			    ieee80211_chan2ieee(ic, ni->ni_chan);
 		break;
 	case IEEE80211_S_ASSOC:
 		break;
@@ -1628,16 +1751,16 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 
 		if (ic->ic_opmode == IEEE80211_M_STA) {
 			/* Create node entry for our BSS */
-			error = athn_usb_create_node(usc, ic->ic_bss);
+			error = athn_usb_create_node(usc, ni);
 			if (error)
 				printf("%s: could not update firmware station "
 				    "table\n", device_get_name(usc->usb_dev));
 		}
-		athn_set_bss(sc, ic->ic_bss);
+		athn_set_bss(sc, ni);
 		athn_usb_wmi_cmd(usc, AR_WMI_CMD_DISABLE_INTR);
 #ifndef IEEE80211_STA_ONLY
 		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
-			athn_usb_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
+			athn_usb_switch_chan(sc, ni->ni_chan, NULL);
 			athn_set_hostap_timers(sc);
 			/* Enable software beacon alert interrupts. */
 			imask = htobe32(AR_IMR_SWBA);
@@ -1658,10 +1781,16 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 		athn_usb_wmi_xcmd(usc, AR_WMI_CMD_ENABLE_INTR,
 		    &imask, sizeof(imask), NULL);
 		break;
+	default:
+		break;
 	}
-	(void)sc->sc_newstate(ic, cmd->state, cmd->arg);
+#if OpenBSD_IEEE80211_API
+	return sc->sc_newstate(ic, state, arg);
 	splx(s);
-#endif
+	#endif
+	ATHN_UNLOCK(sc);
+	IEEE80211_LOCK(ic);
+	return (uvp->newstate(vap, nstate, arg));
 }
 
 void
@@ -2747,7 +2876,7 @@ athn_usb_txeof(struct usb_xfer *xfer, struct athn_usb_data* data)
 
 	device_printf(sc->sc_dev, "%s: called; data=%p\n", __func__, data);
 
-	mtx_assert(&sc->sc_mtx, MA_OWNED);
+	ATHN_ASSERT_LOCKED(sc);
 
 	if (usc->sc_tx_n_active == 0) {
 		device_printf(sc->sc_dev,
