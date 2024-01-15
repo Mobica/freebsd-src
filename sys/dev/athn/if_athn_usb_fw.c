@@ -54,7 +54,7 @@ athn_usb_unload_firmware()
 }
 
 int
-athn_usb_get_firmware(struct athn_usb_softc *usc)
+athn_usb_get_firmware(struct athn_usb_softc *usc, struct ar_wmi_fw_version *version)
 {
 	usb_device_descriptor_t *dd;
 	const char *name;
@@ -76,6 +76,8 @@ athn_usb_get_firmware(struct athn_usb_softc *usc)
 		printf("Firmware name: %s:\n", fware->name);
 		printf("Firmware version: %u:\n", fware->version);
 		printf("Firmware size: %zu:\n", fware->datasize);
+		version->major = fware->version / 100;
+		version->minor = (fware->version / 10) % 10;
 		return 0;
 	}
 }
@@ -91,7 +93,7 @@ athn_usb_transfer_firmware(struct athn_usb_softc *usc)
 	int s, mlen;
 	int error = 0;
 
-	mtx_lock(&usc->sc_sc.sc_mtx);
+	ATHN_LOCK(&usc->sc_sc);
 
 /* Load firmware image. */
 	ptr = (void *)fware->data;
@@ -110,7 +112,7 @@ athn_usb_transfer_firmware(struct athn_usb_softc *usc)
 
 		error = usbd_do_request(usc->sc_udev, &usc->sc_sc.sc_mtx, &req, ptr);
 		if (error != 0) {
-			mtx_unlock(&usc->sc_sc.sc_mtx);
+			ATHN_UNLOCK(&usc->sc_sc);
 			athn_usb_unload_firmware();
 			return (error);
 		}
@@ -144,7 +146,7 @@ athn_usb_transfer_firmware(struct athn_usb_softc *usc)
 		device_printf(usc->sc_sc.sc_dev, "%s: Firmware booted successfully!\n", __func__);
 	}
 
-	mtx_unlock(&usc->sc_sc.sc_mtx);
+	ATHN_UNLOCK(&usc->sc_sc);
 
 	athn_usb_unload_firmware();
 
@@ -152,11 +154,11 @@ athn_usb_transfer_firmware(struct athn_usb_softc *usc)
 }
 
 int
-athn_usb_load_firmware(struct athn_usb_softc *usc)
+athn_usb_load_firmware(struct athn_usb_softc *usc, struct ar_wmi_fw_version *img_version)
 {
 	int error = 0;
 	
-	error = athn_usb_get_firmware(usc);
+	error = athn_usb_get_firmware(usc, img_version);
 	if (error) {
 		printf("Failed to get firmware\n");
 		return error;
