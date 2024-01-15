@@ -570,13 +570,6 @@ athn_usb_attachhook(device_t self)
 #endif
 	int s, i, error;
 
-	/* Load firmware. */
-	error = athn_usb_load_firmware(usc);
-	if (error != 0) {
-		printf("Could not load firmware\n");
-		return;
-	}
-
 	// TODO MichalP: this can be used as a starting point for echo command or firmware command
 //	mtx_lock(&usc->sc_sc.sc_mtx);
 //	device_printf(sc->sc_dev, " %s:val = %d\n", __func__, val);
@@ -594,17 +587,15 @@ athn_usb_attachhook(device_t self)
 		return;
 
 	/* We're now ready to attach the bus agnostic driver. */
-#if OpenBSD_IEEE80211_API
 	// TODO: MichalP needs proper FreeBSD adaptation because this uses code that is
 	//  stubbed and/or commented
 	error = athn_attach(sc);
 	if (error != 0) {
 		return;
 	}
-#endif
 
 	usc->sc_athn_attached = 1;
-#if OpenBSD_IEEE80211_API
+
 	/* Override some operations for USB. */
 	ifp->if_ioctl = athn_usb_ioctl;
 	ifp->if_start = athn_usb_start;
@@ -636,7 +627,7 @@ athn_usb_attachhook(device_t self)
 		athn_reset_key(sc, i);
 
 	ops->enable_antenna_diversity(sc);
-#endif
+
 
 #ifdef ATHN_BT_COEXISTENCE
 	/* Configure bluetooth coexistence for combo chips. */

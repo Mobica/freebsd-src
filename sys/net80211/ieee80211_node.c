@@ -3087,38 +3087,3 @@ ieee80211_getsignal(struct ieee80211vap *vap, int8_t *rssi, int8_t *noise)
 	if (vap->iv_opmode != IEEE80211_M_STA)
 		*rssi = ieee80211_getrssi(vap);
 }
-
-/*
- * Switch to the next channel marked for scanning.
- */
-void
-ieee80211_next_scan(struct ifnet *ifp)
-{
-	struct ieee80211com *ic = (void *)ifp;
-	struct ieee80211_channel *chan;
-
-	chan = ic->ic_bss->ni_chan;
-	for (;;) {
-		if (++chan > &ic->ic_channels[IEEE80211_CHAN_MAX])
-			chan = &ic->ic_channels[0];
-		if (isset(ic->ic_chan_scan, ieee80211_chan2ieee(ic, chan))) {
-			/*
-			 * Ignore channels marked passive-only
-			 * during an active scan.
-			 */
-			if ((ic->ic_flags & IEEE80211_F_ASCAN) == 0 ||
-			    (chan->ic_flags & IEEE80211_CHAN_PASSIVE) == 0)
-				break;
-		}
-		if (chan == ic->ic_bss->ni_chan) {
-			ieee80211_end_scan(ifp);
-			return;
-		}
-	}
-	clrbit(ic->ic_chan_scan, ieee80211_chan2ieee(ic, chan));
-	DPRINTF(("chan %d->%d\n",
-	    ieee80211_chan2ieee(ic, ic->ic_bss->ni_chan),
-	    ieee80211_chan2ieee(ic, chan)));
-	ic->ic_bss->ni_chan = chan;
-	ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
-}

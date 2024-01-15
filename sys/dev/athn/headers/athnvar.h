@@ -59,6 +59,8 @@ extern int athn_debug;
 // TODO missing in linux/ieee80211.h
 #define EDCA_NUM_AC    4
 
+#define	ATHN_NODE(ni)	((struct athn_node *)(ni))
+
 struct athn_rx_radiotap_header {
 	struct ieee80211_radiotap_header wr_ihdr;
 	uint64_t	wr_tsft;
@@ -358,12 +360,19 @@ struct ieee80211_ra_node {
 #define ATHN_NUM_LEGACY_RATES	IEEE80211_RATE_MAXSIZE
 #define ATHN_NUM_RATES		(ATHN_NUM_LEGACY_RATES + ATHN_NUM_MCS)
 struct athn_node {
+	// TODO: not needed because replaced by an_node?
+	#if 0
 	struct ieee80211_node		ni;
 	struct ieee80211_amrr_node	amn;
 	struct ieee80211_ra_node	rn;
+	#endif
+	struct ieee80211_node 		an_node;	/* base class */
 	uint8_t				ridx[ATHN_NUM_RATES];
 	uint8_t				fallback[ATHN_NUM_RATES];
 	uint8_t				sta_index;
+	// TODO: is that mtx needed?
+	struct mtx			an_mtx;		/* protecting the rate control state */
+	char		an_name[32];	/* eg "wlan0_a1" */
 };
 
 /*

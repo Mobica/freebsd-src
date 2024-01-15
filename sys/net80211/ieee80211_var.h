@@ -135,7 +135,6 @@ struct ieee80211_frame;
 struct net80211dump_methods;
 
 struct ieee80211com {
-	struct ifnet 	ic_if; /*find freeBSD version*/
 	void			*ic_softc;	/* driver softc */
 	const char		*ic_name;	/* usually device name */
 	ieee80211_com_lock_t	ic_comlock;	/* state update lock */
@@ -203,7 +202,6 @@ struct ieee80211com {
 	 */
 	int			ic_nchans;	/* # entries in ic_channels */
 	struct ieee80211_channel ic_channels[IEEE80211_CHAN_MAX];
-	int				ic_fixed_rate;	/* index to ic_sup_rates[] */
 	uint8_t			ic_chan_avail[IEEE80211_CHAN_BYTES];
 	uint8_t			ic_chan_active[IEEE80211_CHAN_BYTES];
 	uint8_t			ic_chan_scan[IEEE80211_CHAN_BYTES];
@@ -214,7 +212,6 @@ struct ieee80211com {
 	struct ieee80211_regdomain ic_regdomain;/* regulatory data */
 	struct ieee80211_appie	*ic_countryie;	/* calculated country ie */
 	struct ieee80211_channel *ic_countryie_chan;
-	enum ieee80211_state	ic_state;	/* 802.11 state */
 
 	/* 802.11h/DFS state */
 	struct ieee80211_channel *ic_csa_newchan;/* channel for doing CSA */

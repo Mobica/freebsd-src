@@ -512,13 +512,3 @@ amrr_node_stats(struct ieee80211_node *ni, struct sbuf *s)
 	sbuf_printf(s, "recovery: %u\n", amn->amn_recovery);
 	sbuf_printf(s, "retry_cnt: %u\n", amn->amn_retrycnt);
 }
-
-void
-ieee80211_amrr_node_init(const struct ieee80211_amrr *amrr,
-    struct ieee80211_amrr_node *amn)
-{
-	amn->amn_success = 0;
-	amn->amn_recovery = 0;
-	amn->amn_txcnt = amn->amn_retrycnt = 0;
-	amn->amn_success_threshold = amrr->amrr_min_success_threshold;
-}

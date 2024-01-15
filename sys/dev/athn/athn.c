@@ -117,9 +117,9 @@ void		athn_disable_interrupts(struct athn_softc *);
 void		athn_init_qos(struct athn_softc *);
 int		athn_hw_reset(struct athn_softc *, struct ieee80211_channel *,
 		    struct ieee80211_channel *, int);
-struct		ieee80211_node *athn_node_alloc(struct ieee80211com *);
-void		athn_newassoc(struct ieee80211com *, struct ieee80211_node *,
-		    int);
+static struct		ieee80211_node *athn_node_alloc(struct ieee80211vap *vap, const uint8_t *);
+static void athn_node_free(struct ieee80211_node *);
+void		athn_newassoc(struct ieee80211_node *, int);
 int		athn_media_change(struct ifnet *);
 void		athn_next_scan(void *);
 int		athn_newstate(struct ieee80211com *, enum ieee80211_state,
@@ -420,10 +420,14 @@ athn_attach(struct athn_softc *sc)
 
 	// TODO missing members in 'struct ieee80211com'
 	// if_attach(ifp);
-	// ieee80211_ifattach(ifp);
-	// ic->ic_node_alloc = athn_node_alloc;
-	// ic->ic_newassoc = athn_newassoc;
+	ieee80211_ifattach(ic);
+	
+	ic->ic_node_alloc = athn_node_alloc;
+	// ic->ic_node_free = athn_node_free; -> not present in OpenBSD
+
+	ic->ic_newassoc = athn_newassoc; 
 	ic->ic_updateslot = athn_updateslot;
+
 	// ic->ic_updateedca = athn_updateedca;
 	// ic->ic_set_key = athn_set_key;
 	// ic->ic_delete_key = athn_delete_key;
@@ -598,6 +602,8 @@ athn_set_rxfilter(struct athn_softc *sc, uint32_t rfilt)
 	AR_WRITE_BARRIER(sc);
 }
 
+// TODO: Remove. Not used in Freebsd. It's used for PCI related functions in OpenBSD
+#if 0
 int
 athn_intr(void *xsc)
 {
@@ -612,6 +618,8 @@ athn_intr(void *xsc)
 //#endif
 	return (sc->ops.intr(sc));
 }
+#endif
+
 
 void
 athn_get_chipid(struct athn_softc *sc)
@@ -2552,10 +2560,63 @@ ieee80211_ra_node_init(struct ieee80211_ra_node *rn)
 	memset(rn, 0, sizeof(*rn));
 }
 
+static void
+athn_node_free(struct ieee80211_node *ni)
+{
+	struct ieee80211com *ic = ni->ni_ic;
+	struct ath_softc *sc = ic->ic_softc;
+
+	DPRINTF(("%s: %6D: an %p\n", __func__, ni->ni_macaddr, ":", ATHN_NODE(ni)));
+	mtx_destroy(&ATHN_NODE(ni)->an_mtx);
+	ic->ic_node_free(ni);
+}
+
+static struct ieee80211_node *
+athn_node_alloc(struct ieee80211vap *vap, const uint8_t mac[IEEE80211_ADDR_LEN])
+{
+	struct ieee80211com *ic = vap->iv_ic;
+	struct athn_softc *sc = ic->ic_softc;
+	// TODO: original code from if_ath.c: const size_t space = sizeof(struct ath_node) + sc->sc_rc->arc_space;
+	const size_t space = sizeof(struct athn_node);
+	struct athn_node *an;
+
+	an = malloc(space, M_80211_NODE, M_NOWAIT|M_ZERO);
+	if (an == NULL) {
+		/* XXX stat+msg */
+		return NULL;
+	}
+	// TODO: original code - not needed?
+	// ath_rate_node_init(sc, an); 
+
+	/* Setup the mutex - there's no associd yet so set the name to NULL */
+	snprintf(an->an_name, sizeof(an->an_name), "%s: node %p",
+	    device_get_nameunit(sc->sc_dev), an);
+
+	// TODO: remember to destroy the mutex	
+	mtx_init(&an->an_mtx, an->an_name, NULL, MTX_DEF);
+
+	/* XXX setup ath_tid */
+	// TODO: taken from if_ath.c Needed for TX?
+#if 0	 
+	athn_tx_tid_init(sc, an);
+#endif
+
+	// TODO: taken from if_ath.c. Are stats needed?
+#if 0	 
+	an->an_node_stats.ns_avgbrssi = ATH_RSSI_DUMMY_MARKER;
+	an->an_node_stats.ns_avgrssi = ATH_RSSI_DUMMY_MARKER;
+	an->an_node_stats.ns_avgtxrssi = ATH_RSSI_DUMMY_MARKER;
+#endif
+
+	DPRINTF(("%s: %6D: an %p\n", __func__, mac, ":", an));
+	return &an->an_node;
+}
+#if 0
 struct ieee80211_node *
 athn_node_alloc(struct ieee80211com *ic)
 {
 	struct athn_node *an;
+
 
 	// TODO missing macro in ieee80211_var.h
 	#define    IEEE80211_F_HTON        0x02000000      /* CONF: HT enabled */
@@ -2567,23 +2628,25 @@ athn_node_alloc(struct ieee80211com *ic)
 //#endif
 	return NULL;
 }
+#endif
 
 void
-athn_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni, int isnew)
+athn_newassoc(struct ieee80211_node *ni, int isnew)
 {
-	struct athn_softc *sc = ic->ic_softc;
 	struct athn_node *an = (void *)ni;
+	struct ieee80211vap *vap = ni->ni_vap;
+	struct athn_softc *sc = vap->iv_ic->ic_softc;
 	struct ieee80211_rateset *rs = &ni->ni_rates;
 	uint8_t rate;
 	int ridx, i, j;
 
 	// TODO implicit declaration of function 'ieee80211_amrr_node_init'
-//#if OpenBSD_IEEE80211_API
+#if OpenBSD_IEEE80211_API
 	 if ((ni->ni_flags & IEEE80211_NODE_HT) == 0)
 	 	ieee80211_amrr_node_init(&sc->amrr, &an->amn);
 	else if (ic->ic_opmode == IEEE80211_M_STA)
 		ieee80211_ra_node_init(&an->rn);
-//#endif
+#endif
 
 	/* Start at lowest available bit-rate, AMRR will raise. */
 	ni->ni_txrate = 0;
@@ -2914,7 +2977,7 @@ athn_updateslot(struct ieee80211com *ic)
 	struct athn_softc *sc = ic->ic_softc;
 	int slot;
 
-#if OpenBSD_IEEE80211_API
+#if 1
 	slot = (ic->ic_flags & IEEE80211_F_SHSLOT) ?
 	    IEEE80211_DUR_DS_SHSLOT : IEEE80211_DUR_DS_SLOT;
 	AR_WRITE(sc, AR_D_GBL_IFS_SLOT, slot * athn_clock_rate(sc));
@@ -3210,6 +3273,8 @@ athn_init(struct ifnet *ifp)
 			athn_set_key(ic, NULL, &ic->ic_nw_keys[i]);
 	}
 #endif
+
+// Not needed because it's done in ieee files?
 #if OpenBSD_IEEE80211_API
 	if (ic->ic_opmode == IEEE80211_M_MONITOR)
 		ieee80211_new_state(ic, IEEE80211_S_RUN, -1);
