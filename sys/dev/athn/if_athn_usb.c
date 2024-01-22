@@ -389,7 +389,10 @@ USB_PNP_HOST_INFO(athn_usb_devs);
 static int
 athn_usb_match(device_t self)
 {
+	printf("%s: line: %u\n", __func__, __LINE__);
 	struct usb_attach_arg *uaa =  device_get_ivars(self);
+	printf("%s: line: %u\n", __func__, __LINE__);
+
 	int result = 0;
 
 	if (uaa->usb_mode != USB_MODE_HOST)
@@ -417,14 +420,18 @@ athn_usb_match(device_t self)
 static int
 athn_usb_attach(device_t self)
 {
+	printf("%s: line: %u\n", __func__, __LINE__);
 	struct usb_attach_arg *uaa = device_get_ivars(self);
+	printf("%s: line: %u\n", __func__, __LINE__);
 	struct athn_usb_softc *usc =  device_get_softc(self);
+	printf("%s: line: %u\n", __func__, __LINE__);
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	usb_error_t error;
 	struct usb_endpoint *ep, *ep_end;
 
 	device_set_usb_desc(self);
+	printf("%s: line: %u\n", __func__, __LINE__);
 	usc->sc_udev = uaa->device;
 	sc->sc_dev = self;
 	ic->ic_name = device_get_nameunit(self);
@@ -436,13 +443,13 @@ athn_usb_attach(device_t self)
 	if (strncmp(product, "wb193", 5) == 0)
 		sc->flags |= ATHN_FLAG_BTCOEX3WIRE;
 #endif
-
+	printf("%s: line: %u\n", __func__, __LINE__);
 	sc->ops.read = athn_usb_read;
 	sc->ops.write = athn_usb_write;
 	sc->ops.write_barrier = athn_usb_write_barrier;
 
 	mtx_init(&sc->sc_mtx, device_get_nameunit(self), MTX_NETWORK_LOCK, MTX_DEF);
-
+	printf("%s: line: %u\n", __func__, __LINE__);
 	// MichalP calib_to timeout missing don't know how to put it all together
 	TIMEOUT_TASK_INIT(taskqueue_thread, &sc->scan_to, 0, athn_usb_next_scan, sc);
 	TASK_INIT(&sc->sc_task, 0, athn_usb_task, sc);
@@ -457,7 +464,7 @@ athn_usb_attach(device_t self)
 		mtx_destroy(&sc->sc_mtx);
 		return error;
 	}
-
+	printf("%s: line: %u\n", __func__, __LINE__);
 	// TODO MichalP just for debug purposes can be removed
 	ep = usc->sc_udev->endpoints;
 	ep_end = usc->sc_udev->endpoints + usc->sc_udev->endpoints_max;
@@ -468,7 +475,7 @@ athn_usb_attach(device_t self)
 		device_printf(sc->sc_dev, "%s: endpoint: addr %u, direction %s, endpoint: %p \n", __func__,
 					 UE_GET_ADDR(eaddr), UE_GET_DIR(eaddr) == UE_DIR_OUT ?  "output" : "input", ep);
 	}
-
+	printf("%s: line: %u\n", __func__, __LINE__);
 	if (athn_usb_open_pipes(usc) != 0)
 		return error;
 
@@ -476,6 +483,7 @@ athn_usb_attach(device_t self)
 	if (athn_usb_alloc_tx_cmd(usc) != 0)
 		return error;
 
+	printf("%s: line: %u\n", __func__, __LINE__);
 	athn_usb_attachhook(self);
 
 	return 0;
@@ -606,6 +614,7 @@ athn_usb_verify_fw_ver(struct athn_softc *sc, struct ar_wmi_fw_version *img_ver)
 void
 athn_usb_attachhook(device_t self)
 {
+	printf("%s: line: %u\n", __func__, __LINE__);
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ar_wmi_fw_version img_ver;
@@ -655,18 +664,18 @@ athn_usb_attachhook(device_t self)
 	/* We're now ready to attach the bus agnostic driver. */
 	// TODO: MichalP needs proper FreeBSD adaptation because this uses code that is
 	//  stubbed and/or commented
-	error = athn_attach(sc);
+	// error = athn_attach(sc);
 	if (error != 0) {
 		return;
 	}
 
 	usc->sc_athn_attached = 1;
-
+#if OpenBSD_IEEE80211_API
 	/* Override some operations for USB. */
 	ifp->if_ioctl = athn_usb_ioctl;
 	ifp->if_start = athn_usb_start;
 	// TODO no member named 'if_watchdog' in 'struct ifnet'
-	// ifp->if_watchdog = athn_usb_watchdog;
+	ifp->if_watchdog = athn_usb_watchdog;
 	ic->ic_node_alloc = athn_usb_node_alloc;
 	ic->ic_newauth = athn_usb_newauth;
 	ic->ic_newassoc = athn_usb_newassoc;
@@ -687,7 +696,7 @@ athn_usb_attachhook(device_t self)
 	ic->ic_media.ifm_change_cb = athn_usb_media_change;
 
 	ops->rx_enable = athn_usb_rx_enable;
-
+#endif
 	/* Reset HW key cache entries. */
 	for (i = 0; i < sc->kc_entries; i++)
 		athn_reset_key(sc, i);
@@ -1899,6 +1908,7 @@ athn_usb_newauth(struct ieee80211com *ic, struct ieee80211_node *ni,
 #ifndef IEEE80211_STA_ONLY
 	struct athn_usb_softc *usc = ic->ic_softc;
 #if OpenBSD_IEEE80211_API
+	ic->ic_vaps
 	struct ifnet *ifp = &ic->ic_if;
 #endif
 	struct athn_node *an = (struct athn_node *)ni;

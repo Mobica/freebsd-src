@@ -124,7 +124,7 @@ int		athn_media_change(struct ifnet *);
 void		athn_next_scan(void *);
 int		athn_newstate(struct ieee80211com *, enum ieee80211_state,
 		    int);
-void		athn_updateedca(struct ieee80211com *);
+static int	athn_updateedca(struct ieee80211com *);
 int		athn_clock_rate(struct athn_softc *);
 int		athn_chan_sifs(struct ieee80211_channel *);
 void		athn_setsifs(struct athn_softc *);
@@ -244,15 +244,16 @@ athn_config_ht(struct athn_softc *sc)
 int
 athn_attach(struct athn_softc *sc)
 {
+	printf("%s: line: %u\n", __func__, __LINE__);
 	__attribute__((unused)) struct ieee80211com *ic = &sc->sc_ic;
 	// TODO missing field ic_if' in 'struct ieee80211com'
 	// struct ifnet *ifp = &ic->ic_if;
 	struct ifnet *ifp = NULL;
 	int error;
-
+	printf("%s: line: %u\n", __func__, __LINE__);
 	/* Read hardware revision. */
 	athn_get_chipid(sc);
-
+	printf("%s: line: %u\n", __func__, __LINE__);
 	if ((error = athn_reset_power_on(sc)) != 0) {
 		// TOTO missing field 'dv_xname' in 'struct device'
 		// printf("%s: could not reset chip\n", sc->sc_dev.dv_xname);
@@ -359,7 +360,7 @@ athn_attach(struct athn_softc *sc)
 	ic->ic_opmode = IEEE80211_M_STA;	/* default to BSS mode */
 	// TODO missing field 'ic_state' in 'struct ieee80211com'
 	// ic->ic_state = IEEE80211_S_INIT;
-
+#if 0
 	// TODO missing macros in ieee80211_var.h
 	/* ic_caps */
 #define	IEEE80211_C_WEP		0x00000001	/* CAPABILITY: WEP available */
@@ -387,7 +388,30 @@ athn_attach(struct athn_softc *sc)
 	    IEEE80211_C_SHSLOT |	/* Short slot time supported. */
 	    IEEE80211_C_SHPREAMBLE |	/* Short preamble supported. */
 	    IEEE80211_C_PMGT;		/* Power saving supported. */
-
+#else
+    // Copied from if_ath.c
+	ic->ic_caps =
+			IEEE80211_C_STA		/* station mode */
+			| IEEE80211_C_IBSS		/* ibss, nee adhoc, mode */
+			| IEEE80211_C_HOSTAP		/* hostap mode */
+			| IEEE80211_C_MONITOR		/* monitor mode */
+			| IEEE80211_C_AHDEMO		/* adhoc demo mode */
+			| IEEE80211_C_WDS		/* 4-address traffic works */
+			| IEEE80211_C_MBSS		/* mesh point link mode */
+			| IEEE80211_C_SHPREAMBLE	/* short preamble supported */
+			| IEEE80211_C_SHSLOT		/* short slot time supported */
+			| IEEE80211_C_WPA		/* capable of WPA1+WPA2 */
+	#ifndef	ATH_ENABLE_11N
+			| IEEE80211_C_BGSCAN		/* capable of bg scanning */
+	#endif
+			| IEEE80211_C_TXFRAG		/* handle tx frags */
+	#ifdef	ATH_ENABLE_DFS
+			| IEEE80211_C_DFS		/* Enable radar detection */
+	#endif
+			| IEEE80211_C_PMGT		/* Station side power mgmt */
+			| IEEE80211_C_SWSLEEP
+			;
+#endif
 	athn_config_ht(sc);
 
 	/* Set supported rates. */
@@ -409,10 +433,18 @@ athn_attach(struct athn_softc *sc)
 	/* IBSS channel undefined for now. */
 	// TODO missing 'ic_ibss_chan' in 'struct ieee80211com'
 	// ic->ic_ibss_chan = &ic->ic_channels[0];
+	// ifp not initialized at this stage
+	#if OpenBSD_ONLY
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = athn_ioctl;
 	ifp->if_start = athn_start;
+	#else
+
+	// TODO: athn_ioctl not fully ported
+	// ic->ic_ioctl = athn_ioctl;
+
+	#endif
 	// TODO
 	// ifp->if_watchdog = athn_watchdog;
 	// TOTO missing field 'dv_xname' in 'struct device'
@@ -428,7 +460,8 @@ athn_attach(struct athn_softc *sc)
 	ic->ic_newassoc = athn_newassoc; 
 	ic->ic_updateslot = athn_updateslot;
 
-	// ic->ic_updateedca = athn_updateedca;
+	ic->ic_wme.wme_update = athn_updateedca;
+
 	// ic->ic_set_key = athn_set_key;
 	// ic->ic_delete_key = athn_delete_key;
 
@@ -481,6 +514,14 @@ athn_detach(struct athn_softc *sc)
 void
 athn_radiotap_attach(struct athn_softc *sc)
 {
+	// TODO: Verify that. It's done like that in rt2860_attach function
+	#if 1
+	ieee80211_radiotap_attach(ic,
+	    &sc->sc_txtap.wt_ihdr, sizeof(sc->sc_txtap),
+		ATHN_TX_RADIOTAP_PRESENT,
+	    &sc->sc_rxtap.wr_ihdr, sizeof(sc->sc_rxtap),
+		ATHN_RX_RADIOTAP_PRESENT);
+	#else	
 	bpfattach(&sc->sc_drvbpf, &sc->sc_ic.ic_if, DLT_IEEE802_11_RADIO,
 	    sizeof(struct ieee80211_frame) + IEEE80211_RADIOTAP_HDRLEN);
 
@@ -491,6 +532,7 @@ athn_radiotap_attach(struct athn_softc *sc)
 	sc->sc_txtap_len = sizeof(sc->sc_txtapu);
 	sc->sc_txtap.wt_ihdr.it_len = htole16(sc->sc_txtap_len);
 	sc->sc_txtap.wt_ihdr.it_present = htole32(ATHN_TX_RADIOTAP_PRESENT);
+	#endif
 }
 #endif
 
@@ -2694,10 +2736,10 @@ athn_newassoc(struct ieee80211_node *ni, int isnew)
 			/* Other MCS fall back to next supported lower MCS. */
 			an->fallback[ridx] = ATHN_NUM_LEGACY_RATES + i;
 			for (j = i - 1; j >= 0; j--) {
-//#if OpenBSD_IEEE80211_API
+#if OpenBSD_IEEE80211_API
 				if (!isset(ni->ni_rxmcs, j))
 					continue;
-//#endif
+#endif
 				an->fallback[ridx] = ATHN_NUM_LEGACY_RATES + j;
 				break;
 			}
@@ -2717,7 +2759,7 @@ athn_media_change(struct ifnet *ifp)
 	error = ieee80211_media_change(ifp);
 	if (error != ENETRESET)
 		return (error);
-//#if OpenBSD_IEEE80211_API
+#if OpenBSD_IEEE80211_API
 	if (ic->ic_fixed_rate != -1) {
 		rate = ic->ic_sup_rates[ic->ic_curmode].
 		    rs_rates[ic->ic_fixed_rate] & IEEE80211_RATE_VAL;
@@ -2727,7 +2769,7 @@ athn_media_change(struct ifnet *ifp)
 				break;
 		sc->fixed_ridx = ridx;
 	}
-//#endif
+#endif
 	if ((ifp->if_flags & (IFF_UP | IFF_DRV_RUNNING)) ==
 	    (IFF_UP | IFF_DRV_RUNNING)) {
 		athn_stop(ifp, 0);
@@ -2744,14 +2786,14 @@ athn_next_scan(void *arg)
 	int s;
 
 	s = splnet();
-//#if OpenBSD_IEEE80211_API
+#if OpenBSD_IEEE80211_API
 	if (ic->ic_state == IEEE80211_S_SCAN)
 	{
 		struct ifnet *ic_if = &ic->ic_if;
 		ieee80211_next_scan(ic_if);
 	}
 
-//#endif
+#endif
 	splx(s);
 }
 
@@ -2848,14 +2890,17 @@ athn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 	return 0;
 }
 
-void
+static int
 athn_updateedca(struct ieee80211com *ic)
 {
+// TODO: below OpenBSD code. Port in #else based on
+// rt2860_updateedca from rt2860.c. Remove if works fine.
+#if 0
 #define ATHN_EXP2(x)	((1 << (x)) - 1)	/* CWmin = 2^ECWmin - 1 */
 	struct athn_softc *sc = ic->ic_softc;
 	const struct ieee80211_edca_ac_params *ac;
 	int aci, qid;
-#if OpenBSD_IEEE80211_API
+
 	for (aci = 0; aci < WME_NUM_AC; aci++) {
 		ac = &ic->ic_edca_ac[aci];
 		qid = athn_ac2qid[aci];
@@ -2874,7 +2919,38 @@ athn_updateedca(struct ieee80211com *ic)
 	}
 	AR_WRITE_BARRIER(sc);
 #undef ATHN_EXP2
+#else
+	#define ATHN_EXP2(x)	((1 << (x)) - 1)	/* CWmin = 2^ECWmin - 1 */
+	struct athn_softc *sc = ic->ic_softc;
+	struct chanAccParams chp;
+	const struct wmeParams *wmeps, *wmep;
+	int aci, qid;
+
+	ieee80211_wme_ic_getparams(ic, &chp);
+
+	wmeps = chp.cap_wmeParams;
+
+	for (aci = 0; aci < WME_NUM_AC; aci++) {
+		wmep = &wmeps[aci];
+
+		qid = athn_ac2qid[aci];
+
+		AR_WRITE(sc, AR_DLCL_IFS(qid),
+		    SM(AR_D_LCL_IFS_CWMIN, ATHN_EXP2(wmep->wmep_logcwmin)) |
+		    SM(AR_D_LCL_IFS_CWMAX, ATHN_EXP2(wmep->wmep_logcwmax)) |
+		    SM(AR_D_LCL_IFS_AIFS, wmep->wmep_aifsn));
+		if (wmep->wmep_txopLimit != 0) {
+			AR_WRITE(sc, AR_DCHNTIME(qid),
+			    SM(AR_D_CHNTIME_DUR,
+			       IEEE80211_TXOP_TO_US(wmep->wmep_txopLimit)) |
+			    AR_D_CHNTIME_EN);
+		} else
+			AR_WRITE(sc, AR_DCHNTIME(qid), 0);
+	}
+	AR_WRITE_BARRIER(sc);
+
 #endif
+	return 0;
 }
 
 int
@@ -2983,9 +3059,11 @@ athn_updateslot(struct ieee80211com *ic)
 	AR_WRITE(sc, AR_D_GBL_IFS_SLOT, slot * athn_clock_rate(sc));
 	AR_WRITE_BARRIER(sc);
 
-	// TODO no member named 'ic_bss' in 'struct ieee80211com'
-	// athn_setacktimeout(sc, ic->ic_bss->ni_chan, slot);
-	// athn_setctstimeout(sc, ic->ic_bss->ni_chan, slot);
+	// TODO no member named 'ic_bss' in 'struct ieee80211com'.
+	// I've used ic->ic_bsschan in place of ic->ic_bss->ni_chan. 
+	// Is this variable set?
+	athn_setacktimeout(sc, ic->ic_bsschan, slot);
+	athn_setctstimeout(sc, ic->ic_bsschan, slot);
 #endif
 }
 
