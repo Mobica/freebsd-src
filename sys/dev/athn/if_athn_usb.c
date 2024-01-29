@@ -991,8 +991,8 @@ athn_if_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 				actlen -= htc->control[0];
 			}
-			 athn_usb_rx_wmi_ctrl(usc, buf, actlen);
-			return;
+			athn_usb_rx_wmi_ctrl(usc, buf, actlen);
+			goto rx_tr_setup;
 		}
 
 		// Endpoint 0 carries HTC messages.
@@ -1033,11 +1033,13 @@ athn_if_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 		}
 	}
 	case USB_ST_SETUP:
+rx_tr_setup:
 		printf("USB_ST_SETUP called\n");
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 		break;
 	default: /* Error */
+		printf("TTTT: INTR RX Xfer: error\n");
 		break;
 	}
 	return;
