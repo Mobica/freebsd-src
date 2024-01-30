@@ -1530,7 +1530,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	htc = (struct ar_htc_frame_hdr *)data->buf;
 	memset(htc, 0, sizeof(*htc));
 	htc->endpoint_id = usc->ep_ctrl;
-	htc->payload_len = sizeof(*wmi) + ilen;
+	htc->payload_len = htobe16(sizeof(*wmi) + ilen);
 
 	wmi = (struct ar_wmi_cmd_hdr *)&htc[1];
 	wmi->cmd_id = htobe16(cmd_id);
@@ -1606,13 +1606,14 @@ athn_usb_read(struct athn_softc *sc, uint32_t addr)
 	/* Flush pending writes for strict consistency. */
 	athn_usb_write_barrier(sc);
 
+	addr = htobe32(addr);
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_READ,
 	    &addr, sizeof(addr), &val);
 	if (error != 0)
 		device_printf(sc->sc_dev,
 					  "%s: error \n",
 					  __func__);
-	return (val);
+	return betoh32(val);
 }
 
 void
