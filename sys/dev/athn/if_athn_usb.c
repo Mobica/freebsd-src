@@ -937,13 +937,56 @@ char * epType_str(uint8_t bmAttributes) {
 	}
 }
 
+static boolean_t 
+athn_htc_rx_handle(struct athn_usb_softc *usc, uint8_t *buf, int actlen)
+{
+	struct ar_htc_msg_hdr *msg;
+	uint16_t msg_id;
+
+	// Endpoint 0 carries HTC messages.
+	if (actlen < sizeof(*msg)) {
+		printf("TTTT: htc->flags & AR_HTC_FLAG_TRAILER\n");
+		return TRUE;
+	}
+
+	msg = (struct ar_htc_msg_hdr *)buf;
+	msg_id = betoh16(msg->msg_id);
+	printf("TTTT: Rx HTC msg_id %d, wait_msg_id %d \n", msg_id, usc->wait_msg_id);
+	switch (msg_id) {
+	case AR_HTC_MSG_READY:
+		if (usc->wait_msg_id != msg_id)
+			break;
+		usc->wait_msg_id = 0;
+		wakeup(&usc->wait_msg_id);
+		break;
+	case AR_HTC_MSG_CONN_SVC_RSP:
+		if (usc->wait_msg_id != msg_id)
+			break;
+		if (usc->msg_conn_svc_rsp != NULL) {
+			memcpy(usc->msg_conn_svc_rsp, &msg[1],
+					sizeof(struct ar_htc_msg_conn_svc_rsp));
+		}
+		usc->wait_msg_id = 0;
+		wakeup(&usc->wait_msg_id);
+		break;
+	case AR_HTC_MSG_CONF_PIPE_RSP:
+		if (usc->wait_msg_id != msg_id)
+			break;
+		usc->wait_msg_id = 0;
+		wakeup(&usc->wait_msg_id);
+		break;
+	default:
+		printf("HTC message %d ignored\n", msg_id);
+		break;
+	}
+	return FALSE;
+}
+
 static void
 athn_if_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
 	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
 	struct ar_htc_frame_hdr *htc;
-	struct ar_htc_msg_hdr *msg;
-	uint16_t msg_id;
 	uint8_t *buf;
 
 	int actlen, sumlen;
@@ -974,7 +1017,10 @@ athn_if_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 		buf += sizeof(*htc);
 		actlen -= sizeof(*htc);
 
-		if (htc->endpoint_id != 0) {
+		if (htc->endpoint_id == 0) {
+			if (athn_htc_rx_handle(usc, buf, actlen))
+				break;
+		} else {
 			printf("TTTT: htc->endpoint_id != 0\n");
 			if (htc->endpoint_id != usc->ep_ctrl) {
 				printf("TTTT: htc->endpoint_id != usc->ep_ctrl\n");
@@ -991,53 +1037,17 @@ athn_if_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 				actlen -= htc->control[0];
 			}
-			 athn_usb_rx_wmi_ctrl(usc, buf, actlen);
-			return;
-		}
-
-		// Endpoint 0 carries HTC messages.
-		if (actlen < sizeof(*msg)) {
-			printf("TTTT: htc->flags & AR_HTC_FLAG_TRAILER\n");
-			return;
-		}
-
-		msg = (struct ar_htc_msg_hdr *)buf;
-		msg_id = betoh16(msg->msg_id);
-		printf("TTTT: Rx HTC msg_id %d, wait_msg_id %d \n", msg_id, usc->wait_msg_id);
-		switch (msg_id) {
-		case AR_HTC_MSG_READY:
-			if (usc->wait_msg_id != msg_id)
-				break;
-			usc->wait_msg_id = 0;
-			wakeup(&usc->wait_msg_id);
-			break;
-		case AR_HTC_MSG_CONN_SVC_RSP:
-			if (usc->wait_msg_id != msg_id)
-				break;
-			if (usc->msg_conn_svc_rsp != NULL) {
-				memcpy(usc->msg_conn_svc_rsp, &msg[1],
-					   sizeof(struct ar_htc_msg_conn_svc_rsp));
-			}
-			usc->wait_msg_id = 0;
-			wakeup(&usc->wait_msg_id);
-			break;
-		case AR_HTC_MSG_CONF_PIPE_RSP:
-			if (usc->wait_msg_id != msg_id)
-				break;
-			usc->wait_msg_id = 0;
-			wakeup(&usc->wait_msg_id);
-			break;
-		default:
-			printf("HTC message %d ignored\n", msg_id);
-			break;
-		}
+			athn_usb_rx_wmi_ctrl(usc, buf, actlen);
+		}	
 	}
+	/* FALLTHROUGH */
 	case USB_ST_SETUP:
 		printf("USB_ST_SETUP called\n");
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 		break;
 	default: /* Error */
+		printf("TTTT: INTR RX Xfer: error\n");
 		break;
 	}
 	return;
@@ -1528,7 +1538,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	htc = (struct ar_htc_frame_hdr *)data->buf;
 	memset(htc, 0, sizeof(*htc));
 	htc->endpoint_id = usc->ep_ctrl;
-	htc->payload_len = sizeof(*wmi) + ilen;
+	htc->payload_len = htobe16(sizeof(*wmi) + ilen);
 
 	wmi = (struct ar_wmi_cmd_hdr *)&htc[1];
 	wmi->cmd_id = htobe16(cmd_id);
@@ -1604,13 +1614,14 @@ athn_usb_read(struct athn_softc *sc, uint32_t addr)
 	/* Flush pending writes for strict consistency. */
 	athn_usb_write_barrier(sc);
 
+	addr = htobe32(addr);
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_READ,
 	    &addr, sizeof(addr), &val);
 	if (error != 0)
 		device_printf(sc->sc_dev,
 					  "%s: error \n",
 					  __func__);
-	return (val);
+	return betoh32(val);
 }
 
 void
