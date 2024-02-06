@@ -243,16 +243,20 @@ athn_attach(struct athn_softc *sc)
 	athn_get_chipid(sc);
 
 	if ((error = athn_reset_power_on(sc)) != 0) {
-		// TOTO missing field 'dv_xname' in 'struct device'
-		// printf("%s: could not reset chip\n", sc->sc_dev.dv_xname);
+		printf("Could not reset chip\n");
 		return (error);
 	}
 
 	if ((error = athn_set_power_awake(sc)) != 0) {
-		// TOTO missing field 'dv_xname' in 'struct device'
-		// printf("%s: could not wakeup chip\n", sc->sc_dev.dv_xname);
+		printf("Could not wakeup chip\n");
 		return (error);
 	}
+
+#if OpenBSD_IEEE80211_API
+	// TODO: port everything below
+#else
+	return 0;	
+#endif
 
 #if NATHN_USB > 0
 	if (AR_SREV_9271(sc))
@@ -706,6 +710,7 @@ athn_reset(struct athn_softc *sc, int cold)
 {
 	int ntries;
 
+	ATHN_LOCK(sc);
 	/* Set force wake. */
 	AR_WRITE(sc, AR_RTC_FORCE_WAKE,
 	    AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
@@ -735,6 +740,7 @@ athn_reset(struct athn_softc *sc, int cold)
 	}
 	AR_WRITE(sc, AR_RC, 0);
 	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
 	return (0);
 }
 

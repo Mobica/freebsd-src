@@ -653,14 +653,12 @@ athn_usb_attachhook(device_t self)
 #endif
 
 	/* We're now ready to attach the bus agnostic driver. */
-#if OpenBSD_IEEE80211_API
 	// TODO: MichalP needs proper FreeBSD adaptation because this uses code that is
 	//  stubbed and/or commented
 	error = athn_attach(sc);
 	if (error != 0) {
 		return;
 	}
-#endif
 
 	usc->sc_athn_attached = 1;
 #if OpenBSD_IEEE80211_API
