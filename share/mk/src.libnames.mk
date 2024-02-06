@@ -1,4 +1,3 @@
-# $FreeBSD$
 #
 # The include file <src.libnames.mk> define library names suitable
 # for INTERNALLIB and PRIVATELIB definition
@@ -203,6 +202,7 @@ _LIBRARIES=	\
 		stats \
 		stdthreads \
 		supcplusplus \
+		sys \
 		sysdecode \
 		tacplus \
 		termcapw \
@@ -281,7 +281,7 @@ _DP_9p+=	casper cap_pwd cap_grp
 _DP_archive=	z bz2 lzma bsdxml zstd
 .endif
 _DP_avl=	spl
-_DP_bsddialog=	formw ncursesw tinfow
+_DP_bsddialog=	ncursesw tinfow
 _DP_zstd=	pthread
 .if ${MK_BLACKLIST} != "no"
 _DP_blacklist+=	pthread
@@ -388,12 +388,12 @@ _DP_ucl=	m
 _DP_vmmapi=	util
 _DP_opencsd=	cxxrt
 _DP_ctf=	spl z
-_DP_dtrace=	ctf elf proc pthread rtld_db
+_DP_dtrace=	ctf elf proc pthread rtld_db xo
 _DP_xo=		util
 _DP_ztest=	geom m nvpair umem zpool pthread avl zfs_core spl zutil zfs uutil icp
 # The libc dependencies are not strictly needed but are defined to make the
 # assert happy.
-_DP_c=		compiler_rt
+_DP_c=		sys compiler_rt
 # Use libssp_nonshared only on i386 and power*.  Other archs emit direct calls
 # to __stack_chk_fail, not __stack_chk_fail_local provided by libssp_nonshared.
 .if ${MK_SSP} != "no" && \
@@ -402,6 +402,13 @@ _DP_c+=		ssp_nonshared
 .endif
 _DP_stats=	sbuf pthread
 _DP_stdthreads=	pthread
+_DP_sys=	compiler_rt
+# Use libssp_nonshared only on i386 and power*.  Other archs emit direct calls
+# to __stack_chk_fail, not __stack_chk_fail_local provided by libssp_nonshared.
+.if ${MK_SSP} != "no" && \
+    (${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH:Mpower*} != "")
+_DP_sys+=	ssp_nonshared
+.endif
 _DP_tacplus=	md pam
 _DP_ncursesw=	tinfow
 _DP_formw=	ncursesw
@@ -414,7 +421,7 @@ _DP_fifolog=	z
 _DP_ipf=	kvm
 _DP_tpool=	spl
 _DP_uutil=	avl spl
-_DP_zfs=	md pthread umem util uutil m avl bsdxml crypto geom nvpair \
+_DP_zfs=	md pthread rt umem util uutil m avl bsdxml crypto geom nvpair \
 	z zfs_core zutil
 _DP_zfsbootenv= zfs nvpair
 _DP_zfs_core=	nvpair spl zutil
@@ -554,6 +561,9 @@ LIBSMDB?=	${LIBSMDBDIR}/libsmdb${PIE_SUFFIX}.a
 
 LIBSMUTILDIR=	${_LIB_OBJTOP}/lib/libsmutil
 LIBSMUTIL?=	${LIBSMUTILDIR}/libsmutil${PIE_SUFFIX}.a
+
+LIBSYSDIR=	${_LIB_OBJTOP}/lib/libsys
+LIBSYS?=	${LIBSYSDIR}/libsys${PIE_SUFFIX}.a
 
 LIBNETBSDDIR?=	${_LIB_OBJTOP}/lib/libnetbsd
 LIBNETBSD?=	${LIBNETBSDDIR}/libnetbsd${PIE_SUFFIX}.a

@@ -51,8 +51,6 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_capsicum.h"
 
 #include <sys/param.h>
@@ -2663,6 +2661,7 @@ static struct fileops mqueueops = {
 	.fo_chown		= mqf_chown,
 	.fo_sendfile		= invfo_sendfile,
 	.fo_fill_kinfo		= mqf_fill_kinfo,
+	.fo_cmp			= file_kcmp_generic,
 	.fo_flags		= DFLAG_PASSABLE,
 };
 

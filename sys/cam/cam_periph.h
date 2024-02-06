@@ -26,8 +26,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _CAM_CAM_PERIPH_H
@@ -182,7 +180,7 @@ void		cam_periph_invalidate(struct cam_periph *periph);
 int		cam_periph_mapmem(union ccb *ccb,
 				  struct cam_periph_map_info *mapinfo,
 				  u_int maxmap);
-void		cam_periph_unmapmem(union ccb *ccb,
+int		cam_periph_unmapmem(union ccb *ccb,
 				    struct cam_periph_map_info *mapinfo);
 union ccb	*cam_periph_getccb(struct cam_periph *periph,
 				   uint32_t priority);

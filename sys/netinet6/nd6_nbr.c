@@ -32,8 +32,6 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_inet.h"
 #include "opt_inet6.h"
 #include "opt_ipsec.h"
@@ -264,7 +262,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 	}
 	if (ifa == NULL) {
 		/*
-		 * We've got an NS packet, and we don't have that adddress
+		 * We've got an NS packet, and we don't have that address
 		 * assigned for us.  We MUST silently ignore it.
 		 * See RFC2461 7.2.3.
 		 */

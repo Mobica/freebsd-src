@@ -2015,6 +2015,11 @@ dsl_scan_prefetch_cb(zio_t *zio, const zbookmark_phys_t *zb, const blkptr_t *bp,
 		    zb->zb_objset, DMU_META_DNODE_OBJECT);
 
 		if (OBJSET_BUF_HAS_USERUSED(buf)) {
+			if (OBJSET_BUF_HAS_PROJECTUSED(buf)) {
+				dsl_scan_prefetch_dnode(scn,
+				    &osp->os_projectused_dnode, zb->zb_objset,
+				    DMU_PROJECTUSED_OBJECT);
+			}
 			dsl_scan_prefetch_dnode(scn,
 			    &osp->os_groupused_dnode, zb->zb_objset,
 			    DMU_GROUPUSED_OBJECT);
@@ -2075,10 +2080,16 @@ dsl_scan_prefetch_thread(void *arg)
 			zio_flags |= ZIO_FLAG_RAW;
 		}
 
+		/* We don't need data L1 buffer since we do not prefetch L0. */
+		blkptr_t *bp = &spic->spic_bp;
+		if (BP_GET_LEVEL(bp) == 1 && BP_GET_TYPE(bp) != DMU_OT_DNODE &&
+		    BP_GET_TYPE(bp) != DMU_OT_OBJSET)
+			flags |= ARC_FLAG_NO_BUF;
+
 		/* issue the prefetch asynchronously */
-		(void) arc_read(scn->scn_zio_root, scn->scn_dp->dp_spa,
-		    &spic->spic_bp, dsl_scan_prefetch_cb, spic->spic_spc,
-		    ZIO_PRIORITY_SCRUB, zio_flags, &flags, &spic->spic_zb);
+		(void) arc_read(scn->scn_zio_root, spa, bp,
+		    dsl_scan_prefetch_cb, spic->spic_spc, ZIO_PRIORITY_SCRUB,
+		    zio_flags, &flags, &spic->spic_zb);
 
 		kmem_free(spic, sizeof (scan_prefetch_issue_ctx_t));
 	}
@@ -2131,7 +2142,7 @@ dsl_scan_check_resume(dsl_scan_t *scn, const dnode_phys_t *dnp,
 	return (B_FALSE);
 }
 
-static void dsl_scan_visitbp(blkptr_t *bp, const zbookmark_phys_t *zb,
+static void dsl_scan_visitbp(const blkptr_t *bp, const zbookmark_phys_t *zb,
     dnode_phys_t *dnp, dsl_dataset_t *ds, dsl_scan_t *scn,
     dmu_objset_type_t ostype, dmu_tx_t *tx);
 inline __attribute__((always_inline)) static void dsl_scan_visitdnode(
@@ -2296,12 +2307,11 @@ dsl_scan_visitdnode(dsl_scan_t *scn, dsl_dataset_t *ds,
  * first 5; we want them to be useful.
  */
 static void
-dsl_scan_visitbp(blkptr_t *bp, const zbookmark_phys_t *zb,
+dsl_scan_visitbp(const blkptr_t *bp, const zbookmark_phys_t *zb,
     dnode_phys_t *dnp, dsl_dataset_t *ds, dsl_scan_t *scn,
     dmu_objset_type_t ostype, dmu_tx_t *tx)
 {
 	dsl_pool_t *dp = scn->scn_dp;
-	blkptr_t *bp_toread = NULL;
 
 	if (dsl_scan_check_suspend(scn, zb))
 		return;
@@ -2342,11 +2352,8 @@ dsl_scan_visitbp(blkptr_t *bp, const zbookmark_phys_t *zb,
 		return;
 	}
 
-	bp_toread = kmem_alloc(sizeof (blkptr_t), KM_SLEEP);
-	*bp_toread = *bp;
-
-	if (dsl_scan_recurse(scn, ds, ostype, dnp, bp_toread, zb, tx) != 0)
-		goto out;
+	if (dsl_scan_recurse(scn, ds, ostype, dnp, bp, zb, tx) != 0)
+		return;
 
 	/*
 	 * If dsl_scan_ddt() has already visited this block, it will have
@@ -2356,7 +2363,7 @@ dsl_scan_visitbp(blkptr_t *bp, const zbookmark_phys_t *zb,
 	if (ddt_class_contains(dp->dp_spa,
 	    scn->scn_phys.scn_ddt_class_max, bp)) {
 		scn->scn_ddt_contained_this_txg++;
-		goto out;
+		return;
 	}
 
 	/*
@@ -2368,13 +2375,10 @@ dsl_scan_visitbp(blkptr_t *bp, const zbookmark_phys_t *zb,
 	 */
 	if (BP_PHYSICAL_BIRTH(bp) > scn->scn_phys.scn_cur_max_txg) {
 		scn->scn_gt_max_this_txg++;
-		goto out;
+		return;
 	}
 
 	scan_funcs[scn->scn_phys.scn_func](dp, bp, zb);
-
-out:
-	kmem_free(bp_toread, sizeof (blkptr_t));
 }
 
 static void
@@ -3055,7 +3059,6 @@ dsl_scan_visit(dsl_scan_t *scn, dmu_tx_t *tx)
 		scn->scn_phys.scn_cur_max_txg = scn->scn_phys.scn_max_txg;
 		dsl_scan_visit_rootbp(scn, NULL,
 		    &dp->dp_meta_rootbp, tx);
-		spa_set_rootblkptr(dp->dp_spa, &dp->dp_meta_rootbp);
 		if (scn->scn_suspending)
 			return;
 

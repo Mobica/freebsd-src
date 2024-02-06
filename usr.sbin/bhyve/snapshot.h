@@ -31,8 +31,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _BHYVE_SNAPSHOT_
@@ -102,7 +100,6 @@ int vm_resume_devices(void);
 int get_checkpoint_msg(int conn_fd, struct vmctx *ctx);
 void *checkpoint_thread(void *param);
 int init_checkpoint_thread(struct vmctx *ctx);
-void init_snapshot(void);
 
 int load_restore_file(const char *filename, struct restore_state *rstate);
 
@@ -121,8 +118,7 @@ do {										\
 	    (RNULL), (META));							\
 	if ((RES) != 0) {							\
 		if ((RES) == EFAULT)						\
-			fprintf(stderr, "%s: invalid address: %s\r\n",		\
-				__func__, #ADDR);				\
+			EPRINTLN("%s: invalid address: %s", __func__, #ADDR);	\
 		goto LABEL;							\
 	}									\
 } while (0)

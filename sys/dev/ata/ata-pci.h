@@ -24,8 +24,6 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 /* structure holding chipset config info */
@@ -245,6 +243,9 @@ struct ata_pci_controller {
 
 #define ATA_COLETOCRK_S1        0x23a18086
 #define ATA_COLETOCRK_S2        0x23a68086
+
+#define ATA_IBT_S1              0x0f208086
+#define ATA_IBT_S2              0x0f218086
 
 #define ATA_ITE_ID              0x1283
 #define ATA_IT8211F             0x82111283

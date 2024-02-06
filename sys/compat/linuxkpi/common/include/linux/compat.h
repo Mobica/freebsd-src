@@ -25,8 +25,6 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 #ifndef	_LINUXKPI_LINUX_COMPAT_H_
 #define	_LINUXKPI_LINUX_COMPAT_H_
@@ -42,6 +40,7 @@ struct task_struct;
 extern int linux_alloc_current(struct thread *, int flags);
 extern void linux_free_current(struct task_struct *);
 extern struct domainset *linux_get_vm_domain_set(int node);
+extern int linux_set_fpu_ctx(struct task_struct *);
 
 static inline void
 linux_set_current(struct thread *td)

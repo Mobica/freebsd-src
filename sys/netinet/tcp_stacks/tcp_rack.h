@@ -21,8 +21,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _NETINET_TCP_RACK_H_
@@ -122,7 +120,6 @@ rack_ts_to_msec(uint64_t ts)
 }
 
 
-RB_HEAD(rack_rb_tree_head, rack_sendmap);
 TAILQ_HEAD(rack_head, rack_sendmap);
 TAILQ_HEAD(def_opt_head, deferred_opt_list);
 

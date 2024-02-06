@@ -32,13 +32,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)kern_sig.c	8.7 (Berkeley) 4/18/94
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_capsicum.h"
 #include "opt_ktrace.h"
 
@@ -160,6 +156,10 @@ SYSCTL_INT(_kern_sigqueue, OID_AUTO, alloc_fail, CTLFLAG_RD,
 static int	kern_lognosys = 0;
 SYSCTL_INT(_kern, OID_AUTO, lognosys, CTLFLAG_RWTUN, &kern_lognosys, 0,
     "Log invalid syscalls");
+
+static int	kern_signosys = 1;
+SYSCTL_INT(_kern, OID_AUTO, signosys, CTLFLAG_RWTUN, &kern_signosys, 0,
+    "Send SIGSYS on return from invalid syscall");
 
 __read_frequently bool sigfastblock_fetch_always = false;
 SYSCTL_BOOL(_kern, OID_AUTO, sigfastblock_fetch_always, CTLFLAG_RWTUN,
@@ -2688,7 +2688,8 @@ ptrace_syscallreq(struct thread *td, struct proc *p,
 	audited = AUDIT_SYSCALL_ENTER(sc, td) != 0;
 
 	if (!sy_thr_static) {
-		error = syscall_thread_enter(td, se);
+		error = syscall_thread_enter(td, &se);
+		sy_thr_static = (se->sy_thrcnt & SY_THR_STATIC) != 0;
 		if (error != 0) {
 			tsr->ts_ret.sr_error = error;
 			return;
@@ -3598,6 +3599,8 @@ void
 sigexit(struct thread *td, int sig)
 {
 	struct proc *p = td->td_proc;
+	const char *coreinfo;
+	int rv;
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
 	proc_set_p2_wexit(p);
@@ -3622,16 +3625,32 @@ sigexit(struct thread *td, int sig)
 		 * XXX : Todo, as well as euid, write out ruid too
 		 * Note that coredump() drops proc lock.
 		 */
-		if (coredump(td) == 0)
+		rv = coredump(td);
+		switch (rv) {
+		case 0:
 			sig |= WCOREFLAG;
+			coreinfo = " (core dumped)";
+			break;
+		case EFAULT:
+			coreinfo = " (no core dump - bad address)";
+			break;
+		case EINVAL:
+			coreinfo = " (no core dump - invalid argument)";
+			break;
+		case EFBIG:
+			coreinfo = " (no core dump - too large)";
+			break;
+		default:
+			coreinfo = " (no core dump - other error)";
+			break;
+		}
 		if (kern_logsigexit)
 			log(LOG_INFO,
 			    "pid %d (%s), jid %d, uid %d: exited on "
 			    "signal %d%s\n", p->p_pid, p->p_comm,
 			    p->p_ucred->cr_prison->pr_id,
 			    td->td_ucred->cr_uid,
-			    sig &~ WCOREFLAG,
-			    sig & WCOREFLAG ? " (core dumped)" : "");
+			    sig &~ WCOREFLAG, coreinfo);
 	} else
 		PROC_UNLOCK(p);
 	exit1(td, 0, sig);
@@ -3950,7 +3969,7 @@ corefile_open(const char *comm, uid_t uid, pid_t pid, struct thread *td,
 				}
 				getcredhostname(td->td_ucred, hostname,
 				    MAXHOSTNAMELEN);
-				sbuf_printf(&sb, "%s", hostname);
+				sbuf_cat(&sb, hostname);
 				break;
 			case 'I':	/* autoincrementing index */
 				if (indexpos != -1) {
@@ -3989,9 +4008,9 @@ corefile_open(const char *comm, uid_t uid, pid_t pid, struct thread *td,
 	sx_sunlock(&corefilename_lock);
 	free(hostname, M_TEMP);
 	if (compress == COMPRESS_GZIP)
-		sbuf_printf(&sb, GZIP_SUFFIX);
+		sbuf_cat(&sb, GZIP_SUFFIX);
 	else if (compress == COMPRESS_ZSTD)
-		sbuf_printf(&sb, ZSTD_SUFFIX);
+		sbuf_cat(&sb, ZSTD_SUFFIX);
 	if (sbuf_error(&sb) != 0) {
 		log(LOG_ERR, "pid %ld (%s), uid (%lu): corename is too "
 		    "long\n", (long)pid, comm, (u_long)uid);
@@ -4147,10 +4166,10 @@ coredump(struct thread *td)
 	sb = sbuf_new_auto();
 	if (vn_fullpath_global(p->p_textvp, &fullpath, &freepath) != 0)
 		goto out2;
-	sbuf_printf(sb, "comm=\"");
+	sbuf_cat(sb, "comm=\"");
 	devctl_safe_quote_sb(sb, fullpath);
 	free(freepath, M_TEMP);
-	sbuf_printf(sb, "\" core=\"");
+	sbuf_cat(sb, "\" core=\"");
 
 	/*
 	 * We can't lookup core file vp directly. When we're replacing a core, and
@@ -4169,7 +4188,7 @@ coredump(struct thread *td)
 		sbuf_putc(sb, '/');
 	}
 	devctl_safe_quote_sb(sb, name);
-	sbuf_printf(sb, "\"");
+	sbuf_putc(sb, '"');
 	if (sbuf_finish(sb) == 0)
 		devctl_notify("kernel", "signal", "coredump", sbuf_data(sb));
 out2:
@@ -4202,9 +4221,11 @@ nosys(struct thread *td, struct nosys_args *args)
 
 	p = td->td_proc;
 
-	PROC_LOCK(p);
-	tdsignal(td, SIGSYS);
-	PROC_UNLOCK(p);
+	if (SV_PROC_FLAG(p, SV_SIGSYS) != 0 && kern_signosys) {
+		PROC_LOCK(p);
+		tdsignal(td, SIGSYS);
+		PROC_UNLOCK(p);
+	}
 	if (kern_lognosys == 1 || kern_lognosys == 3) {
 		uprintf("pid %d comm %s: nosys %d\n", p->p_pid, p->p_comm,
 		    td->td_sa.code);
@@ -4275,9 +4296,7 @@ filt_sigattach(struct knote *kn)
 static void
 filt_sigdetach(struct knote *kn)
 {
-	struct proc *p = kn->kn_ptr.p_proc;
-
-	knlist_remove(p->p_klist, kn, 0);
+	knlist_remove(kn->kn_knlist, kn, 0);
 }
 
 /*

@@ -27,8 +27,6 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_ddb.h"
 #include "opt_kld.h"
 #include "opt_hwpmc_hooks.h"
@@ -463,8 +461,11 @@ linker_load_file(const char *filename, linker_file_t *result)
 		 * If we got something other than ENOENT, then it exists but
 		 * we cannot load it for some other reason.
 		 */
-		if (error != ENOENT)
+		if (error != ENOENT) {
 			foundfile = 1;
+			if (error == EEXIST)
+				break;
+		}
 		if (lf) {
 			error = linker_file_register_modules(lf);
 			if (error == EEXIST) {
@@ -473,6 +474,9 @@ linker_load_file(const char *filename, linker_file_t *result)
 			}
 			modules = !TAILQ_EMPTY(&lf->modules);
 			linker_file_register_sysctls(lf, false);
+#ifdef VIMAGE
+			LINKER_PROPAGATE_VNETS(lf);
+#endif
 			linker_file_sysinit(lf);
 			lf->flags |= LINKER_FILE_LINKED;
 

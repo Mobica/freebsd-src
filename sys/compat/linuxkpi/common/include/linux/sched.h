@@ -25,8 +25,6 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 #ifndef	_LINUXKPI_LINUX_SCHED_H_
 #define	_LINUXKPI_LINUX_SCHED_H_
@@ -66,6 +64,7 @@
 #define	TASK_COMM_LEN		(MAXCOMLEN + 1)
 
 struct seq_file;
+struct fpu_kern_ctx;
 
 struct work_struct;
 struct task_struct {
@@ -91,6 +90,7 @@ struct task_struct {
 	struct task_struct *group_leader;
 	unsigned rcu_section[TS_RCU_TYPE_MAX];
 	unsigned int fpu_ctx_level;
+	struct fpu_kern_ctx *fpu_ctx;
 };
 
 #define	current	({ \

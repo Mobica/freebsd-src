@@ -27,13 +27,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)tcp_output.c	8.4 (Berkeley) 5/24/95
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_inet.h"
 #include "opt_inet6.h"
 #include "opt_ipsec.h"
@@ -334,9 +330,6 @@ again:
 			    __func__, off));
 			sack_rxmit = 1;
 			sendalot = 1;
-			TCPSTAT_INC(tcps_sack_rexmits);
-			TCPSTAT_ADD(tcps_sack_rexmit_bytes,
-			    min(len, tcp_maxseg(tp)));
 		}
 	}
 after_sack_rexmit:
@@ -399,10 +392,10 @@ after_sack_rexmit:
 	 * in which case len is already set.
 	 */
 	if (sack_rxmit == 0) {
-		if (sack_bytes_rxmt == 0)
+		if (sack_bytes_rxmt == 0) {
 			len = ((int32_t)min(sbavail(&so->so_snd), sendwin) -
 			    off);
-		else {
+		} else {
 			int32_t cwin;
 
 			/*
@@ -565,12 +558,8 @@ after_sack_rexmit:
 	    ipoptlen == 0 && !(flags & TH_SYN))
 		tso = 1;
 
-	if (sack_rxmit) {
-		if (SEQ_LT(p->rxmit + len, tp->snd_una + sbused(&so->so_snd)))
-			flags &= ~TH_FIN;
-	} else {
-		if (SEQ_LT(tp->snd_nxt + len, tp->snd_una +
-		    sbused(&so->so_snd)))
+	if (SEQ_LT((sack_rxmit ? p->rxmit : tp->snd_nxt) + len,
+		    tp->snd_una + sbused(&so->so_snd))) {
 			flags &= ~TH_FIN;
 	}
 
@@ -655,8 +644,7 @@ after_sack_rexmit:
 	 * Don't send an independent window update if a delayed
 	 * ACK is pending (it will get piggy-backed on it) or the
 	 * remote side already has done a half-close and won't send
-	 * more data.  Skip this if the connection is in T/TCP
-	 * half-open state.
+	 * more data.
 	 */
 	if (recwin > 0 && !(tp->t_flags & TF_NEEDSYN) &&
 	    !(tp->t_flags & TF_DELACK) &&
@@ -1041,6 +1029,10 @@ send:
 			tp->t_sndrexmitpack++;
 			TCPSTAT_INC(tcps_sndrexmitpack);
 			TCPSTAT_ADD(tcps_sndrexmitbyte, len);
+			if (sack_rxmit) {
+				TCPSTAT_INC(tcps_sack_rexmits);
+				TCPSTAT_ADD(tcps_sack_rexmit_bytes, len);
+			}
 #ifdef STATS
 			stats_voi_update_abs_u32(tp->t_stats, VOI_TCP_RETXPB,
 			    len);
@@ -1656,7 +1648,7 @@ timer:
 		    ((flags & TH_SYN) == 0) &&
 		    (error != EPERM)) {
 			if (sack_rxmit) {
-				p->rxmit -= len;
+				p->rxmit = SEQ_MIN(p->end, p->rxmit) - len;
 				tp->sackhint.sack_bytes_rexmit -= len;
 				KASSERT(tp->sackhint.sack_bytes_rexmit >= 0,
 				    ("sackhint bytes rtx >= 0"));
@@ -1667,6 +1659,8 @@ timer:
 				if (flags & TH_FIN)
 					tp->snd_nxt--;
 			}
+			if (IN_RECOVERY(tp->t_flags))
+				tp->sackhint.prr_out -= len;
 		}
 		SOCKBUF_UNLOCK_ASSERT(&so->so_snd);	/* Check gotos. */
 		switch (error) {
@@ -1722,16 +1716,6 @@ timer:
 	tp->t_flags &= ~(TF_ACKNOW | TF_DELACK);
 	if (tcp_timer_active(tp, TT_DELACK))
 		tcp_timer_activate(tp, TT_DELACK, 0);
-#if 0
-	/*
-	 * This completely breaks TCP if newreno is turned on.  What happens
-	 * is that if delayed-acks are turned on on the receiver, this code
-	 * on the transmitter effectively destroys the TCP window, forcing
-	 * it to four packets (1.5Kx4 = 6K window).
-	 */
-	if (sendalot && --maxburst)
-		goto again;
-#endif
 	if (sendalot)
 		goto again;
 	return (0);
@@ -2091,7 +2075,7 @@ tcp_m_copym(struct mbuf *m, int32_t off0, int32_t *plen,
 		}
 		n->m_len = mlen;
 		len_cp += n->m_len;
-		if (m->m_flags & (M_EXT|M_EXTPG)) {
+		if (m->m_flags & (M_EXT | M_EXTPG)) {
 			n->m_data = m->m_data + off;
 			mb_dupcl(n, m);
 		} else

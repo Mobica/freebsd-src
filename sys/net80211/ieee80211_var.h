@@ -24,8 +24,6 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 #ifndef _NET80211_IEEE80211_VAR_H_
 #define _NET80211_IEEE80211_VAR_H_
@@ -242,10 +240,9 @@ struct ieee80211com {
 	uint8_t			ic_txstream;    /* # TX streams */
 
 	/* VHT information */
-	uint32_t		ic_vhtcaps;	/* VHT capabilities */
+	uint32_t		ic_vht_flags;	/* VHT state flags */
+	struct ieee80211_vht_cap ic_vht_cap;	/* VHT capabilities + MCS info */
 	uint32_t		ic_vhtextcaps;	/* VHT extended capabilities (TODO) */
-	struct ieee80211_vht_mcs_info	ic_vht_mcsinfo; /* Support TX/RX VHT MCS */
-	uint32_t		ic_flags_vht;	/* VHT state flags */
 	uint32_t		ic_vht_spare[3];
 
 	/* optional state for Atheros SuperG protocol extensions */
@@ -425,10 +422,9 @@ struct ieee80211vap {
 	int			iv_inact_probe;	/* inactive probe time */
 
 	/* VHT flags */
-	uint32_t		iv_flags_vht;	/* VHT state flags */
-	uint32_t		iv_vhtcaps;	/* VHT capabilities */
+	uint32_t		iv_vht_flags;	/* VHT state flags */
+	struct ieee80211_vht_cap iv_vht_cap;	/* VHT capabilities + MCS info */
 	uint32_t		iv_vhtextcaps;	/* VHT extended capabilities (TODO) */
-	struct ieee80211_vht_mcs_info	iv_vht_mcsinfo;
 	uint32_t		iv_vht_spare[4];
 
 	int			iv_des_nssid;	/* # desired ssids */

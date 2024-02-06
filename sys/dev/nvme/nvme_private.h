@@ -24,8 +24,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef __NVME_PRIVATE_H__
@@ -88,6 +86,7 @@ MALLOC_DECLARE(M_NVME);
 #define NVME_MAX_CONSUMERS	(2)
 #define NVME_MAX_ASYNC_EVENTS	(8)
 
+#define NVME_ADMIN_TIMEOUT_PERIOD	(60)    /* in seconds */
 #define NVME_DEFAULT_TIMEOUT_PERIOD	(30)    /* in seconds */
 #define NVME_MIN_TIMEOUT_PERIOD		(5)
 #define NVME_MAX_TIMEOUT_PERIOD		(120)
@@ -119,11 +118,12 @@ struct nvme_request {
 	struct nvme_command		cmd;
 	struct nvme_qpair		*qpair;
 	struct memdesc			payload;
-	bool				payload_valid;
-	bool				timeout;
 	nvme_cb_fn_t			cb_fn;
 	void				*cb_arg;
 	int32_t				retries;
+	bool				payload_valid;
+	bool				timeout;
+	bool				spare[2];		/* Future use */
 	STAILQ_ENTRY(nvme_request)	stailq;
 };
 
@@ -150,8 +150,6 @@ struct nvme_tracker {
 
 enum nvme_recovery {
 	RECOVERY_NONE = 0,		/* Normal operations */
-	RECOVERY_START,			/* Deadline has passed, start recovering */
-	RECOVERY_RESET,			/* This pass, initiate reset of controller */
 	RECOVERY_WAITING,		/* waiting for the reset to complete */
 };
 struct nvme_qpair {
@@ -165,10 +163,9 @@ struct nvme_qpair {
 	struct resource		*res;
 	void 			*tag;
 
-	struct callout		timer;
-	sbintime_t		deadline;
-	bool			timer_armed;
-	enum nvme_recovery	recovery_state;
+	struct callout		timer;			/* recovery lock */
+	bool			timer_armed;		/* recovery lock */
+	enum nvme_recovery	recovery_state;		/* recovery lock */
 
 	uint32_t		num_entries;
 	uint32_t		num_trackers;
@@ -185,6 +182,7 @@ struct nvme_qpair {
 	int64_t			num_retries;
 	int64_t			num_failures;
 	int64_t			num_ignored;
+	int64_t			num_recovery_nolock;
 
 	struct nvme_command	*cmd;
 	struct nvme_completion	*cpl;
@@ -202,8 +200,8 @@ struct nvme_qpair {
 
 	struct nvme_tracker	**act_tr;
 
-	struct mtx		lock __aligned(CACHE_LINE_SIZE);
-
+	struct mtx_padalign	lock;
+	struct mtx_padalign	recovery;
 } __aligned(CACHE_LINE_SIZE);
 
 struct nvme_namespace {
@@ -257,7 +255,6 @@ struct nvme_controller {
 	uint32_t		queues_created;
 
 	struct task		reset_task;
-	struct task		fail_req_task;
 	struct taskqueue	*taskqueue;
 
 	/* For shared legacy interrupt. */
@@ -283,6 +280,7 @@ struct nvme_controller {
 	uint32_t		int_coal_threshold;
 
 	/** timeout period in seconds */
+	uint32_t		admin_timeout_period;
 	uint32_t		timeout_period;
 
 	/** doorbell stride */
@@ -412,8 +410,6 @@ void	nvme_ctrlr_submit_admin_request(struct nvme_controller *ctrlr,
 					struct nvme_request *req);
 void	nvme_ctrlr_submit_io_request(struct nvme_controller *ctrlr,
 				     struct nvme_request *req);
-void	nvme_ctrlr_post_failed_request(struct nvme_controller *ctrlr,
-				       struct nvme_request *req);
 
 int	nvme_qpair_construct(struct nvme_qpair *qpair,
 			     uint32_t num_entries, uint32_t num_trackers,
@@ -443,8 +439,10 @@ void	nvme_ns_destruct(struct nvme_namespace *ns);
 
 void	nvme_sysctl_initialize_ctrlr(struct nvme_controller *ctrlr);
 
-void	nvme_dump_command(struct nvme_command *cmd);
-void	nvme_dump_completion(struct nvme_completion *cpl);
+void	nvme_qpair_print_command(struct nvme_qpair *qpair,
+	    struct nvme_command *cmd);
+void	nvme_qpair_print_completion(struct nvme_qpair *qpair,
+	    struct nvme_completion *cpl);
 
 int	nvme_attach(device_t dev);
 int	nvme_shutdown(device_t dev);

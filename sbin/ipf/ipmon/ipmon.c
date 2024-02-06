@@ -1,4 +1,3 @@
-/*	$FreeBSD$	*/
 
 /*
  * Copyright (C) 2012 by Darren Reed.
@@ -14,10 +13,6 @@
 #include <fcntl.h>
 #include <signal.h>
 
-#if !defined(lint)
-static const char sccsid[] = "@(#)ipmon.c	1.21 6/5/96 (C)1993-2000 Darren Reed";
-static const char rcsid[] = "@(#)$Id$";
-#endif
 
 
 #define	STRERROR(x)	strerror(x)
@@ -583,7 +578,7 @@ dumphex(FILE *log, int dopts, char *buf, int len)
 		}
 
 		if ((j + 1) & 0xf)
-			*t++ = ' ';;
+			*t++ = ' ';
 	}
 
 	if (j & 0xf) {

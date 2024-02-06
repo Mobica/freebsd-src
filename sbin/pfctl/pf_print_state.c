@@ -32,9 +32,6 @@
  *
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/endian.h>
@@ -379,6 +376,8 @@ print_state(struct pfctl_state *s, int opts)
 			printf(", sloppy");
 		if (s->state_flags & PFSTATE_NOSYNC)
 			printf(", no-sync");
+		if (s->state_flags & PFSTATE_PFLOW)
+			printf(", pflow");
 		if (s->state_flags & PFSTATE_ACK)
 			printf(", psync-ack");
 		if (s->state_flags & PFSTATE_NODF)

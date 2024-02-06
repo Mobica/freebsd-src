@@ -1,7 +1,7 @@
 /*-
  * SPDX-License-Identifier: BSD-4-Clause
  *
- * Copyright (c) 2000 Dag-Erling Coïdan Smørgrav
+ * Copyright (c) 2000 Dag-Erling Smørgrav
  * Copyright (c) 1999 Pierre Beyssac
  * Copyright (c) 1993 Jan-Simon Pendry
  * Copyright (c) 1993
@@ -37,17 +37,12 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)procfs_status.c	8.4 (Berkeley) 6/15/94
  */
 
 #include "opt_inet.h"
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
-#include <sys/queue.h>
+#include <sys/systm.h>
 #include <sys/blist.h>
 #include <sys/conf.h>
 #include <sys/exec.h>
@@ -64,6 +59,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/ptrace.h>
+#include <sys/queue.h>
 #include <sys/resourcevar.h>
 #include <sys/resource.h>
 #include <sys/sbuf.h>
@@ -74,7 +70,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/syscallsubr.h>
 #include <sys/sysctl.h>
 #include <sys/sysent.h>
-#include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/tty.h>
 #include <sys/user.h>
@@ -204,10 +199,7 @@ linprocfs_domeminfo(PFS_FILL_ARGS)
 static int
 linprocfs_docpuinfo(PFS_FILL_ARGS)
 {
-	int hw_model[2];
-	char model[128];
 	uint64_t freq;
-	size_t size;
 	u_int cache_size[4];
 	u_int regs[4] = { 0 };
 	int fqmhz, fqkhz;
@@ -307,12 +299,6 @@ linprocfs_docpuinfo(PFS_FILL_ARGS)
 		"acc_power",
 	};
 
-	hw_model[0] = CTL_HW;
-	hw_model[1] = HW_MODEL;
-	model[0] = '\0';
-	size = sizeof(model);
-	if (kernel_sysctl(td, hw_model, 2, &model, &size, 0, 0, 0, 0) != 0)
-		strcpy(model, "unknown");
 #ifdef __i386__
 	switch (cpu_vendor_id) {
 	case CPU_VENDOR_AMD:
@@ -356,7 +342,7 @@ linprocfs_docpuinfo(PFS_FILL_ARGS)
 		    "cpuid level\t: %d\n"
 		    "wp\t\t: %s\n",
 		    i, cpu_vendor, CPUID_TO_FAMILY(cpu_id),
-		    CPUID_TO_MODEL(cpu_id), model, cpu_id & CPUID_STEPPING,
+		    CPUID_TO_MODEL(cpu_id), cpu_model, cpu_id & CPUID_STEPPING,
 		    fqmhz, fqkhz,
 		    (cache_size[2] >> 16), 0, mp_ncpus, i, mp_ncpus,
 		    i, i, /*cpu_id & CPUID_LOCAL_APIC_ID ??*/

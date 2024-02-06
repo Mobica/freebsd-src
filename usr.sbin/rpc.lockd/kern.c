@@ -30,9 +30,6 @@
  *      from BSDI kern.c,v 1.2 1998/11/25 22:38:27 don Exp
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/queue.h>

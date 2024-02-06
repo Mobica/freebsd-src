@@ -23,7 +23,6 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# $FreeBSD$
 
 . $(atf_get_srcdir)/conf.sh
 
@@ -38,7 +37,7 @@ preserve_props_body()
 {
 	geli_test_setup
 
-	md=$(attach_md -s1m)
+	attach_md md -s1m
 	atf_check geli onetime /dev/${md}
 	md_secsize=$(diskinfo ${md} | cut -wf 2)
 	md_stripesize=$(diskinfo ${md} | cut -wf 5)
@@ -104,7 +103,7 @@ physpath_body()
 		atf_skip "$error_message"
 	fi
 
-	md=$(attach_md -s1m)
+	attach_md md -s1m
 	# If the underlying device has no physical path, then geli should not
 	# create one.
 	atf_check -o empty -e ignore diskinfo -p $md

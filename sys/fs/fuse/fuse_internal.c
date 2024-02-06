@@ -60,9 +60,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/counter.h>
@@ -328,7 +325,6 @@ fuse_internal_cache_attrs(struct vnode *vp, struct fuse_attr *attr,
 	else
 		return;
 
-	vattr_null(vp_cache_at);
 	vp_cache_at->va_fsid = mp->mnt_stat.f_fsid.val[0];
 	vp_cache_at->va_fileid = attr->ino;
 	vp_cache_at->va_mode = attr->mode & ~S_IFMT;
@@ -999,7 +995,7 @@ fuse_internal_init_callback(struct fuse_ticket *tick, struct uio *uio)
 		 * But there would be little payoff.
 		 */
 		SDT_PROBE2(fusefs, , internal, trace, 1,
-			"userpace version too low");
+			"userspace version too low");
 		err = EPROTONOSUPPORT;
 		goto out;
 	}

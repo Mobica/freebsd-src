@@ -1,4 +1,3 @@
-# $FreeBSD$
 #
 # Option file for bmake builds. These options are available to all users of
 # bmake (including the source tree userland and kernel builds). They generally
@@ -61,6 +60,7 @@ __DEFAULT_YES_OPTIONS = \
     MAKE_CHECK_USE_SANDBOX \
     MAN \
     MANCOMPRESS \
+    MANSPLITPKG \
     NIS \
     NLS \
     OPENSSH \
@@ -76,10 +76,7 @@ __DEFAULT_NO_OPTIONS = \
     BIND_NOW \
     CCACHE_BUILD \
     CTF \
-    INIT_ALL_PATTERN \
-    INIT_ALL_ZERO \
     INSTALL_AS_USER \
-    MANSPLITPKG \
     PROFILE \
     RETPOLINE \
     STALE_STAGED \
@@ -104,13 +101,15 @@ __DEFAULT_NO_OPTIONS+= PIE
 __DEFAULT_YES_OPTIONS+=PIE
 .endif
 
+__SINGLE_OPTIONS = \
+   INIT_ALL
+
+__INIT_ALL_OPTIONS=	none pattern zero
+__INIT_ALL_DEFAULT=	none
+
 .-include <local.opts.mk>
 
 .include <bsd.mkopt.mk>
-
-.if ${MK_INIT_ALL_PATTERN} == "yes" && ${MK_INIT_ALL_ZERO} == "yes"
-.warning WITH_INIT_ALL_PATTERN and WITH_INIT_ALL_ZERO are mutually exclusive.
-.endif
 
 #
 # Supported NO_* options (if defined, MK_* will be forced to "no",

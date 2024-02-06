@@ -60,9 +60,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/types.h>
 #include <sys/systm.h>
 #include <sys/counter.h>
@@ -158,7 +155,14 @@ fuse_vnode_init(struct vnode *vp, struct fuse_vnode_data *fvdat,
 {
 	fvdat->nid = nodeid;
 	LIST_INIT(&fvdat->handles);
+
 	vattr_null(&fvdat->cached_attrs);
+	fvdat->cached_attrs.va_birthtime.tv_sec = -1;
+	fvdat->cached_attrs.va_birthtime.tv_nsec = 0;
+	fvdat->cached_attrs.va_fsid = VNOVAL;
+	fvdat->cached_attrs.va_gen = 0;
+	fvdat->cached_attrs.va_rdev = NODEV;
+
 	if (nodeid == FUSE_ROOT_ID) {
 		vp->v_vflag |= VV_ROOT;
 	}

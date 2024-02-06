@@ -27,9 +27,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -64,7 +61,7 @@ const char *separator = "\t";
 static void clear_persist(struct cfjail *j);
 static int update_jail(struct cfjail *j);
 static int rdtun_params(struct cfjail *j, int dofail);
-static void running_jid(struct cfjail *j, int dflag);
+static void running_jid(struct cfjail *j);
 static void jail_quoted_warnx(const struct cfjail *j, const char *name_msg,
     const char *noname_msg);
 static int jailparam_set_note(const struct cfjail *j, struct jailparam *jp,
@@ -101,6 +98,7 @@ static const enum intparam startcommands[] = {
     IP_EXEC_PRESTART,
     IP__OP,
     IP_EXEC_CREATED,
+    IP_ZFS_DATASET,
     IP_VNET_INTERFACE,
     IP_EXEC_START,
     IP_COMMAND,
@@ -140,8 +138,8 @@ main(int argc, char **argv)
 	const char *cfname;
 	size_t sysvallen;
 	unsigned op, pi;
-	int ch, docf, error, i, oldcl, sysval;
-	int dflag, Rflag;
+	int ch, docf, dying_warned, error, i, oldcl, sysval;
+	int dflag, eflag, Rflag;
 #if defined(INET) || defined(INET6)
 	char *cs, *ncs;
 #endif
@@ -150,7 +148,7 @@ main(int argc, char **argv)
 #endif
 
 	op = 0;
-	dflag = Rflag = 0;
+	dflag = eflag = Rflag = 0;
 	docf = 1;
 	cfname = CONF_FILE;
 	JidFile = NULL;
@@ -164,7 +162,7 @@ main(int argc, char **argv)
 			dflag = 1;
 			break;
 		case 'e':
-			op |= JF_SHOW;
+			eflag = 1;
 			separator = optarg;
 			break;
 		case 'f':
@@ -234,7 +232,16 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	/* Find out which of the four command line styles this is. */
+	if (eflag) {
+		/* Just print list of all configured non-wildcard jails */
+		if (op || argc > 0)
+			usage();
+		load_config(cfname);
+		show_jails();
+		exit(0);
+	}
+
+	/* Find out which of the command line styles this is. */
 	oldcl = 0;
 	if (!op) {
 		/* Old-style command line with four fixed parameters */
@@ -284,13 +291,7 @@ main(int argc, char **argv)
 					    ? NULL : "false");
 			}
 		}
-	} else if (op == JF_STOP || op == JF_SHOW) {
-		/* Just print list of all configured non-wildcard jails */
-		if (op == JF_SHOW) {
-			load_config(cfname);
-			show_jails();
-			exit(0);
-		}
+	} else if (op == JF_STOP) {
 		/* Jail remove, perhaps using the config file */
 		if (!docf || argc == 0)
 			usage();
@@ -377,6 +378,7 @@ main(int argc, char **argv)
 	 * operation on it.  When that is done, the jail may be finished,
 	 * or it may go back for the next step.
 	 */
+	dying_warned = 0;
 	while ((j = next_jail()))
 	{
 		if (j->flags & JF_FAILED) {
@@ -397,11 +399,13 @@ main(int argc, char **argv)
 			    import_params(j) < 0)
 				continue;
 		}
+		if (j->intparams[IP_ALLOW_DYING] && !dying_warned) {
+			warnx("%s", "the 'allow.dying' parameter and '-d' flag"
+			    "are deprecated and have no effect.");
+			dying_warned = 1;
+		}
 		if (!j->jid)
-			running_jid(j,
-			    (j->flags & (JF_SET | JF_DEPEND)) == JF_SET
-			    ? dflag || bool_param(j->intparams[IP_ALLOW_DYING])
-			    : 0);
+			running_jid(j);
 		if (finish_command(j))
 			continue;
 
@@ -613,11 +617,10 @@ jail_warnx(const struct cfjail *j, const char *fmt, ...)
 int
 create_jail(struct cfjail *j)
 {
-	struct iovec jiov[4];
 	struct stat st;
-	struct jailparam *jp, *setparams, *setparams2, *sjp;
+	struct jailparam *jp, *setparams, *sjp;
 	const char *path;
-	int dopersist, ns, jid, dying, didfail;
+	int dopersist, ns;
 
 	/*
 	 * Check the jail's path, with a better error message than jail_set
@@ -657,57 +660,8 @@ create_jail(struct cfjail *j)
 			*sjp++ = *jp;
 	ns = sjp - setparams;
 
-	didfail = 0;
 	j->jid = jailparam_set_note(j, setparams, ns, JAIL_CREATE);
-	if (j->jid < 0 && errno == EEXIST &&
-	    bool_param(j->intparams[IP_ALLOW_DYING]) &&
-	    int_param(j->intparams[KP_JID], &jid) && jid != 0) {
-		/*
-		 * The jail already exists, but may be dying.
-		 * Make sure it is, in which case an update is appropriate.
-		 */
-		jiov[0].iov_base = __DECONST(char *, "jid");
-		jiov[0].iov_len = sizeof("jid");
-		jiov[1].iov_base = &jid;
-		jiov[1].iov_len = sizeof(jid);
-		jiov[2].iov_base = __DECONST(char *, "dying");
-		jiov[2].iov_len = sizeof("dying");
-		jiov[3].iov_base = &dying;
-		jiov[3].iov_len = sizeof(dying);
-		if (jail_get(jiov, 4, JAIL_DYING) < 0) {
-			/*
-			 * It could be that the jail just barely finished
-			 * dying, or it could be that the jid never existed
-			 * but the name does.  In either case, another try
-			 * at creating the jail should do the right thing.
-			 */
-			if (errno == ENOENT)
-				j->jid = jailparam_set_note(j, setparams, ns,
-				    JAIL_CREATE);
-		} else if (dying) {
-			j->jid = jid;
-			if (rdtun_params(j, 1) < 0) {
-				j->jid = -1;
-				didfail = 1;
-			} else {
-				sjp = setparams2 = alloca((j->njp + dopersist) *
-				    sizeof(struct jailparam));
-				for (jp = setparams; jp < setparams + ns; jp++)
-					if (!JP_RDTUN(jp) ||
-					    !strcmp(jp->jp_name, "jid"))
-						*sjp++ = *jp;
-				j->jid = jailparam_set_note(j, setparams2,
-				    sjp - setparams2, JAIL_UPDATE | JAIL_DYING);
-				/*
-				 * Again, perhaps the jail just finished dying.
-				 */
-				if (j->jid < 0 && errno == ENOENT)
-					j->jid = jailparam_set_note(j,
-					    setparams, ns, JAIL_CREATE);
-			}
-		}
-	}
-	if (j->jid < 0 && !didfail) {
+	if (j->jid < 0) {
 		jail_warnx(j, "%s", jail_errmsg);
 		failed(j);
 	}
@@ -772,9 +726,7 @@ update_jail(struct cfjail *j)
 		if (!JP_RDTUN(jp))
 			*++sjp = *jp;
 
-	jid = jailparam_set_note(j, setparams, ns,
-	    bool_param(j->intparams[IP_ALLOW_DYING])
-	    ? JAIL_UPDATE | JAIL_DYING : JAIL_UPDATE);
+	jid = jailparam_set_note(j, setparams, ns, JAIL_UPDATE);
 	if (jid < 0) {
 		jail_warnx(j, "%s", jail_errmsg);
 		failed(j);
@@ -815,8 +767,7 @@ rdtun_params(struct cfjail *j, int dofail)
 			rtjp->jp_value = NULL;
 		}
 	rval = 0;
-	if (jailparam_get(rtparams, nrt,
-	    bool_param(j->intparams[IP_ALLOW_DYING]) ? JAIL_DYING : 0) > 0) {
+	if (jailparam_get(rtparams, nrt, 0) > 0) {
 		rtjp = rtparams + 1;
 		for (jp = j->jp; rtjp < rtparams + nrt; jp++) {
 			if (JP_RDTUN(jp) && strcmp(jp->jp_name, "jid")) {
@@ -863,7 +814,7 @@ rdtun_params(struct cfjail *j, int dofail)
  * Get the jail's jid if it is running.
  */
 static void
-running_jid(struct cfjail *j, int dflag)
+running_jid(struct cfjail *j)
 {
 	struct iovec jiov[2];
 	const char *pval;
@@ -889,7 +840,7 @@ running_jid(struct cfjail *j, int dflag)
 		j->jid = -1;
 		return;
 	}
-	j->jid = jail_get(jiov, 2, dflag ? JAIL_DYING : 0);
+	j->jid = jail_get(jiov, 2, 0);
 }
 
 static void
@@ -918,10 +869,9 @@ jailparam_set_note(const struct cfjail *j, struct jailparam *jp, unsigned njp,
 
 	jid = jailparam_set(jp, njp, flags);
 	if (verbose > 0) {
-		jail_note(j, "jail_set(%s%s)",
+		jail_note(j, "jail_set(%s)",
 		    (flags & (JAIL_CREATE | JAIL_UPDATE)) == JAIL_CREATE
-		    ? "JAIL_CREATE" : "JAIL_UPDATE",
-		    (flags & JAIL_DYING) ? " | JAIL_DYING" : "");
+		    ? "JAIL_CREATE" : "JAIL_UPDATE");
 		for (i = 0; i < njp; i++) {
 			printf(" %s", jp[i].jp_name);
 			if (jp[i].jp_value == NULL)

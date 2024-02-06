@@ -1,4 +1,3 @@
-# $FreeBSD$
 
 PACKAGE=	tests
 
@@ -8,10 +7,11 @@ BINDIR=		${TESTSDIR}
 TESTS_SUBDIRS+=	libalias
 
 ATF_TESTS_C=	ip_reass_test \
+		ip6_v4mapped_test \
 		so_reuseport_lb_test \
 		socket_afinet \
-		tcp6_v4mapped_bind_test \
 		tcp_connect_port_test \
+		tcp_implied_connect \
 		tcp_md5_getsockopt
 
 ATF_TESTS_SH=	arp \
@@ -25,6 +25,7 @@ ATF_TESTS_SH=	arp \
 		redirect
 
 ATF_TESTS_PYTEST+=	carp.py
+ATF_TESTS_PYTEST+=	igmp.py
 
 TEST_METADATA.divert+=	required_programs="python"
 TEST_METADATA.forward+=	required_programs="python"

@@ -23,8 +23,6 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef RTLD_H /* { */
@@ -52,6 +50,7 @@ extern size_t tls_last_size;
 extern size_t tls_static_space;
 extern Elf_Addr tls_dtv_generation;
 extern int tls_max_index;
+extern size_t ld_static_tls_extra;
 
 extern int npagesizes;
 extern size_t *pagesizes;
@@ -241,6 +240,7 @@ typedef struct Struct_Obj_Entry {
     bool ver_checked : 1;	/* True if processed by rtld_verify_object_versions */
     bool textrel : 1;		/* True if there are relocations to text seg */
     bool symbolic : 1;		/* True if generated with "-Bsymbolic" */
+    bool deepbind : 1;		/* True if loaded with RTLD_DEEPBIND" */
     bool bind_now : 1;		/* True if all relocations should be made first */
     bool traced : 1;		/* Already printed in ldd trace output */
     bool jmpslots_done : 1;	/* Already have relocated the jump slots */
@@ -363,8 +363,7 @@ Obj_Entry *map_object(int, const char *, const struct stat *);
 void *xcalloc(size_t, size_t);
 void *xmalloc(size_t);
 char *xstrdup(const char *);
-void *malloc_aligned(size_t size, size_t align, size_t offset);
-void free_aligned(void *ptr);
+void *xmalloc_aligned(size_t size, size_t align, size_t offset);
 extern Elf_Addr _GLOBAL_OFFSET_TABLE_[];
 extern Elf_Sym sym_zero;	/* For resolving undefined weak refs. */
 extern bool ld_bind_not;

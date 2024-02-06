@@ -27,8 +27,6 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 /*
  * The DPAA2 Management Complex (MC) Bus Driver (FDT-based).
  *
@@ -273,8 +271,6 @@ dpaa2_mc_fdt_attach(device_t dev)
 		if (!ofw_bus_node_is_compatible(child, "fsl,qoriq-mc-dpmac"))
 			continue;
 		if (!OF_hasprop(child, "reg"))
-			continue;
-		if (!OF_hasprop(child, "pcs-handle"))
 			continue;
 		if (dpaa2_mc_fdt_probe_child(dev, child) != 0)
 			continue;

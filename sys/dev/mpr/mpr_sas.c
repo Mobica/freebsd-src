@@ -31,8 +31,6 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 /* Communications core for Avago Technologies (LSI) MPT3 */
 
 /* TODO Move headers to mprvar */
@@ -306,7 +304,6 @@ mprsas_log_command(struct mpr_command *cm, u_int level, const char *fmt, ...)
 	struct sbuf sb;
 	va_list ap;
 	char str[224];
-	char path_str[64];
 
 	if (cm == NULL)
 		return;
@@ -320,9 +317,7 @@ mprsas_log_command(struct mpr_command *cm, u_int level, const char *fmt, ...)
 	va_start(ap, fmt);
 
 	if (cm->cm_ccb != NULL) {
-		xpt_path_string(cm->cm_ccb->csio.ccb_h.path, path_str,
-		    sizeof(path_str));
-		sbuf_cat(&sb, path_str);
+		xpt_path_sbuf(cm->cm_ccb->csio.ccb_h.path, &sb);
 		if (cm->cm_ccb->ccb_h.func_code == XPT_SCSI_IO) {
 			scsi_command_string(&cm->cm_ccb->csio, &sb);
 			sbuf_printf(&sb, "length %d ",

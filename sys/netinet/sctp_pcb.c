@@ -32,9 +32,6 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <netinet/sctp_os.h>
 #include <sys/proc.h>
 #include <netinet/sctp_var.h>
@@ -2501,7 +2498,7 @@ sctp_inpcb_alloc(struct socket *so, uint32_t vrf_id)
 	SCTP_INP_LOCK_INIT(inp);
 	rw_init_flags(&inp->ip_inp.inp.inp_lock, "sctpinp",
 	    RW_RECURSE | RW_DUPOK);
-	SCTP_INP_READ_INIT(inp);
+	SCTP_INP_READ_LOCK_INIT(inp);
 	SCTP_ASOC_CREATE_LOCK_INIT(inp);
 	/* lock the new ep */
 	SCTP_INP_WLOCK(inp);
@@ -3408,7 +3405,6 @@ sctp_inpcb_free(struct sctp_inpcb *inp, int immediate, int from)
 				continue;
 			}
 			if ((stcb->asoc.size_on_reasm_queue > 0) ||
-			    (stcb->asoc.control_pdapi) ||
 			    (stcb->asoc.size_on_all_streams > 0) ||
 			    ((so != NULL) && (SCTP_SBAVAIL(&so->so_rcv) > 0))) {
 				/* Left with Data unread */
@@ -3678,7 +3674,7 @@ sctp_inpcb_free(struct sctp_inpcb *inp, int immediate, int from)
 	crfree(inp->ip_inp.inp.inp_cred);
 	INP_LOCK_DESTROY(&inp->ip_inp.inp);
 	SCTP_INP_LOCK_DESTROY(inp);
-	SCTP_INP_READ_DESTROY(inp);
+	SCTP_INP_READ_LOCK_DESTROY(inp);
 	SCTP_ASOC_CREATE_LOCK_DESTROY(inp);
 	SCTP_ZONE_FREE(SCTP_BASE_INFO(ipi_zone_ep), inp);
 	SCTP_DECR_EP_COUNT();
@@ -4765,32 +4761,19 @@ sctp_free_assoc(struct sctp_inpcb *inp, struct sctp_tcb *stcb, int from_inpcbfre
 				 * now.
 				 */
 				if (sq->end_added == 0) {
-					/* Held for PD-API clear that. */
+					/* Held for PD-API, clear that. */
 					sq->pdapi_aborted = 1;
 					sq->held_length = 0;
 					if (sctp_stcb_is_feature_on(inp, stcb, SCTP_PCB_FLAGS_PDAPIEVNT) && (so != NULL)) {
-						/*
-						 * Need to add a PD-API
-						 * aborted indication.
-						 * Setting the control_pdapi
-						 * assures that it will be
-						 * added right after this
-						 * msg.
-						 */
-						uint32_t strseq;
-
-						stcb->asoc.control_pdapi = sq;
-						strseq = (sq->sinfo_stream << 16) | (sq->mid & 0x0000ffff);
 						sctp_ulp_notify(SCTP_NOTIFY_PARTIAL_DELVIERY_INDICATION,
 						    stcb,
 						    SCTP_PARTIAL_DELIVERY_ABORTED,
-						    (void *)&strseq,
+						    (void *)sq,
 						    SCTP_SO_LOCKED);
-						stcb->asoc.control_pdapi = NULL;
 					}
+					/* Add an end to wake them */
+					sq->end_added = 1;
 				}
-				/* Add an end to wake them */
-				sq->end_added = 1;
 			}
 		}
 		SCTP_INP_READ_UNLOCK(inp);
@@ -4868,7 +4851,6 @@ sctp_free_assoc(struct sctp_inpcb *inp, struct sctp_tcb *stcb, int from_inpcbfre
 				SOCKBUF_LOCK(&so->so_rcv);
 				so->so_state &= ~(SS_ISCONNECTING |
 				    SS_ISDISCONNECTING |
-				    SS_ISCONFIRMING |
 				    SS_ISCONNECTED);
 				so->so_state |= SS_ISDISCONNECTED;
 				socantrcvmore_locked(so);
@@ -5693,6 +5675,11 @@ sctp_startup_mcore_threads(void)
 }
 #endif
 
+#define VALIDATE_LOADER_TUNABLE(var_name, prefix)		\
+	if (SCTP_BASE_SYSCTL(var_name) < prefix##_MIN ||	\
+	    SCTP_BASE_SYSCTL(var_name) > prefix##_MAX)		\
+		SCTP_BASE_SYSCTL(var_name) = prefix##_DEFAULT
+
 void
 sctp_pcb_init(void)
 {
@@ -5734,6 +5721,9 @@ sctp_pcb_init(void)
 	TUNABLE_INT_FETCH("net.inet.sctp.tcbhashsize", &SCTP_BASE_SYSCTL(sctp_hashtblsize));
 	TUNABLE_INT_FETCH("net.inet.sctp.pcbhashsize", &SCTP_BASE_SYSCTL(sctp_pcbtblsize));
 	TUNABLE_INT_FETCH("net.inet.sctp.chunkscale", &SCTP_BASE_SYSCTL(sctp_chunkscale));
+	VALIDATE_LOADER_TUNABLE(sctp_hashtblsize, SCTPCTL_TCBHASHSIZE);
+	VALIDATE_LOADER_TUNABLE(sctp_pcbtblsize, SCTPCTL_PCBHASHSIZE);
+	VALIDATE_LOADER_TUNABLE(sctp_chunkscale, SCTPCTL_CHUNKSCALE);
 	SCTP_BASE_INFO(sctp_asochash) = SCTP_HASH_INIT((SCTP_BASE_SYSCTL(sctp_hashtblsize) * 31),
 	    &SCTP_BASE_INFO(hashasocmark));
 	SCTP_BASE_INFO(sctp_ephash) = SCTP_HASH_INIT(SCTP_BASE_SYSCTL(sctp_hashtblsize),

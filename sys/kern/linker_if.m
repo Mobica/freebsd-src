@@ -23,7 +23,6 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# $FreeBSD$
 #
 
 #include <sys/linker.h>
@@ -155,3 +154,12 @@ STATICMETHOD int link_preload {
 METHOD int link_preload_finish {
     linker_file_t	file;
 };
+
+#ifdef VIMAGE
+#
+# Propagate system tunable values to all vnets.
+#
+METHOD void propagate_vnets {
+	linker_file_t	file;
+};
+#endif

@@ -27,8 +27,6 @@ The Regents of the University of California.  All rights reserved.\n";
 static const char rcsid[] =
     "@(#)$Id: traceroute.c,v 1.68 2000/12/14 08:04:33 leres Exp $ (LBL)";
 #endif
-static const char rcsid[] =
-    "$FreeBSD$";
 #endif
 
 /*
@@ -57,7 +55,7 @@ static const char rcsid[] =
  * A sample use might be:
  *
  *     [yak 71]% traceroute nis.nsf.net.
- *     traceroute to nis.nsf.net (35.1.1.48), 64 hops max, 56 byte packet
+ *     traceroute to nis.nsf.net (35.1.1.48), 64 hops max, 40 byte packets
  *      1  helios.ee.lbl.gov (128.3.112.1)  19 ms  19 ms  0 ms
  *      2  lilac-dmc.Berkeley.EDU (128.32.216.1)  39 ms  39 ms  19 ms
  *      3  lilac-dmc.Berkeley.EDU (128.32.216.1)  39 ms  39 ms  19 ms
@@ -77,7 +75,7 @@ static const char rcsid[] =
  * A more interesting example is:
  *
  *     [yak 72]% traceroute allspice.lcs.mit.edu.
- *     traceroute to allspice.lcs.mit.edu (18.26.0.115), 64 hops max
+ *     traceroute to allspice.lcs.mit.edu (18.26.0.115), 64 hops max, 40 byte packets
  *      1  helios.ee.lbl.gov (128.3.112.1)  0 ms  0 ms  0 ms
  *      2  lilac-dmc.Berkeley.EDU (128.32.216.1)  19 ms  19 ms  19 ms
  *      3  lilac-dmc.Berkeley.EDU (128.32.216.1)  39 ms  19 ms  19 ms
@@ -157,7 +155,7 @@ static const char rcsid[] =
  * This program requires a kernel mod that does not appear in any
  * system available from Berkeley:  A raw ip socket using proto
  * IPPROTO_RAW must interpret the data sent as an ip datagram (as
- * opposed to data to be wrapped in a ip datagram).  See the README
+ * opposed to data to be wrapped in an ip datagram).  See the README
  * file that came with the source to this program for a description
  * of the mods I made to /sys/netinet/raw_ip.c.  Your mileage may
  * vary.  But, again, ANY 4.x (x < 4) BSD KERNEL WILL HAVE TO BE
@@ -365,6 +363,7 @@ int doipcksum = 1;		/* calculate ip checksums by default */
 int optlen;			/* length of ip options */
 int fixedPort = 0;		/* Use fixed destination port for TCP and UDP */
 int printdiff = 0;		/* Print the difference between sent and quoted */
+int ecnflag = 0;		/* ECN bleaching detection flag */
 
 extern int optind;
 extern int opterr;
@@ -388,7 +387,7 @@ int	packet_ok(u_char *, int, struct sockaddr_in *, int);
 char	*pr_type(u_char);
 void	print(u_char *, int, struct sockaddr_in *);
 #ifdef	IPSEC
-int	setpolicy __P((int so, char *policy));
+int	setpolicy(int so, char *policy);
 #endif
 void	send_probe(int, int);
 struct outproto *setproto(char *);
@@ -539,7 +538,7 @@ main(int argc, char **argv)
 		exit(1);
 	}
 	/*
-	 * Do the setuid-required stuff first, then lose priveleges ASAP.
+	 * Do the setuid-required stuff first, then lose privileges ASAP.
 	 * Do error checking for these two calls where they appeared in
 	 * the original code.
 	 */
@@ -597,7 +596,7 @@ main(int argc, char **argv)
 		prog = argv[0];
 
 	opterr = 0;
-	while ((op = getopt(argc, argv, "aA:edDFInrSvxf:g:i:M:m:P:p:q:s:t:w:z:")) != EOF)
+	while ((op = getopt(argc, argv, "aA:eEdDFInrSvxf:g:i:M:m:P:p:q:s:t:w:z:")) != EOF)
 		switch (op) {
 		case 'a':
 			as_path = 1;
@@ -618,6 +617,10 @@ main(int argc, char **argv)
 
 		case 'e':
 			fixedPort = 1;
+			break;
+
+		case 'E':
+			ecnflag = 1;
 			break;
 
 		case 'f':
@@ -762,7 +765,7 @@ main(int argc, char **argv)
 	}
 
 #ifdef HAVE_SETLINEBUF
-	setlinebuf (stdout);
+	setlinebuf(stdout);
 #else
 	setvbuf(stdout, NULL, _IOLBF, 0);
 #endif
@@ -784,6 +787,10 @@ main(int argc, char **argv)
 	outip->ip_v = IPVERSION;
 	if (settos)
 		outip->ip_tos = tos;
+	if (ecnflag) {
+		outip->ip_tos &= ~IPTOS_ECN_MASK;
+		outip->ip_tos |= IPTOS_ECN_ECT1;
+	}
 #ifdef BYTESWAP_IP_HDR
 	outip->ip_len = htons(packlen);
 	outip->ip_off = htons(off);
@@ -988,7 +995,7 @@ main(int argc, char **argv)
 	if (bind(sndsock, (struct sockaddr *)from, sizeof(*from)) < 0) {
 		Fprintf(stderr, "%s: bind: %s\n",
 		    prog, strerror(errno));
-		exit (1);
+		exit(1);
 	}
 
 	if (as_path) {
@@ -1104,7 +1111,8 @@ main(int argc, char **argv)
 					continue;
 				if (!gotlastaddr ||
 				    from->sin_addr.s_addr != lastaddr) {
-					if (gotlastaddr) printf("\n   ");
+					if (gotlastaddr)
+						printf("\n   ");
 					print(packet, cc, from);
 					lastaddr = from->sin_addr.s_addr;
 					++gotlastaddr;
@@ -1121,6 +1129,23 @@ main(int argc, char **argv)
 #endif
 					precis = 3;
 				Printf("  %.*f ms", precis, T);
+				if (ecnflag) {
+					u_char ecn = hip->ip_tos & IPTOS_ECN_MASK;
+					switch (ecn) {
+					case IPTOS_ECN_ECT1:
+						Printf(" (ecn=passed)");
+						break;
+					case IPTOS_ECN_NOTECT:
+						Printf(" (ecn=bleached)");
+						break;
+					case IPTOS_ECN_CE:
+						Printf(" (ecn=congested)");
+						break;
+					default:
+						Printf(" (ecn=mangled)");
+						break;
+					}
+				}
 				if (printdiff) {
 					Printf("\n");
 					Printf("%*.*s%s\n",
@@ -1292,7 +1317,7 @@ wait_for_reply(register int sock, register struct sockaddr_in *fromp,
 			    (struct sockaddr *)fromp, &fromlen);
 
 	free(fdsp);
-	return(cc);
+	return (cc);
 }
 
 void
@@ -1354,14 +1379,14 @@ setpolicy(int so, char *policy)
 	buf = ipsec_set_policy(policy, strlen(policy));
 	if (buf == NULL) {
 		warnx("%s", ipsec_strerror());
-		return -1;
+		return (-1);
 	}
 	(void)setsockopt(so, IPPROTO_IP, IP_IPSEC_POLICY,
 		buf, ipsec_get_policylen(buf));
 
 	free(buf);
 
-	return 0;
+	return (0);
 }
 #endif
 
@@ -1390,9 +1415,9 @@ pr_type(register u_char t)
 	};
 
 	if (t > 16)
-		return("OUT-OF-RANGE");
+		return ("OUT-OF-RANGE");
 
-	return(ttab[t]);
+	return (ttab[t]);
 }
 
 int
@@ -1433,7 +1458,7 @@ packet_ok(register u_char *buf, int cc, register struct sockaddr_in *from,
 	if (type == ICMP_ECHOREPLY
 	    && proto->num == IPPROTO_ICMP
 	    && (*proto->check)((u_char *)icp, (u_char)seq))
-		return -2;
+		return (-2);
 	if ((type == ICMP_TIMXCEED && code == ICMP_TIMXCEED_INTRANS) ||
 	    type == ICMP_UNREACH) {
 		u_char *inner;
@@ -1459,7 +1484,7 @@ packet_ok(register u_char *buf, int cc, register struct sockaddr_in *from,
 			Printf("%2d: %8.8x\n", i, ntohl(*lp++));
 	}
 #endif
-	return(0);
+	return (0);
 }
 
 void
@@ -1495,7 +1520,7 @@ udp_prep(struct outdata *outdata)
 	outudp->uh_ulen = htons((u_short)protlen);
 	outudp->uh_sum = 0;
 	if (doipcksum) {
-	    u_short sum = p_cksum(outip, (u_short*)outudp, protlen, protlen);
+	    u_short sum = p_cksum(outip, (u_short *)outudp, protlen, protlen);
 	    outudp->uh_sum = (sum) ? sum : 0xffff;
 	}
 
@@ -1521,7 +1546,7 @@ udplite_prep(struct outdata *outdata)
 	outudp->uh_ulen = htons(8);
 	outudp->uh_sum = 0;
 	if (doipcksum) {
-	    u_short sum = p_cksum(outip, (u_short*)outudp, protlen, 8);
+	    u_short sum = p_cksum(outip, (u_short *)outudp, protlen, 8);
 	    outudp->uh_sum = (sum) ? sum : 0xffff;
 	}
 
@@ -1551,7 +1576,7 @@ tcp_prep(struct outdata *outdata)
 	tcp->th_sum = 0;
 
 	if (doipcksum)
-	    tcp->th_sum = p_cksum(outip, (u_short*)tcp, protlen, protlen);
+	    tcp->th_sum = p_cksum(outip, (u_short *)tcp, protlen, protlen);
 }
 
 int
@@ -1676,7 +1701,7 @@ gre_check(const u_char *data, int seq)
 {
 	struct grehdr *const gre = (struct grehdr *) data;
 
-	return(ntohs(gre->proto) == port
+	return (ntohs(gre->proto) == port
 	    && ntohs(gre->callId) == ident + seq);
 }
 
@@ -1694,7 +1719,7 @@ gen_check(const u_char *data, int seq)
 {
 	u_int16_t *const ptr = (u_int16_t *) data;
 
-	return(ntohs(ptr[0]) == ident
+	return (ntohs(ptr[0]) == ident
 	    && ntohs(ptr[1]) == port + seq);
 }
 
@@ -1720,7 +1745,7 @@ print(register u_char *buf, register int cc, register struct sockaddr_in *from)
 		Printf(" %s (%s)", inetname(from->sin_addr), addr);
 
 	if (verbose)
-		Printf(" %d bytes to %s", cc, inet_ntoa (ip->ip_dst));
+		Printf(" %d bytes to %s", cc, inet_ntoa(ip->ip_dst));
 }
 
 /*
@@ -1737,10 +1762,10 @@ p_cksum(struct ip *ip, u_short *data, int len, int cov)
 	ipo.ih_src = ip->ip_src;
 	ipo.ih_dst = ip->ip_dst;
 
-	sum[1] = in_cksum((u_short*)&ipo, sizeof(ipo)); /* pseudo ip hdr cksum */
-	sum[0] = in_cksum(data, cov);                   /* payload data cksum */
+	sum[1] = in_cksum((u_short *)&ipo, sizeof(ipo)); /* pseudo ip hdr cksum */
+	sum[0] = in_cksum(data, cov);                    /* payload data cksum */
 
-	return ~in_cksum(sum, sizeof(sum));
+	return (~in_cksum(sum, sizeof(sum)));
 }
 
 /*
@@ -1782,7 +1807,7 @@ in_cksum(register u_short *addr, register int len)
  * CRC32C routine for the Stream Control Transmission Protocol
  */
 
-#define CRC32C(c, d) (c = (c>>8) ^ crc_c[(c^(d))&0xFF])
+#define CRC32C(c, d) (c = (c >> 8) ^ crc_c[(c ^ (d)) & 0xFF])
 
 static u_int32_t crc_c[256] = {
 	0x00000000, 0xF26B8303, 0xE13B70F7, 0x1350F3F4,
@@ -1863,11 +1888,11 @@ sctp_crc32c(const void *packet, u_int32_t len)
 		CRC32C(crc32c, buf[i]);
 	crc32c = ~crc32c;
 	byte0  = crc32c & 0xff;
-	byte1  = (crc32c>>8) & 0xff;
-	byte2  = (crc32c>>16) & 0xff;
-	byte3  = (crc32c>>24) & 0xff;
+	byte1  = (crc32c >> 8) & 0xff;
+	byte2  = (crc32c >> 16) & 0xff;
+	byte3  = (crc32c >> 24) & 0xff;
 	crc32c = ((byte0 << 24) | (byte1 << 16) | (byte2 << 8) | byte3);
-	return htonl(crc32c);
+	return (htonl(crc32c));
 }
 
 /*
@@ -2052,7 +2077,7 @@ str2val(register const char *str, register const char *what,
 	} else
 		val = (int)strtol(str, &ep, 10);
 	if (*ep != '\0') {
-		Fprintf(stderr, "%s: \"%s\" bad value for %s \n",
+		Fprintf(stderr, "%s: \"%s\" bad value for %s\n",
 		    prog, str, what);
 		exit(1);
 	}
@@ -2095,7 +2120,7 @@ setproto(char *pname)
 			pnum = str2val(optarg, "proto number", 1, 255);
 		proto->num = pnum;
 	}
-	return proto;
+	return (proto);
 }
 
 void
@@ -2125,8 +2150,9 @@ usage(void)
 
 	Fprintf(stderr, "Version %s\n", version);
 	Fprintf(stderr,
-	    "Usage: %s [-adDeFInrSvx] [-f first_ttl] [-g gateway] [-i iface]\n"
-	    "\t[-m max_ttl] [-p port] [-P proto] [-q nqueries] [-s src_addr]\n"
-	    "\t[-t tos] [-w waittime] [-A as_server] [-z pausemsecs] host [packetlen]\n", prog);
+	    "Usage: %s [-adDeEFInrSvx] [-A as_server] [-f first_ttl] [-g gateway]\n"
+	    "\t[-i iface] [-m max_ttl] [-M first_ttl] [-p port] [-P proto]\n"
+	    "\t[-q nprobes] [-s src_addr] [-t tos] [-w waittime]\n"
+	    "\t[-z pausemsecs] host [packetlen]\n", prog);
 	exit(1);
 }

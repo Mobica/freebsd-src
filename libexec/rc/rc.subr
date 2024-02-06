@@ -1,5 +1,4 @@
 # $NetBSD: rc.subr,v 1.67 2006/10/07 11:25:15 elad Exp $
-# $FreeBSD$
 #
 # Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -52,7 +51,7 @@ ID="/usr/bin/id"
 IDCMD="if [ -x $ID ]; then $ID -un; fi"
 PS="/bin/ps -ww"
 JID=0
-CPUSET="/usr/bin/cpuset"
+CPUSET="/bin/cpuset"
 
 # rc_service provides the path to the service script that we are executing.
 # This is not being set here in an execution context, necessarily, so it's
@@ -219,7 +218,7 @@ stop_boot()
 
 	case $1 in
 		#	"yes", "true", "on", or "1"
-        [Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|[Oo][Nn]|1)
+	[Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|[Oo][Nn]|1)
 		always=true
 		;;
 	*)
@@ -981,7 +980,7 @@ run_rc_command()
 	esac
 
 	_cpusetcmd=
-	if [ -n "$_cpuset" -a -x $CPUSET ]; then
+	if [ -n "$_cpuset" ]; then
 		_cpusetcmd="$CPUSET -l $_cpuset"
 	fi
 
@@ -1042,13 +1041,14 @@ run_rc_command()
 			continue
 		fi
 					# if ${rcvar} is set, $1 is not "rcvar", "describe",
-					# "enable" or "delete", and ${rc_pid} is not set, run:
+					# "enable", "delete" or "status", and ${rc_pid} is
+					# not set, run:
 					#	checkyesno ${rcvar}
 					# and return if that failed
 					#
 		if [ -n "${rcvar}" -a "$rc_arg" != "rcvar" -a "$rc_arg" != "stop" \
 		    -a "$rc_arg" != "delete" -a "$rc_arg" != "enable" \
-		    -a "$rc_arg" != "describe" ] ||
+		    -a "$rc_arg" != "describe" -a "$rc_arg" != "status" ] ||
 		    [ -n "${rcvar}" -a "$rc_arg" = "stop" -a -z "${rc_pid}" ]; then
 			if ! checkyesno ${rcvar}; then
 				if [ -n "${rc_quiet}" ]; then
@@ -1583,7 +1583,7 @@ load_rc_config_var()
 	fi
 	eval $(eval '(
 		load_rc_config '$1' >/dev/null;
-                if [ -n "${'$2'}" -o "${'$2'-UNSET}" != "UNSET" ]; then
+		if [ -n "${'$2'}" -o "${'$2'-UNSET}" != "UNSET" ]; then
 			echo '$2'=\'\''${'$2'}\'\'';
 		fi
 	)' )

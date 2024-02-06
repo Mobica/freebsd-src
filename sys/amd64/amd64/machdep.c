@@ -36,13 +36,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	from: @(#)machdep.c	7.4 (Berkeley) 6/3/91
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_atpic.h"
 #include "opt_cpu.h"
 #include "opt_ddb.h"
@@ -328,10 +324,6 @@ cpu_setregs(void)
 
 	TSENTER();
 	cr0 = rcr0();
-	/*
-	 * CR0_MP, CR0_NE and CR0_TS are also set by npx_probe() for the
-	 * BSP.  See the comments there about why we set them.
-	 */
 	cr0 |= CR0_MP | CR0_NE | CR0_TS | CR0_WP | CR0_AM;
 	TSENTER2("load_cr0");
 	load_cr0(cr0);
@@ -990,10 +982,11 @@ getmemsize(caddr_t kmdp, u_int64_t first)
 		if (physmap[i + 1] < end)
 			end = trunc_page(physmap[i + 1]);
 		for (pa = round_page(physmap[i]); pa < end; pa += PAGE_SIZE) {
-			int tmp, page_bad, full;
 			int *ptr = (int *)CADDR1;
+			int tmp;
+			bool full, page_bad;
 
-			full = FALSE;
+			full = false;
 			/*
 			 * block out kernel memory as not available.
 			 */
@@ -1008,7 +1001,7 @@ getmemsize(caddr_t kmdp, u_int64_t first)
 			    && pa < dcons_addr + dcons_size)
 				goto do_dump_avail;
 
-			page_bad = FALSE;
+			page_bad = false;
 			if (memtest == 0)
 				goto skip_memtest;
 
@@ -1032,25 +1025,25 @@ getmemsize(caddr_t kmdp, u_int64_t first)
 			 */
 			*(volatile int *)ptr = 0xaaaaaaaa;
 			if (*(volatile int *)ptr != 0xaaaaaaaa)
-				page_bad = TRUE;
+				page_bad = true;
 			/*
 			 * Test for alternating 0's and 1's
 			 */
 			*(volatile int *)ptr = 0x55555555;
 			if (*(volatile int *)ptr != 0x55555555)
-				page_bad = TRUE;
+				page_bad = true;
 			/*
 			 * Test for all 1's
 			 */
 			*(volatile int *)ptr = 0xffffffff;
 			if (*(volatile int *)ptr != 0xffffffff)
-				page_bad = TRUE;
+				page_bad = true;
 			/*
 			 * Test for all 0's
 			 */
 			*(volatile int *)ptr = 0x0;
 			if (*(volatile int *)ptr != 0x0)
-				page_bad = TRUE;
+				page_bad = true;
 			/*
 			 * Restore original value.
 			 */
@@ -1060,7 +1053,7 @@ skip_memtest:
 			/*
 			 * Adjust array of valid/good pages.
 			 */
-			if (page_bad == TRUE)
+			if (page_bad == true)
 				continue;
 			/*
 			 * If this good page is a continuation of the
@@ -1081,7 +1074,7 @@ skip_memtest:
 					printf(
 		"Too many holes in the physical address space, giving up\n");
 					pa_indx--;
-					full = TRUE;
+					full = true;
 					goto do_dump_avail;
 				}
 				phys_avail[pa_indx++] = pa;	/* start */
@@ -1486,7 +1479,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	TUNABLE_INT_FETCH("hw.spec_store_bypass_disable", &hw_ssb_disable);
 	TUNABLE_INT_FETCH("machdep.mitigations.ssb.disable", &hw_ssb_disable);
 
-	TUNABLE_INT_FETCH("machdep.syscall_ret_l1d_flush",
+	TUNABLE_INT_FETCH("machdep.syscall_ret_flush_l1d",
 	    &syscall_ret_l1d_flush_mode);
 
 	TUNABLE_INT_FETCH("hw.mds_disable", &hw_mds_disable);
@@ -1494,8 +1487,12 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 
 	TUNABLE_INT_FETCH("machdep.mitigations.taa.enable", &x86_taa_enable);
 
-	TUNABLE_INT_FETCH("machdep.mitigations.rndgs.enable",
+	TUNABLE_INT_FETCH("machdep.mitigations.rngds.enable",
 	    &x86_rngds_mitg_enable);
+
+	TUNABLE_INT_FETCH("machdep.mitigations.zenbleed.enable",
+	    &zenbleed_enable);
+	zenbleed_sanitize_enable();
 
 	finishidentcpu();	/* Final stage of CPU initialization */
 

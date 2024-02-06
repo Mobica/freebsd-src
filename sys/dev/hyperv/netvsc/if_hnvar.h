@@ -22,8 +22,6 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _IF_HNVAR_H_
@@ -279,6 +277,8 @@ struct hn_softc {
 	u_int			hn_saved_tsomax;
 	u_int			hn_saved_tsosegcnt;
 	u_int			hn_saved_tsosegsz;
+	u_int			hn_saved_capenable;
+	u_int			hn_saved_hwassist;
 
 	/*
 	 * RSC switch, default off

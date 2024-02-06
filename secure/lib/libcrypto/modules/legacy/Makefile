@@ -1,6 +1,6 @@
-# $FreeBSD$
 
 SHLIB_NAME?=	legacy.so
+LIBADD=		crypto
 
 SRCS+=	legacyprov.c prov_running.c
 

@@ -29,20 +29,6 @@
  * SUCH DAMAGE.
  */
 
-#if 0
-#ifndef lint
-static const char copyright[] =
-"@(#) Copyright (c) 1980, 1986, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n";
-#endif /* not lint */
-
-#ifndef lint
-static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/14/95";
-#endif /* not lint */
-#endif
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #define _WANT_P_OSREL
 #include <sys/param.h>
 #include <sys/file.h>
@@ -61,7 +47,6 @@ __FBSDID("$FreeBSD$");
 #include <fstab.h>
 #include <grp.h>
 #include <inttypes.h>
-#include <libufs.h>
 #include <mntopts.h>
 #include <paths.h>
 #include <stdint.h>
@@ -70,7 +55,8 @@ __FBSDID("$FreeBSD$");
 
 #include "fsck.h"
 
-static int	restarts;
+static int  restarts;
+static char snapname[BUFSIZ];	/* when doing snapshots, the name of the file */
 
 static void usage(void) __dead2;
 static intmax_t argtoimax(int flag, const char *req, const char *str, int base);
@@ -666,8 +652,7 @@ setup_bkgrdchk(struct statfs *mntp, int sbreadfailed, char **filesys)
 		    "SUPPORT\n");
 	}
 	/* Find or create the snapshot directory */
-	snprintf(snapname, sizeof snapname, "%s/.snap",
-	    mntp->f_mntonname);
+	snprintf(snapname, sizeof snapname, "%s/.snap", mntp->f_mntonname);
 	if (stat(snapname, &snapdir) < 0) {
 		if (errno != ENOENT) {
 			pwarn("CANNOT FIND SNAPSHOT DIRECTORY %s: %s, CANNOT "
@@ -715,6 +700,8 @@ setup_bkgrdchk(struct statfs *mntp, int sbreadfailed, char **filesys)
 		    "BACKGROUND\n", snapname, strerror(errno));
 		return (0);
 	}
+	/* Immediately unlink snapshot so that it will be deleted when closed */
+	unlink(snapname);
 	free(sblock.fs_csp);
 	free(sblock.fs_si);
 	if (readsb() == 0) {

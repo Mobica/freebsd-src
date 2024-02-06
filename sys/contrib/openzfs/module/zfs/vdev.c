@@ -58,6 +58,7 @@
 #include <sys/abd.h>
 #include <sys/vdev_initialize.h>
 #include <sys/vdev_trim.h>
+#include <sys/vdev_raidz.h>
 #include <sys/zvol.h>
 #include <sys/zfs_ratelimit.h>
 #include "zfs_prop.h"
@@ -305,13 +306,13 @@ vdev_derive_alloc_bias(const char *bias)
  * all children.  This is what's used by anything other than RAID-Z.
  */
 uint64_t
-vdev_default_asize(vdev_t *vd, uint64_t psize)
+vdev_default_asize(vdev_t *vd, uint64_t psize, uint64_t txg)
 {
 	uint64_t asize = P2ROUNDUP(psize, 1ULL << vd->vdev_top->vdev_ashift);
 	uint64_t csize;
 
 	for (int c = 0; c < vd->vdev_children; c++) {
-		csize = vdev_psize_to_asize(vd->vdev_child[c], psize);
+		csize = vdev_psize_to_asize_txg(vd->vdev_child[c], psize, txg);
 		asize = MAX(asize, csize);
 	}
 
@@ -889,9 +890,15 @@ vdev_alloc(spa_t *spa, vdev_t **vdp, nvlist_t *nv, vdev_t *parent, uint_t id,
 	    &vd->vdev_not_present);
 
 	/*
-	 * Get the alignment requirement.
+	 * Get the alignment requirement. Ignore pool ashift for vdev
+	 * attach case.
 	 */
-	(void) nvlist_lookup_uint64(nv, ZPOOL_CONFIG_ASHIFT, &vd->vdev_ashift);
+	if (alloctype != VDEV_ALLOC_ATTACH) {
+		(void) nvlist_lookup_uint64(nv, ZPOOL_CONFIG_ASHIFT,
+		    &vd->vdev_ashift);
+	} else {
+		vd->vdev_attaching = B_TRUE;
+	}
 
 	/*
 	 * Retrieve the vdev creation time.
@@ -924,6 +931,8 @@ vdev_alloc(spa_t *spa, vdev_t **vdp, nvlist_t *nv, vdev_t *parent, uint_t id,
 		    &vd->vdev_removing);
 		(void) nvlist_lookup_uint64(nv, ZPOOL_CONFIG_VDEV_TOP_ZAP,
 		    &vd->vdev_top_zap);
+		vd->vdev_rz_expanding = nvlist_exists(nv,
+		    ZPOOL_CONFIG_RAIDZ_EXPANDING);
 	} else {
 		ASSERT0(vd->vdev_top_zap);
 	}
@@ -1186,7 +1195,6 @@ vdev_top_transfer(vdev_t *svd, vdev_t *tvd)
 
 	ASSERT(tvd == tvd->vdev_top);
 
-	tvd->vdev_pending_fastwrite = svd->vdev_pending_fastwrite;
 	tvd->vdev_ms_array = svd->vdev_ms_array;
 	tvd->vdev_ms_shift = svd->vdev_ms_shift;
 	tvd->vdev_ms_count = svd->vdev_ms_count;
@@ -1393,6 +1401,36 @@ vdev_remove_parent(vdev_t *cvd)
 	vdev_free(mvd);
 }
 
+/*
+ * Choose GCD for spa_gcd_alloc.
+ */
+static uint64_t
+vdev_gcd(uint64_t a, uint64_t b)
+{
+	while (b != 0) {
+		uint64_t t = b;
+		b = a % b;
+		a = t;
+	}
+	return (a);
+}
+
+/*
+ * Set spa_min_alloc and spa_gcd_alloc.
+ */
+static void
+vdev_spa_set_alloc(spa_t *spa, uint64_t min_alloc)
+{
+	if (min_alloc < spa->spa_min_alloc)
+		spa->spa_min_alloc = min_alloc;
+	if (spa->spa_gcd_alloc == INT_MAX) {
+		spa->spa_gcd_alloc = min_alloc;
+	} else {
+		spa->spa_gcd_alloc = vdev_gcd(min_alloc,
+		    spa->spa_gcd_alloc);
+	}
+}
+
 void
 vdev_metaslab_group_create(vdev_t *vd)
 {
@@ -1445,8 +1483,7 @@ vdev_metaslab_group_create(vdev_t *vd)
 				spa->spa_min_ashift = vd->vdev_ashift;
 
 			uint64_t min_alloc = vdev_get_min_alloc(vd);
-			if (min_alloc < spa->spa_min_alloc)
-				spa->spa_min_alloc = min_alloc;
+			vdev_spa_set_alloc(spa, min_alloc);
 		}
 	}
 }
@@ -1620,7 +1657,6 @@ vdev_metaslab_fini(vdev_t *vd)
 		}
 	}
 	ASSERT0(vd->vdev_ms_count);
-	ASSERT3U(vd->vdev_pending_fastwrite, ==, 0);
 }
 
 typedef struct vdev_probe_stats {
@@ -1659,6 +1695,8 @@ vdev_probe_done(zio_t *zio)
 
 		vd->vdev_cant_read |= !vps->vps_readable;
 		vd->vdev_cant_write |= !vps->vps_writeable;
+		vdev_dbgmsg(vd, "probe done, cant_read=%u cant_write=%u",
+		    vd->vdev_cant_read, vd->vdev_cant_write);
 
 		if (vdev_readable(vd) &&
 		    (vdev_writeable(vd) || !spa_writeable(spa))) {
@@ -1880,17 +1918,20 @@ vdev_open_children_subset(vdev_t *vd, vdev_open_children_func_t *open_func)
 }
 
 /*
- * Compute the raidz-deflation ratio.  Note, we hard-code
- * in 128k (1 << 17) because it is the "typical" blocksize.
- * Even though SPA_MAXBLOCKSIZE changed, this algorithm can not change,
- * otherwise it would inconsistently account for existing bp's.
+ * Compute the raidz-deflation ratio.  Note, we hard-code 128k (1 << 17)
+ * because it is the "typical" blocksize.  Even though SPA_MAXBLOCKSIZE
+ * changed, this algorithm can not change, otherwise it would inconsistently
+ * account for existing bp's.  We also hard-code txg 0 for the same reason
+ * since expanded RAIDZ vdevs can use a different asize for different birth
+ * txg's.
  */
 static void
 vdev_set_deflate_ratio(vdev_t *vd)
 {
 	if (vd == vd->vdev_top && !vd->vdev_ishole && vd->vdev_ashift != 0) {
 		vd->vdev_deflate_ratio = (1 << 17) /
-		    (vdev_psize_to_asize(vd, 1 << 17) >> SPA_MINBLOCKSHIFT);
+		    (vdev_psize_to_asize_txg(vd, 1 << 17, 0) >>
+		    SPA_MINBLOCKSHIFT);
 	}
 }
 
@@ -2144,9 +2185,9 @@ vdev_open(vdev_t *vd)
 				return (SET_ERROR(EDOM));
 			}
 
-			if (vd->vdev_top == vd) {
+			if (vd->vdev_top == vd && vd->vdev_attaching == B_FALSE)
 				vdev_ashift_optimize(vd);
-			}
+			vd->vdev_attaching = B_FALSE;
 		}
 		if (vd->vdev_ashift != 0 && (vd->vdev_ashift < ASHIFT_MIN ||
 		    vd->vdev_ashift > ASHIFT_MAX)) {
@@ -2207,8 +2248,7 @@ vdev_open(vdev_t *vd)
 	if (vd->vdev_top == vd && vd->vdev_ashift != 0 &&
 	    vd->vdev_islog == 0 && vd->vdev_aux == NULL) {
 		uint64_t min_alloc = vdev_get_min_alloc(vd);
-		if (min_alloc < spa->spa_min_alloc)
-			spa->spa_min_alloc = min_alloc;
+		vdev_spa_set_alloc(spa, min_alloc);
 	}
 
 	/*
@@ -2453,22 +2493,36 @@ vdev_validate(vdev_t *vd)
 }
 
 static void
+vdev_update_path(const char *prefix, char *svd, char **dvd, uint64_t guid)
+{
+	if (svd != NULL && *dvd != NULL) {
+		if (strcmp(svd, *dvd) != 0) {
+			zfs_dbgmsg("vdev_copy_path: vdev %llu: %s changed "
+			    "from '%s' to '%s'", (u_longlong_t)guid, prefix,
+			    *dvd, svd);
+			spa_strfree(*dvd);
+			*dvd = spa_strdup(svd);
+		}
+	} else if (svd != NULL) {
+		*dvd = spa_strdup(svd);
+		zfs_dbgmsg("vdev_copy_path: vdev %llu: path set to '%s'",
+		    (u_longlong_t)guid, *dvd);
+	}
+}
+
+static void
 vdev_copy_path_impl(vdev_t *svd, vdev_t *dvd)
 {
 	char *old, *new;
-	if (svd->vdev_path != NULL && dvd->vdev_path != NULL) {
-		if (strcmp(svd->vdev_path, dvd->vdev_path) != 0) {
-			zfs_dbgmsg("vdev_copy_path: vdev %llu: path changed "
-			    "from '%s' to '%s'", (u_longlong_t)dvd->vdev_guid,
-			    dvd->vdev_path, svd->vdev_path);
-			spa_strfree(dvd->vdev_path);
-			dvd->vdev_path = spa_strdup(svd->vdev_path);
-		}
-	} else if (svd->vdev_path != NULL) {
-		dvd->vdev_path = spa_strdup(svd->vdev_path);
-		zfs_dbgmsg("vdev_copy_path: vdev %llu: path set to '%s'",
-		    (u_longlong_t)dvd->vdev_guid, dvd->vdev_path);
-	}
+
+	vdev_update_path("vdev_path", svd->vdev_path, &dvd->vdev_path,
+	    dvd->vdev_guid);
+
+	vdev_update_path("vdev_devid", svd->vdev_devid, &dvd->vdev_devid,
+	    dvd->vdev_guid);
+
+	vdev_update_path("vdev_physpath", svd->vdev_physpath,
+	    &dvd->vdev_physpath, dvd->vdev_guid);
 
 	/*
 	 * Our enclosure sysfs path may have changed between imports
@@ -3196,32 +3250,43 @@ vdev_dtl_reassess(vdev_t *vd, uint64_t txg, uint64_t scrub_txg,
 
 		if (txg != 0)
 			vdev_dirty(vd->vdev_top, VDD_DTL, vd, txg);
-		return;
+	} else {
+		mutex_enter(&vd->vdev_dtl_lock);
+		for (int t = 0; t < DTL_TYPES; t++) {
+			/* account for child's outage in parent's missing map */
+			int s = (t == DTL_MISSING) ? DTL_OUTAGE: t;
+			if (t == DTL_SCRUB) {
+				/* leaf vdevs only */
+				continue;
+			}
+			if (t == DTL_PARTIAL) {
+				/* i.e. non-zero */
+				minref = 1;
+			} else if (vdev_get_nparity(vd) != 0) {
+				/* RAIDZ, DRAID */
+				minref = vdev_get_nparity(vd) + 1;
+			} else {
+				/* any kind of mirror */
+				minref = vd->vdev_children;
+			}
+			space_reftree_create(&reftree);
+			for (int c = 0; c < vd->vdev_children; c++) {
+				vdev_t *cvd = vd->vdev_child[c];
+				mutex_enter(&cvd->vdev_dtl_lock);
+				space_reftree_add_map(&reftree,
+				    cvd->vdev_dtl[s], 1);
+				mutex_exit(&cvd->vdev_dtl_lock);
+			}
+			space_reftree_generate_map(&reftree,
+			    vd->vdev_dtl[t], minref);
+			space_reftree_destroy(&reftree);
+		}
+		mutex_exit(&vd->vdev_dtl_lock);
 	}
 
-	mutex_enter(&vd->vdev_dtl_lock);
-	for (int t = 0; t < DTL_TYPES; t++) {
-		/* account for child's outage in parent's missing map */
-		int s = (t == DTL_MISSING) ? DTL_OUTAGE: t;
-		if (t == DTL_SCRUB)
-			continue;			/* leaf vdevs only */
-		if (t == DTL_PARTIAL)
-			minref = 1;			/* i.e. non-zero */
-		else if (vdev_get_nparity(vd) != 0)
-			minref = vdev_get_nparity(vd) + 1; /* RAID-Z, dRAID */
-		else
-			minref = vd->vdev_children;	/* any kind of mirror */
-		space_reftree_create(&reftree);
-		for (int c = 0; c < vd->vdev_children; c++) {
-			vdev_t *cvd = vd->vdev_child[c];
-			mutex_enter(&cvd->vdev_dtl_lock);
-			space_reftree_add_map(&reftree, cvd->vdev_dtl[s], 1);
-			mutex_exit(&cvd->vdev_dtl_lock);
-		}
-		space_reftree_generate_map(&reftree, vd->vdev_dtl[t], minref);
-		space_reftree_destroy(&reftree);
+	if (vd->vdev_top->vdev_ops == &vdev_raidz_ops) {
+		raidz_dtl_reassessed(vd);
 	}
-	mutex_exit(&vd->vdev_dtl_lock);
 }
 
 /*
@@ -3595,6 +3660,12 @@ vdev_load(vdev_t *vd)
 	}
 
 	vdev_set_deflate_ratio(vd);
+
+	if (vd->vdev_ops == &vdev_raidz_ops) {
+		error = vdev_raidz_load(vd);
+		if (error != 0)
+			return (error);
+	}
 
 	/*
 	 * On spa_load path, grab the allocation bias from our zap
@@ -3973,10 +4044,22 @@ vdev_sync(vdev_t *vd, uint64_t txg)
 	dmu_tx_commit(tx);
 }
 
+/*
+ * Return the amount of space that should be (or was) allocated for the given
+ * psize (compressed block size) in the given TXG. Note that for expanded
+ * RAIDZ vdevs, the size allocated for older BP's may be larger. See
+ * vdev_raidz_asize().
+ */
+uint64_t
+vdev_psize_to_asize_txg(vdev_t *vd, uint64_t psize, uint64_t txg)
+{
+	return (vd->vdev_ops->vdev_op_asize(vd, psize, txg));
+}
+
 uint64_t
 vdev_psize_to_asize(vdev_t *vd, uint64_t psize)
 {
-	return (vd->vdev_ops->vdev_op_asize(vd, psize));
+	return (vdev_psize_to_asize_txg(vd, psize, 0));
 }
 
 /*
@@ -4142,9 +4225,6 @@ vdev_online(spa_t *spa, uint64_t guid, uint64_t flags, vdev_state_t *newstate)
 	if ((vd = spa_lookup_by_guid(spa, guid, B_TRUE)) == NULL)
 		return (spa_vdev_state_exit(spa, NULL, SET_ERROR(ENODEV)));
 
-	if (!vd->vdev_ops->vdev_op_leaf)
-		return (spa_vdev_state_exit(spa, NULL, SET_ERROR(ENOTSUP)));
-
 	wasoffline = (vd->vdev_offline || vd->vdev_tmpoffline);
 	oldstate = vd->vdev_state;
 
@@ -4183,6 +4263,7 @@ vdev_online(spa_t *spa, uint64_t guid, uint64_t flags, vdev_state_t *newstate)
 		/* XXX - L2ARC 1.0 does not support expansion */
 		if (vd->vdev_aux)
 			return (spa_vdev_state_exit(spa, vd, ENOTSUP));
+		spa->spa_ccw_fail_time = 0;
 		spa_async_request(spa, SPA_ASYNC_CONFIG_UPDATE);
 	}
 
@@ -5424,7 +5505,9 @@ vdev_expand(vdev_t *vd, uint64_t txg)
 
 	vdev_set_deflate_ratio(vd);
 
-	if ((vd->vdev_asize >> vd->vdev_ms_shift) > vd->vdev_ms_count &&
+	if ((vd->vdev_spa->spa_raidz_expand == NULL ||
+	    vd->vdev_spa->spa_raidz_expand->vre_vdev_id != vd->vdev_id) &&
+	    (vd->vdev_asize >> vd->vdev_ms_shift) > vd->vdev_ms_count &&
 	    vdev_is_concrete(vd)) {
 		vdev_metaslab_group_create(vd);
 		VERIFY(vdev_metaslab_init(vd, txg) == 0);
@@ -5688,6 +5771,7 @@ vdev_props_set_sync(void *arg, dmu_tx_t *tx)
 	objset_t *mos = spa->spa_meta_objset;
 	nvpair_t *elem = NULL;
 	uint64_t vdev_guid;
+	uint64_t objid;
 	nvlist_t *nvprops;
 
 	vdev_guid = fnvlist_lookup_uint64(nvp, ZPOOL_VDEV_PROPS_SET_VDEV);
@@ -5698,30 +5782,27 @@ vdev_props_set_sync(void *arg, dmu_tx_t *tx)
 	if (vd == NULL)
 		return;
 
+	/*
+	 * Set vdev property values in the vdev props mos object.
+	 */
+	if (vd->vdev_root_zap != 0) {
+		objid = vd->vdev_root_zap;
+	} else if (vd->vdev_top_zap != 0) {
+		objid = vd->vdev_top_zap;
+	} else if (vd->vdev_leaf_zap != 0) {
+		objid = vd->vdev_leaf_zap;
+	} else {
+		panic("unexpected vdev type");
+	}
+
 	mutex_enter(&spa->spa_props_lock);
 
 	while ((elem = nvlist_next_nvpair(nvprops, elem)) != NULL) {
-		uint64_t intval, objid = 0;
+		uint64_t intval;
 		const char *strval;
 		vdev_prop_t prop;
 		const char *propname = nvpair_name(elem);
 		zprop_type_t proptype;
-
-		/*
-		 * Set vdev property values in the vdev props mos object.
-		 */
-		if (vd->vdev_root_zap != 0) {
-			objid = vd->vdev_root_zap;
-		} else if (vd->vdev_top_zap != 0) {
-			objid = vd->vdev_top_zap;
-		} else if (vd->vdev_leaf_zap != 0) {
-			objid = vd->vdev_leaf_zap;
-		} else {
-			/*
-			 * XXX: implement vdev_props_set_check()
-			 */
-			panic("vdev not root/top/leaf");
-		}
 
 		switch (prop = vdev_name_to_prop(propname)) {
 		case VDEV_PROP_USERPROP:
@@ -5790,6 +5871,12 @@ vdev_prop_set(vdev_t *vd, nvlist_t *innvl, nvlist_t *outnvl)
 	int error = 0;
 
 	ASSERT(vd != NULL);
+
+	/* Check that vdev has a zap we can use */
+	if (vd->vdev_root_zap == 0 &&
+	    vd->vdev_top_zap == 0 &&
+	    vd->vdev_leaf_zap == 0)
+		return (SET_ERROR(EINVAL));
 
 	if (nvlist_lookup_uint64(innvl, ZPOOL_VDEV_PROPS_SET_VDEV,
 	    &vdev_guid) != 0)
@@ -6171,6 +6258,14 @@ vdev_prop_get(vdev_t *vd, nvlist_t *innvl, nvlist_t *outnvl)
 			case VDEV_PROP_REMOVING:
 				vdev_prop_add_list(outnvl, propname, NULL,
 				    vd->vdev_removing, ZPROP_SRC_NONE);
+				continue;
+			case VDEV_PROP_RAIDZ_EXPANDING:
+				/* Only expose this for raidz */
+				if (vd->vdev_ops == &vdev_raidz_ops) {
+					vdev_prop_add_list(outnvl, propname,
+					    NULL, vd->vdev_rz_expanding,
+					    ZPROP_SRC_NONE);
+				}
 				continue;
 			/* Numeric Properites */
 			case VDEV_PROP_ALLOCATING:

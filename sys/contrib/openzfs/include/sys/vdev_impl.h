@@ -72,7 +72,7 @@ typedef void	vdev_fini_func_t(vdev_t *vd);
 typedef int	vdev_open_func_t(vdev_t *vd, uint64_t *size, uint64_t *max_size,
     uint64_t *ashift, uint64_t *pshift);
 typedef void	vdev_close_func_t(vdev_t *vd);
-typedef uint64_t vdev_asize_func_t(vdev_t *vd, uint64_t psize);
+typedef uint64_t vdev_asize_func_t(vdev_t *vd, uint64_t psize, uint64_t txg);
 typedef uint64_t vdev_min_asize_func_t(vdev_t *vd);
 typedef uint64_t vdev_min_alloc_func_t(vdev_t *vd);
 typedef void	vdev_io_start_func_t(zio_t *zio);
@@ -131,7 +131,10 @@ typedef const struct vdev_ops {
  * Virtual device properties
  */
 typedef union vdev_queue_class {
-	list_t		vqc_list;
+	struct {
+		ulong_t 	vqc_list_numnodes;
+		list_t		vqc_list;
+	};
 	avl_tree_t	vqc_tree;
 } vdev_queue_class_t;
 
@@ -266,7 +269,6 @@ struct vdev {
 	metaslab_group_t *vdev_mg;	/* metaslab group		*/
 	metaslab_group_t *vdev_log_mg;	/* embedded slog metaslab group	*/
 	metaslab_t	**vdev_ms;	/* metaslab array		*/
-	uint64_t	vdev_pending_fastwrite; /* allocated fastwrites */
 	txg_list_t	vdev_ms_list;	/* per-txg dirty metaslab lists	*/
 	txg_list_t	vdev_dtl_list;	/* per-txg dirty DTL lists	*/
 	txg_node_t	vdev_txg_node;	/* per-txg dirty vdev linkage	*/
@@ -279,6 +281,7 @@ struct vdev {
 	uint64_t	vdev_noalloc;	/* device is passivated?	*/
 	uint64_t	vdev_removing;	/* device is being removed?	*/
 	uint64_t	vdev_failfast;	/* device failfast setting	*/
+	boolean_t	vdev_rz_expanding; /* raidz is being expanded?	*/
 	boolean_t	vdev_ishole;	/* is a hole in the namespace	*/
 	uint64_t	vdev_top_zap;
 	vdev_alloc_bias_t vdev_alloc_bias; /* metaslab allocation bias	*/
@@ -420,6 +423,7 @@ struct vdev {
 	boolean_t	vdev_copy_uberblocks;  /* post expand copy uberblocks */
 	boolean_t	vdev_resilver_deferred;  /* resilver deferred */
 	boolean_t	vdev_kobj_flag; /* kobj event record */
+	boolean_t	vdev_attaching; /* vdev attach ashift handling */
 	vdev_queue_t	vdev_queue;	/* I/O deadline schedule queue	*/
 	spa_aux_vdev_t	*vdev_aux;	/* for l2cache and spares vdevs	*/
 	zio_t		*vdev_probe_zio; /* root of current probe	*/
@@ -533,6 +537,7 @@ typedef struct vdev_label {
 /*
  * Size of embedded boot loader region on each label.
  * The total size of the first two labels plus the boot area is 4MB.
+ * On RAIDZ, this space is overwritten during RAIDZ expansion.
  */
 #define	VDEV_BOOT_SIZE		(7ULL << 19)			/* 3.5M */
 
@@ -605,7 +610,7 @@ extern vdev_ops_t vdev_indirect_ops;
  */
 extern void vdev_default_xlate(vdev_t *vd, const range_seg64_t *logical_rs,
     range_seg64_t *physical_rs, range_seg64_t *remain_rs);
-extern uint64_t vdev_default_asize(vdev_t *vd, uint64_t psize);
+extern uint64_t vdev_default_asize(vdev_t *vd, uint64_t psize, uint64_t txg);
 extern uint64_t vdev_default_min_asize(vdev_t *vd);
 extern uint64_t vdev_get_min_asize(vdev_t *vd);
 extern void vdev_set_min_asize(vdev_t *vd);

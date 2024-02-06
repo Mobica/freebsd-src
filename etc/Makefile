@@ -1,5 +1,3 @@
-#	from: @(#)Makefile	5.11 (Berkeley) 5/21/91
-# $FreeBSD$
 
 .include <src.opts.mk>
 .include <src.tools.mk>
@@ -41,8 +39,9 @@ distribute:
 	# Avoid installing tests here; "make distribution" will do this and
 	# correctly place them in the right location.
 	${_+_}cd ${.CURDIR} ; ${MAKE} MK_TESTS=no install \
-	    DESTDIR=${DISTDIR}/${DISTRIBUTION}
-	${_+_}cd ${.CURDIR} ; ${MAKE} distribution DESTDIR=${DISTDIR}/${DISTRIBUTION}
+	    DISTBASE=/${DISTRIBUTION} DESTDIR=${DISTDIR}/${DISTRIBUTION}
+	${_+_}cd ${.CURDIR} ; ${MAKE} distribution \
+	    DISTBASE=/${DISTRIBUTION} DESTDIR=${DISTDIR}/${DISTRIBUTION}
 
 .include <bsd.endian.mk>
 
@@ -126,6 +125,7 @@ MTREES+=	../${mtree}			/
 # Clean up files that have changed into directories, as mtree cannot handle this
 # scenario.
 DISTRIB_CLEANUP_FILES+=	${INCLUDEDIR}/c++/v1/__string
+DISTRIB_CLEANUP_FILES+=	${INCLUDEDIR}/c++/v1/__tuple
 distrib-cleanup: .PHONY
 	for file in ${DISTRIB_CLEANUP_FILES}; do \
 		if [ -f ${DESTDIR}/$${file} ]; then \

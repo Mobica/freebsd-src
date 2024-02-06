@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /* Copyright(c) 2007-2022 Intel Corporation */
-/* $FreeBSD$ */
 #include <linux/kernel.h>
 #include "adf_accel_devices.h"
 #include "adf_common_drv.h"
@@ -389,6 +388,11 @@ adf_enable_vf2pf_comms(struct adf_accel_dev *accel_dev)
 {
 	struct adf_hw_device_data *hw_data = accel_dev->hw_device;
 	int ret;
+
+	/* init workqueue for VF */
+	ret = adf_init_vf_wq();
+	if (ret)
+		return ret;
 
 	hw_data->enable_pf2vf_interrupt(accel_dev);
 

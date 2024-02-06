@@ -32,13 +32,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)ufs_lookup.c	8.15 (Berkeley) 6/16/95
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_ufs.h"
 #include "opt_quota.h"
 
@@ -1125,7 +1121,7 @@ ufs_dirremove(struct vnode *dvp, struct inode *ip, int flags, int isrmdir)
 			softdep_setup_unlink(dp, ip);
 		} else {
 			ip->i_nlink--;
-			DIP_SET(ip, i_nlink, ip->i_nlink);
+			DIP_SET_NLINK(ip, ip->i_nlink);
 			UFS_INODE_SET_FLAG(ip, IN_CHANGE);
 		}
 	}
@@ -1141,7 +1137,7 @@ ufs_dirremove(struct vnode *dvp, struct inode *ip, int flags, int isrmdir)
 				softdep_change_linkcnt(ip);
 			} else {
 				ip->i_nlink++;
-				DIP_SET(ip, i_nlink, ip->i_nlink);
+				DIP_SET_NLINK(ip, ip->i_nlink);
 				UFS_INODE_SET_FLAG(ip, IN_CHANGE);
 			}
 		}
@@ -1245,7 +1241,7 @@ ufs_dirrewrite(struct inode *dp, struct inode *oip, ino_t newinum, int newtype,
 		softdep_setup_unlink(dp, oip);
 	} else {
 		oip->i_nlink--;
-		DIP_SET(oip, i_nlink, oip->i_nlink);
+		DIP_SET_NLINK(oip, oip->i_nlink);
 		UFS_INODE_SET_FLAG(oip, IN_CHANGE);
 	}
 
@@ -1262,7 +1258,7 @@ ufs_dirrewrite(struct inode *dp, struct inode *oip, ino_t newinum, int newtype,
 			softdep_change_linkcnt(oip);
 		} else {
 			oip->i_nlink++;
-			DIP_SET(oip, i_nlink, oip->i_nlink);
+			DIP_SET_NLINK(oip, oip->i_nlink);
 			UFS_INODE_SET_FLAG(oip, IN_CHANGE);
 		}
 		return (error);

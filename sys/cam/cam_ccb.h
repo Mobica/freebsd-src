@@ -26,15 +26,12 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _CAM_CAM_CCB_H
 #define _CAM_CAM_CCB_H 1
 
 #include <sys/queue.h>
-#include <sys/cdefs.h>
 #include <sys/time.h>
 #include <sys/limits.h>
 #ifndef _KERNEL
@@ -309,6 +306,7 @@ typedef enum {
 				 !XPORT_IS_ATA(t) && !XPORT_IS_NVME(t))
 #define XPORT_DEVSTAT_TYPE(t)	(XPORT_IS_ATA(t) ? DEVSTAT_TYPE_IF_IDE : \
 				 XPORT_IS_SCSI(t) ? DEVSTAT_TYPE_IF_SCSI : \
+				 XPORT_IS_NVME(t) ? DEVSTAT_TYPE_IF_NVME : \
 				 DEVSTAT_TYPE_IF_OTHER)
 
 #define PROTO_VERSION_UNKNOWN (UINT_MAX - 1)

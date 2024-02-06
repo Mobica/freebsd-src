@@ -22,8 +22,6 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _VMBUS_VAR_H_
@@ -131,6 +129,7 @@ struct vmbus_softc {
 	void *icookie;
 	int vector;
 #endif
+	bus_dma_tag_t   dmat;
 };
 
 #define VMBUS_FLAG_ATTACHED	0x0001	/* vmbus was attached */

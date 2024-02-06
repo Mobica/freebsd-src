@@ -562,7 +562,7 @@ wg_aip_add(struct wg_softc *sc, struct wg_peer *peer, sa_family_t af, const void
 		node = root->rnh_lookup(&aip->a_addr, &aip->a_mask, &root->rh);
 	if (!node) {
 		free(aip, M_WG);
-		return (ENOMEM);
+		ret = ENOMEM;
 	} else if (node != aip->a_nodes) {
 		free(aip, M_WG);
 		aip = (struct wg_aip *)node;
@@ -806,14 +806,15 @@ wg_socket_bind(struct socket **in_so4, struct socket **in_so6, in_port_t *reques
 		if (ret4 && ret4 != EADDRNOTAVAIL)
 			return (ret4);
 		if (!ret4 && !sin.sin_port) {
-			struct sockaddr_in *bound_sin;
-			int ret = so4->so_proto->pr_sockaddr(so4,
-			    (struct sockaddr **)&bound_sin);
+			struct sockaddr_in bound_sin =
+			    { .sin_len = sizeof(bound_sin) };
+			int ret;
+
+			ret = sosockaddr(so4, (struct sockaddr *)&bound_sin);
 			if (ret)
 				return (ret);
-			port = ntohs(bound_sin->sin_port);
-			sin6.sin6_port = bound_sin->sin_port;
-			free(bound_sin, M_SONAME);
+			port = ntohs(bound_sin.sin_port);
+			sin6.sin6_port = bound_sin.sin_port;
 		}
 	}
 
@@ -822,13 +823,14 @@ wg_socket_bind(struct socket **in_so4, struct socket **in_so6, in_port_t *reques
 		if (ret6 && ret6 != EADDRNOTAVAIL)
 			return (ret6);
 		if (!ret6 && !sin6.sin6_port) {
-			struct sockaddr_in6 *bound_sin6;
-			int ret = so6->so_proto->pr_sockaddr(so6,
-			    (struct sockaddr **)&bound_sin6);
+			struct sockaddr_in6 bound_sin6 =
+			    { .sin6_len = sizeof(bound_sin6) };
+			int ret;
+
+			ret = sosockaddr(so6, (struct sockaddr *)&bound_sin6);
 			if (ret)
 				return (ret);
-			port = ntohs(bound_sin6->sin6_port);
-			free(bound_sin6, M_SONAME);
+			port = ntohs(bound_sin6.sin6_port);
 		}
 	}
 
@@ -1461,8 +1463,12 @@ calculate_padding(struct wg_packet *pkt)
 {
 	unsigned int padded_size, last_unit = pkt->p_mbuf->m_pkthdr.len;
 
-	if (__predict_false(!pkt->p_mtu))
-		return (last_unit + (WG_PKT_PADDING - 1)) & ~(WG_PKT_PADDING - 1);
+	/* Keepalive packets don't set p_mtu, but also have a length of zero. */
+	if (__predict_false(pkt->p_mtu == 0)) {
+		padded_size = (last_unit + (WG_PKT_PADDING - 1)) &
+		    ~(WG_PKT_PADDING - 1);
+		return (padded_size - last_unit);
+	}
 
 	if (__predict_false(last_unit > pkt->p_mtu))
 		last_unit %= pkt->p_mtu;
@@ -1470,7 +1476,7 @@ calculate_padding(struct wg_packet *pkt)
 	padded_size = (last_unit + (WG_PKT_PADDING - 1)) & ~(WG_PKT_PADDING - 1);
 	if (pkt->p_mtu < padded_size)
 		padded_size = pkt->p_mtu;
-	return padded_size - last_unit;
+	return (padded_size - last_unit);
 }
 
 static void
@@ -2870,6 +2876,7 @@ wg_clone_destroy(struct if_clone *ifc, if_t ifp, uint32_t flags)
 
 	if (cred != NULL)
 		crfree(cred);
+	bpfdetach(sc->sc_ifp);
 	if_detach(sc->sc_ifp);
 	if_free(sc->sc_ifp);
 

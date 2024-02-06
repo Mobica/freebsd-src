@@ -27,11 +27,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* $FreeBSD$ */
-
-#include <sys/cdefs.h>
-__COPYRIGHT("@(#) Copyright (c) 2008 Iain Hibbert. All rights reserved.");
-__RCSID("$NetBSD: btpand.c,v 1.1 2008/08/17 13:20:57 plunky Exp $");
 
 #include <sys/wait.h>
 

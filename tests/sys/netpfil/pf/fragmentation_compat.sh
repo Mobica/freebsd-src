@@ -1,4 +1,3 @@
-# $FreeBSD$
 #
 # SPDX-License-Identifier: BSD-2-Clause
 #
@@ -301,17 +300,6 @@ reassemble_body()
 	atf_check -s exit:0 -o ignore ping -c 1 192.0.2.2
 
 	jexec alcatraz pfctl -e
-	pft_set_rules alcatraz \
-		"pass out" \
-		"block in" \
-		"pass in inet proto icmp all icmp-type echoreq"
-
-	# Single fragment passes
-	atf_check -s exit:0 -o ignore ping -c 1 192.0.2.2
-
-	# But a fragmented ping does not
-	atf_check -s exit:2 -o ignore ping -c 1 -s 2000 192.0.2.2
-
 	pft_set_rules alcatraz \
 		"scrub in" \
 		"pass out" \

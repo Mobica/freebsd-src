@@ -1,4 +1,4 @@
-# $NetBSD: varmod-gmtime.mk,v 1.15 2023/06/01 20:56:35 rillig Exp $
+# $NetBSD: varmod-gmtime.mk,v 1.21 2023/11/19 21:47:52 rillig Exp $
 #
 # Tests for the :gmtime variable modifier, which formats a timestamp
 # using strftime(3) in UTC.
@@ -45,7 +45,7 @@
 
 
 # Before var.c 1.1050 from 2023-05-09, it was not possible to pass the
-# seconds via a variable expression.
+# seconds via an expression.
 .if ${%Y:L:gmtime=${:U1593536400}} != "2020"
 .  error
 .endif
@@ -144,5 +144,45 @@
 .if ${%Y:L:gmtime=100000S,1970,bad,} != "bad"
 .  error
 .endif
+
+
+# Before var.c 1.1062 from 2023-08-19, ':gmtime' but not ':localtime' reported
+# wrong values for '%s', depending on the operating system and the timezone.
+export TZ=UTC
+.for t in ${%s:L:gmtime} ${%s:L:localtime}
+TIMESTAMPS+= $t
+.endfor
+export TZ=Europe/Berlin
+.for t in ${%s:L:gmtime} ${%s:L:localtime}
+TIMESTAMPS+= $t
+.endfor
+export TZ=UTC
+.for t in ${%s:L:gmtime} ${%s:L:localtime}
+TIMESTAMPS+= $t
+.endfor
+export TZ=America/Los_Angeles
+.for t in ${%s:L:gmtime} ${%s:L:localtime}
+TIMESTAMPS+= $t
+.endfor
+export TZ=UTC
+.for t in ${%s:L:gmtime} ${%s:L:localtime}
+TIMESTAMPS+= $t
+.endfor
+.for a b in ${TIMESTAMPS:[1]} ${TIMESTAMPS:@t@$t $t@} ${TIMESTAMPS:[-1]}
+.  if $a > $b
+.    warning timestamp $a > $b
+.  endif
+.endfor
+
+
+.if ${year=%Y month=%m day=%d:L:gmtime=1459494000} != "year=2016 month=04 day=01"
+.  error
+.endif
+# Slightly contorted syntax to convert a UTC timestamp from an expression to a
+# formatted timestamp.
+.if ${%Y%m%d:L:${gmtime=${:U1459494000}:L}} != "20160401"
+.  error
+.endif
+
 
 all:

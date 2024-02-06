@@ -18,6 +18,34 @@ OpenSSL Releases
 OpenSSL 3.0
 -----------
 
+### Major changes between OpenSSL 3.0.12 and OpenSSL 3.0.13 [30 Jan 2024]
+
+  * Fixed PKCS12 Decoding crashes
+    ([CVE-2024-0727])
+  * Fixed Excessive time spent checking invalid RSA public keys
+    ([CVE-2023-6237])
+  * Fixed POLY1305 MAC implementation corrupting vector registers on PowerPC
+    CPUs which support PowerISA 2.07
+    ([CVE-2023-6129])
+  * Fix excessive time spent in DH check / generation with large Q parameter
+    value ([CVE-2023-5678])
+
+### Major changes between OpenSSL 3.0.11 and OpenSSL 3.0.12 [24 Oct 2023]
+
+  * Mitigate incorrect resize handling for symmetric cipher keys and IVs.
+    ([CVE-2023-5363])
+
+### Major changes between OpenSSL 3.0.10 and OpenSSL 3.0.11 [19 Sep 2023]
+
+  * Fix POLY1305 MAC implementation corrupting XMM registers on Windows
+    ([CVE-2023-4807])
+
+### Major changes between OpenSSL 3.0.9 and OpenSSL 3.0.10 [1 Aug 2023]
+
+  * Fix excessive time spent checking DH q parameter value ([CVE-2023-3817])
+  * Fix DH_check() excessive time with over sized modulus ([CVE-2023-3446])
+  * Do not ignore empty associated data entries with AES-SIV ([CVE-2023-2975])
+
 ### Major changes between OpenSSL 3.0.8 and OpenSSL 3.0.9 [30 May 2023]
 
   * Mitigate for very slow `OBJ_obj2txt()` performance with gigantic OBJECT
@@ -1442,6 +1470,15 @@ OpenSSL 0.9.x
 
 <!-- Links -->
 
+[CVE-2024-0727]: https://www.openssl.org/news/vulnerabilities.html#CVE-2024-0727
+[CVE-2023-6237]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-6237
+[CVE-2023-6129]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-6129
+[CVE-2023-5678]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-5678
+[CVE-2023-5363]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-5363
+[CVE-2023-4807]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-4807
+[CVE-2023-3817]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-3817
+[CVE-2023-3446]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-3446
+[CVE-2023-2975]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-2975
 [CVE-2023-2650]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-2650
 [CVE-2023-1255]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-1255
 [CVE-2023-0466]: https://www.openssl.org/news/vulnerabilities.html#CVE-2023-0466

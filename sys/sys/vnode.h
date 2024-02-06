@@ -27,9 +27,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)vnode.h	8.7 (Berkeley) 2/4/94
- * $FreeBSD$
  */
 
 #ifndef _SYS_VNODE_H_
@@ -821,6 +818,7 @@ int	vn_vget_ino_gen(struct vnode *vp, vn_get_ino_t alloc,
 	    void *alloc_arg, int lkflags, struct vnode **rvp);
 int	vn_utimes_perm(struct vnode *vp, struct vattr *vap,
 	    struct ucred *cred, struct thread *td);
+int	vn_cmp(struct file *, struct file *, struct thread *td);
 
 int	vn_io_fault_uiomove(char *data, int xfersize, struct uio *uio);
 int	vn_io_fault_pgmove(vm_page_t ma[], vm_offset_t offset, int xfersize,

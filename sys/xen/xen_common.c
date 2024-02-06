@@ -28,9 +28,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h> /* required by xen/xen-os.h */
 
 #include <vm/vm.h>
@@ -44,8 +41,6 @@ __FBSDID("$FreeBSD$");
 #include <contrib/xen/vcpu.h>
 
 /*-------------------------------- Global Data -------------------------------*/
-enum xen_domain_type xen_domain_type = XEN_NATIVE;
-
 /**
  * Start info flags. ATM this only used to store the initial domain flag for
  * PVHv2, and it's always empty for HVM guests.

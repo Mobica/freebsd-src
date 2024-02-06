@@ -35,8 +35,38 @@
 
 #ifdef _KERNEL
 extern const char *panicstr;	/* panic message */
-extern bool panicked;
-#define	KERNEL_PANICKED()	__predict_false(panicked)
+#define	KERNEL_PANICKED()	__predict_false(panicstr != NULL)
+
+/*
+ * Trap accesses going through a pointer. Moreover if kasan is available trap
+ * reading the pointer itself.
+ *
+ * Sample usage: you have a struct with numerous fields and by API contract
+ * only some of them get populated, even if the implementation temporary writes
+ * to them. You can use DEBUG_POISON_POINTER so that the consumer which should
+ * no be looking at the field gets caught.
+ *
+ * DEBUG_POISON_POINTER(obj->ptr);
+ * ....
+ * if (obj->ptr != NULL) // traps with kasan, does not trap otherwise
+ * ....
+ * if (obj->ptr->field) // traps with and without kasan
+ */
+#ifdef	INVARIANTS
+
+#include <sys/asan.h>
+
+extern caddr_t poisoned_buf;
+#define DEBUG_POISON_POINTER_VALUE poisoned_buf
+
+#define DEBUG_POISON_POINTER(x) ({				\
+	x = (void *)(DEBUG_POISON_POINTER_VALUE);		\
+	kasan_mark(&x, 0, sizeof(x), KASAN_GENERIC_REDZONE);	\
+})
+
+#else
+#define DEBUG_POISON_POINTER(x)
+#endif
 
 #ifdef	INVARIANTS		/* The option is always available */
 #define	VNASSERT(exp, vp, msg) do {					\
@@ -149,17 +179,6 @@ void	kassert_panic(const char *fmt, ...)  __printflike(1, 2);
 #define	CRITICAL_ASSERT(td)						\
 	KASSERT((td)->td_critnest >= 1, ("Not in critical section"))
 
-/*
- * If we have already panic'd and this is the thread that called
- * panic(), then don't block on any mutexes but silently succeed.
- * Otherwise, the kernel will deadlock since the scheduler isn't
- * going to run the thread that holds any lock we need.
- */
-#define	SCHEDULER_STOPPED_TD(td)  ({					\
-	MPASS((td) == curthread);					\
-	__predict_false((td)->td_stopsched);				\
-})
-#define	SCHEDULER_STOPPED() SCHEDULER_STOPPED_TD(curthread)
 #endif /* _KERNEL */
 
 #endif	/* _SYS_KASSERT_H_ */

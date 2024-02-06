@@ -32,14 +32,13 @@
  * SUCH DAMAGE.
  *
  * so there!
- *
- * $FreeBSD$
  */
 
 #pragma once
 
 #include <libifconfig.h>
 #include <stdbool.h>
+#include <net/if_types.h>
 
 #define	__constructor	__attribute__((constructor))
 
@@ -232,6 +231,7 @@ struct ifconfig_args {
 	bool supmedia;		/* Supported media */
 	bool printkeys;		/* Print security keys */
 	bool allfamilies;	/* Print all families */
+	bool drivername;	/* Print driver name */
 	int verbose;		/* verbosity level */
 	int argc;
 	char **argv;
@@ -281,6 +281,7 @@ struct afswtch	*af_getbyfamily(int af);
 void	af_other_status(if_ctx *ctx);
 void	print_ifstatus(if_ctx *ctx);
 void	print_metric(if_ctx *ctx);
+ifType	convert_iftype(ifType iftype);
 
 /* Netlink-related functions */
 void	list_interfaces_nl(struct ifconfig_args *args);

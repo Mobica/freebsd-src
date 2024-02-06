@@ -33,8 +33,6 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_inet.h"
 #include "opt_inet6.h"
 #include "opt_ipsec.h"
@@ -805,7 +803,6 @@ syncache_socket(struct syncache *sc, struct socket *lso, struct mbuf *m)
 	}
 	inp = sotoinpcb(so);
 	if ((tp = tcp_newtcpcb(inp)) == NULL) {
-		in_pcbdetach(inp);
 		in_pcbfree(inp);
 		sodealloc(so);
 		goto allocfail;
@@ -954,7 +951,8 @@ syncache_socket(struct syncache *sc, struct socket *lso, struct mbuf *m)
 	tp->rcv_adv += tp->rcv_wnd;
 	tp->last_ack_sent = tp->rcv_nxt;
 
-	tp->t_flags = sototcpcb(lso)->t_flags & (TF_NOPUSH|TF_NODELAY);
+	tp->t_flags = sototcpcb(lso)->t_flags &
+	    (TF_LRD|TF_NOPUSH|TF_NODELAY);
 	if (sc->sc_flags & SCF_NOOPT)
 		tp->t_flags |= TF_NOOPT;
 	else {
@@ -1052,7 +1050,6 @@ allocfail:
 	return (NULL);
 
 abort:
-	in_pcbdetach(inp);
 	in_pcbfree(inp);
 	sodealloc(so);
 	if ((s = tcp_log_addrs(&sc->sc_inc, NULL, NULL, NULL))) {

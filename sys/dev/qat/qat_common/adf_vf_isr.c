@@ -1,10 +1,9 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /* Copyright(c) 2007-2022 Intel Corporation */
-/* $FreeBSD$ */
 #include "qat_freebsd.h"
 #include <sys/kernel.h>
 #include <sys/systm.h>
-#include <sys/cdefs.h>
+
 #include <sys/types.h>
 #include <sys/interrupt.h>
 #include <dev/pci/pcivar.h>

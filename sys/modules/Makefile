@@ -1,4 +1,3 @@
-# $FreeBSD$
 
 SYSDIR?=${SRCTOP}/sys
 .include "${SYSDIR}/conf/kern.opts.mk"
@@ -42,6 +41,7 @@ SUBDIR=	\
 	${_arcmsr} \
 	${_allwinner} \
 	${_armv8crypto} \
+	${_armv8_rng} \
 	${_asmc} \
 	ata \
 	ath \
@@ -54,7 +54,6 @@ SUBDIR=	\
 	ath_hal_ar9300 \
 	ath_main \
 	ath_rate \
-	ath_pci \
 	${_autofs} \
 	axgbe \
 	backlight \
@@ -307,6 +306,7 @@ SUBDIR=	\
 	${_pcfclock} \
 	${_pf} \
 	${_pflog} \
+	${_pflow} \
 	${_pfsync} \
 	plip \
 	${_pms} \
@@ -341,7 +341,6 @@ SUBDIR=	\
 	${_rockchip} \
 	rtsx \
 	${_rtw88} \
-	${_rtw88fw} \
 	rtwn \
 	rtwn_pci \
 	rtwn_usb \
@@ -357,6 +356,7 @@ SUBDIR=	\
 	${_sdhci_fdt} \
 	sdhci_pci \
 	sdio \
+	${_sff} \
 	sem \
 	send \
 	${_sfxge} \
@@ -566,12 +566,13 @@ _iwlwifi=	iwlwifi
 .if ${MK_SOURCELESS_UCODE} != "no"
 _iwlwififw=	iwlwififw
 .endif
-_ossl=		ossl
 _rtw88=		rtw88
-.if ${MK_SOURCELESS_UCODE} != "no"
-_rtw88fw=	rtw88fw
-.endif
 _vmware=	vmware
+.endif
+
+.if ${MACHINE_CPUARCH} == "aarch64" || ${MACHINE_CPUARCH} == "amd64" || \
+    ${MACHINE_CPUARCH} == "i386" || ${MACHINE_ARCH} == "armv7"
+_ossl=		ossl
 .endif
 
 # MAC framework
@@ -611,6 +612,7 @@ _netgraph=	netgraph
 	${MK_INET6_SUPPORT} != "no")) || defined(ALL_MODULES)
 _pf=		pf
 _pflog=		pflog
+_pflow=		pflow
 .if ${MK_INET_SUPPORT} != "no"
 _pfsync=	pfsync
 .endif
@@ -634,11 +636,12 @@ _cxgbe=		cxgbe
 .endif
 
 # This has only been tested on amd64 and arm64
-.if ${MACHINE_ARCH} == "amd64" || ${MACHINE_ARCH} == "arm64"
+.if ${MACHINE_CPUARCH} == "amd64" || ${MACHINE_CPUARCH} == "aarch64"
 _mpi3mr=mpi3mr
 .endif
 
-.if ${MACHINE_ARCH} == "amd64" || ${MACHINE_ARCH} == "arm64" || ${MACHINE_ARCH:Mpowerpc64*}
+.if ${MACHINE_CPUARCH} == "amd64" || ${MACHINE_CPUARCH} == "aarch64" || \
+	${MACHINE_ARCH:Mpowerpc64*}
 _ice=		ice
 .if ${MK_SOURCELESS_UCODE} != "no"
 _ice_ddp=	ice_ddp
@@ -678,7 +681,9 @@ _cxgb=		cxgb
 
 .if ${MACHINE_CPUARCH} == "aarch64"
 _armv8crypto=	armv8crypto
+_armv8_rng=	armv8_rng
 _dpaa2=		dpaa2
+_sff=		sff
 _em=		em
 _hyperv=  hyperv
 
@@ -908,10 +913,11 @@ SUBDIR:= ${SUBDIR:N${reject}}
 .if !defined(NO_XREF)
 .MAKEFLAGS+=	-DNO_XREF
 afterinstall: .PHONY
-	@if type kldxref >/dev/null 2>&1; then \
-		${ECHO} ${KLDXREF_CMD} ${DESTDIR}${KMODDIR}; \
-		${KLDXREF_CMD} ${DESTDIR}${KMODDIR}; \
-	fi
+	${KLDXREF_CMD} ${DESTDIR}${KMODDIR}
+.if defined(NO_ROOT) && defined(METALOG)
+	echo ".${DISTBASE}${KMODDIR}/linker.hints type=file mode=0644 uname=root gname=wheel" | \
+	    cat -l >> ${METALOG}
+.endif
 .endif
 
 SUBDIR:= ${SUBDIR:u:O}

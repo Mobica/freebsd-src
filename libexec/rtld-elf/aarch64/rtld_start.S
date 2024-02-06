@@ -28,7 +28,7 @@
  */
 
 #include <machine/asm.h>
-__FBSDID("$FreeBSD$");
+#include <sys/elf_common.h>
 
 ENTRY(.rtld_start)
 	.cfi_undefined	x30
@@ -251,3 +251,5 @@ ENTRY(_rtld_tlsdesc_dynamic)
 	.cfi_adjust_cfa_offset	-2 * 16
 	ret
 END(_rtld_tlsdesc_dynamic)
+
+GNU_PROPERTY_AARCH64_FEATURE_1_NOTE(GNU_PROPERTY_AARCH64_FEATURE_1_VAL)

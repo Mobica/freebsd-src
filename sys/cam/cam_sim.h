@@ -26,8 +26,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _CAM_CAM_SIM_H
@@ -58,15 +56,6 @@ struct cam_sim *  cam_sim_alloc(sim_action_func sim_action,
 				const char *sim_name,
 				void *softc,
 				uint32_t unit,
-				struct mtx *mtx,
-				int max_dev_transactions,
-				int max_tagged_dev_transactions,
-				struct cam_devq *queue);
-struct cam_sim *  cam_sim_alloc_dev(sim_action_func sim_action,
-				sim_poll_func sim_poll,
-				const char *sim_name,
-				void *softc,
-				device_t dev,
 				struct mtx *mtx,
 				int max_dev_transactions,
 				int max_tagged_dev_transactions,

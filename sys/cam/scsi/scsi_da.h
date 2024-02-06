@@ -45,14 +45,11 @@
  * functioning of this software in any circumstances.
  *
  * Ported to run under 386BSD by Julian Elischer (julian@tfs.com) Sept 1992
- *
- * $FreeBSD$
  */
 
 #ifndef	_SCSI_SCSI_DA_H
 #define _SCSI_SCSI_DA_H 1
 
-#include <sys/cdefs.h>
 
 struct scsi_rezero_unit
 {

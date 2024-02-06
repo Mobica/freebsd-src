@@ -1,7 +1,6 @@
 # This file tells config what files go into building a kernel,
 # files marked standard are always included.
 #
-# $FreeBSD$
 #
 # This file contains all the x86 devices and such that are
 # common between i386 and amd64, but aren't applicable to
@@ -70,6 +69,8 @@ dev/atkbdc/atkbdc.c		optional	atkbdc
 dev/atkbdc/atkbdc_isa.c		optional	atkbdc isa
 dev/atkbdc/atkbdc_subr.c	optional	atkbdc
 dev/atkbdc/psm.c		optional	psm atkbdc
+dev/atopcase/atopcase.c		optional	atopcase acpi hid spibus
+dev/atopcase/atopcase_acpi.c	optional	atopcase acpi hid spibus
 dev/bxe/bxe.c                   optional	bxe pci
 dev/bxe/bxe_stats.c             optional	bxe pci
 dev/bxe/bxe_debug.c             optional	bxe pci

@@ -51,8 +51,6 @@
 
 #define HDA_DRV_TEST_REV	"20120126_0002"
 
-SND_DECLARE_FILE("$FreeBSD$");
-
 #define hdac_lock(sc)		snd_mtxlock((sc)->lock)
 #define hdac_unlock(sc)		snd_mtxunlock((sc)->lock)
 #define hdac_lockassert(sc)	snd_mtxassert((sc)->lock)
@@ -1103,10 +1101,8 @@ hdac_probe(device_t dev)
 		snprintf(desc, sizeof(desc), "Generic (0x%08x)", model);
 		result = BUS_PROBE_GENERIC;
 	}
-	if (result != ENXIO) {
-		strlcat(desc, " HDA Controller", sizeof(desc));
-		device_set_desc_copy(dev, desc);
-	}
+	if (result != ENXIO)
+		device_set_descf(dev, "%s HDA Controller", desc);
 
 	return (result);
 }
@@ -1274,9 +1270,6 @@ hdac_attach(device_t dev)
 	result = hdac_mem_alloc(sc);
 	if (result != 0)
 		goto hdac_attach_fail;
-	result = hdac_irq_alloc(sc);
-	if (result != 0)
-		goto hdac_attach_fail;
 
 	/* Get Capabilities */
 	result = hdac_get_capabilities(sc);
@@ -1348,6 +1341,10 @@ hdac_attach(device_t dev)
 	/* Initialize the CORB and RIRB */
 	hdac_corb_init(sc);
 	hdac_rirb_init(sc);
+
+	result = hdac_irq_alloc(sc);
+	if (result != 0)
+		goto hdac_attach_fail;
 
 	/* Defer remaining of initialization until interrupts are enabled */
 	sc->intrhook.ich_func = hdac_attach2;

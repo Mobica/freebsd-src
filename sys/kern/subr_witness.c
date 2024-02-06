@@ -87,8 +87,6 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_ddb.h"
 #include "opt_hwpmc_hooks.h"
 #include "opt_stack.h"
@@ -2364,6 +2362,10 @@ witness_save(struct lock_object *lock, const char **filep, int *linep)
 	struct lock_instance *instance;
 	struct lock_class *class;
 
+	/* Initialize for KMSAN's benefit. */
+	*filep = NULL;
+	*linep = 0;
+
 	/*
 	 * This function is used independently in locking code to deal with
 	 * Giant, SCHEDULER_STOPPED() check can be removed here after Giant
@@ -2757,7 +2759,7 @@ restart:
 				    tmp_w1->w_name, tmp_w1->w_class->lc_name, 
 				    tmp_w2->w_name, tmp_w2->w_class->lc_name);
 				stack_sbuf_print(sb, &tmp_data1->wlod_stack);
-				sbuf_printf(sb, "\n");
+				sbuf_putc(sb, '\n');
 			}
 			if (data2 && data2 != data1) {
 				sbuf_printf(sb,
@@ -2765,7 +2767,7 @@ restart:
 				    tmp_w2->w_name, tmp_w2->w_class->lc_name, 
 				    tmp_w1->w_name, tmp_w1->w_class->lc_name);
 				stack_sbuf_print(sb, &tmp_data2->wlod_stack);
-				sbuf_printf(sb, "\n");
+				sbuf_putc(sb, '\n');
 			}
 		}
 	}
@@ -2903,7 +2905,7 @@ sysctl_debug_witness_fullgraph(SYSCTL_HANDLER_ARGS)
 	sb = sbuf_new_for_sysctl(NULL, NULL, FULLGRAPH_SBUF_SIZE, req);
 	if (sb == NULL)
 		return (ENOMEM);
-	sbuf_printf(sb, "\n");
+	sbuf_putc(sb, '\n');
 
 	mtx_lock_spin(&w_mtx);
 	STAILQ_FOREACH(w, &w_all, w_list)

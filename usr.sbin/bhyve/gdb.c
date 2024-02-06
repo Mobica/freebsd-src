@@ -25,9 +25,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
 #ifndef WITHOUT_CAPSICUM
 #include <sys/capsicum.h>
@@ -61,6 +58,7 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "config.h"
+#include "debug.h"
 #include "gdb.h"
 #include "mem.h"
 #include "mevent.h"
@@ -70,6 +68,13 @@ __FBSDID("$FreeBSD$");
  * use SIGTRAP.
  */
 #define	GDB_SIGNAL_TRAP		5
+
+#define	GDB_BP_SIZE		1
+#define	GDB_BP_INSTR		(uint8_t []){0xcc}
+#define	GDB_PC_REGNAME		VM_REG_GUEST_RIP
+
+_Static_assert(sizeof(GDB_BP_INSTR) == GDB_BP_SIZE,
+    "GDB_BP_INSTR has wrong size");
 
 static void gdb_resume_vcpus(void);
 static void check_command(int fd);
@@ -97,7 +102,7 @@ struct io_buffer {
 
 struct breakpoint {
 	uint64_t gpa;
-	uint8_t shadow_inst;
+	uint8_t shadow_inst[GDB_BP_SIZE];
 	TAILQ_ENTRY(breakpoint) link;
 };
 
@@ -136,58 +141,34 @@ static struct vcpu **vcpus;
 static int cur_vcpu, stopped_vcpu;
 static bool gdb_active = false;
 
-static const int gdb_regset[] = {
-	VM_REG_GUEST_RAX,
-	VM_REG_GUEST_RBX,
-	VM_REG_GUEST_RCX,
-	VM_REG_GUEST_RDX,
-	VM_REG_GUEST_RSI,
-	VM_REG_GUEST_RDI,
-	VM_REG_GUEST_RBP,
-	VM_REG_GUEST_RSP,
-	VM_REG_GUEST_R8,
-	VM_REG_GUEST_R9,
-	VM_REG_GUEST_R10,
-	VM_REG_GUEST_R11,
-	VM_REG_GUEST_R12,
-	VM_REG_GUEST_R13,
-	VM_REG_GUEST_R14,
-	VM_REG_GUEST_R15,
-	VM_REG_GUEST_RIP,
-	VM_REG_GUEST_RFLAGS,
-	VM_REG_GUEST_CS,
-	VM_REG_GUEST_SS,
-	VM_REG_GUEST_DS,
-	VM_REG_GUEST_ES,
-	VM_REG_GUEST_FS,
-	VM_REG_GUEST_GS
-};
-
-static const int gdb_regsize[] = {
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	8,
-	4,
-	4,
-	4,
-	4,
-	4,
-	4,
-	4
+static const struct gdb_reg {
+	enum vm_reg_name id;
+	int size;
+} gdb_regset[] = {
+	{ .id = VM_REG_GUEST_RAX, .size = 8 },
+	{ .id = VM_REG_GUEST_RBX, .size = 8 },
+	{ .id = VM_REG_GUEST_RCX, .size = 8 },
+	{ .id = VM_REG_GUEST_RDX, .size = 8 },
+	{ .id = VM_REG_GUEST_RSI, .size = 8 },
+	{ .id = VM_REG_GUEST_RDI, .size = 8 },
+	{ .id = VM_REG_GUEST_RBP, .size = 8 },
+	{ .id = VM_REG_GUEST_RSP, .size = 8 },
+	{ .id = VM_REG_GUEST_R8, .size = 8 },
+	{ .id = VM_REG_GUEST_R9, .size = 8 },
+	{ .id = VM_REG_GUEST_R10, .size = 8 },
+	{ .id = VM_REG_GUEST_R11, .size = 8 },
+	{ .id = VM_REG_GUEST_R12, .size = 8 },
+	{ .id = VM_REG_GUEST_R13, .size = 8 },
+	{ .id = VM_REG_GUEST_R14, .size = 8 },
+	{ .id = VM_REG_GUEST_R15, .size = 8 },
+	{ .id = VM_REG_GUEST_RIP, .size = 8 },
+	{ .id = VM_REG_GUEST_RFLAGS, .size = 4 },
+	{ .id = VM_REG_GUEST_CS, .size = 4 },
+	{ .id = VM_REG_GUEST_SS, .size = 4 },
+	{ .id = VM_REG_GUEST_DS, .size = 4 },
+	{ .id = VM_REG_GUEST_ES, .size = 4 },
+	{ .id = VM_REG_GUEST_FS, .size = 4 },
+	{ .id = VM_REG_GUEST_GS, .size = 4 },
 };
 
 #ifdef GDB_LOG
@@ -287,6 +268,12 @@ guest_vaddr2paddr(struct vcpu *vcpu, uint64_t vaddr, uint64_t *paddr)
 	if (fault)
 		return (0);
 	return (1);
+}
+
+static uint64_t
+guest_pc(struct vm_exit *vme)
+{
+	return (vme->rip);
 }
 
 static void
@@ -746,6 +733,43 @@ _gdb_cpu_suspend(struct vcpu *vcpu, bool report_stop)
 }
 
 /*
+ * Requests vCPU single-stepping using a
+ * VMEXIT suitable for the host platform.
+ */
+static int
+_gdb_set_step(struct vcpu *vcpu, int val)
+{
+	int error;
+
+	/*
+	 * If the MTRAP cap fails, we are running on an AMD host.
+	 * In that case, we request DB exits caused by RFLAGS.TF.
+	 */
+	error = vm_set_capability(vcpu, VM_CAP_MTRAP_EXIT, val);
+	if (error != 0)
+		error = vm_set_capability(vcpu, VM_CAP_RFLAGS_TF, val);
+	if (error == 0)
+		(void)vm_set_capability(vcpu, VM_CAP_MASK_HWINTR, val);
+
+	return (error);
+}
+
+/*
+ * Checks whether single-stepping is enabled for a given vCPU.
+ */
+static int
+_gdb_check_step(struct vcpu *vcpu)
+{
+	int val;
+
+	if (vm_get_capability(vcpu, VM_CAP_MTRAP_EXIT, &val) != 0) {
+		if (vm_get_capability(vcpu, VM_CAP_RFLAGS_TF, &val) != 0)
+			return -1;
+	}
+	return 0;
+}
+
+/*
  * Invoked at the start of a vCPU thread's execution to inform the
  * debug server about the new thread.
  */
@@ -765,7 +789,7 @@ gdb_cpu_add(struct vcpu *vcpu)
 	CPU_SET(vcpuid, &vcpus_active);
 	if (!TAILQ_EMPTY(&breakpoints)) {
 		vm_set_capability(vcpu, VM_CAP_BPT_EXIT, 1);
-		debug("$vCPU %d enabled breakpoint exits\n", vcpu);
+		debug("$vCPU %d enabled breakpoint exits\n", vcpuid);
 	}
 
 	/*
@@ -799,10 +823,7 @@ gdb_cpu_resume(struct vcpu *vcpu)
 	assert(vs->hit_swbreak == false);
 	assert(vs->stepped == false);
 	if (vs->stepping) {
-		error = vm_set_capability(vcpu, VM_CAP_MTRAP_EXIT, 1);
-		assert(error == 0);
-
-		error = vm_set_capability(vcpu, VM_CAP_MASK_HWINTR, 1);
+		error = _gdb_set_step(vcpu, 1);
 		assert(error == 0);
 	}
 }
@@ -837,26 +858,24 @@ gdb_suspend_vcpus(void)
 }
 
 /*
- * Handler for VM_EXITCODE_MTRAP reported when a vCPU single-steps via
- * the VT-x-specific MTRAP exit.
+ * Invoked each time a vmexit handler needs to step a vCPU.
+ * Handles MTRAP and RFLAGS.TF vmexits.
  */
-void
-gdb_cpu_mtrap(struct vcpu *vcpu)
+static void
+gdb_cpu_step(struct vcpu *vcpu)
 {
 	struct vcpu_state *vs;
-	int vcpuid;
+	int vcpuid = vcpu_id(vcpu);
+	int error;
 
-	if (!gdb_active)
-		return;
-	vcpuid = vcpu_id(vcpu);
-	debug("$vCPU %d MTRAP\n", vcpuid);
+	debug("$vCPU %d stepped\n", vcpuid);
 	pthread_mutex_lock(&gdb_lock);
 	vs = &vcpu_state[vcpuid];
 	if (vs->stepping) {
 		vs->stepping = false;
 		vs->stepped = true;
-		vm_set_capability(vcpu, VM_CAP_MTRAP_EXIT, 0);
-		vm_set_capability(vcpu, VM_CAP_MASK_HWINTR, 0);
+		error = _gdb_set_step(vcpu, 0);
+		assert(error == 0);
 
 		while (vs->stepped) {
 			if (stopped_vcpu == -1) {
@@ -869,6 +888,34 @@ gdb_cpu_mtrap(struct vcpu *vcpu)
 		gdb_cpu_resume(vcpu);
 	}
 	pthread_mutex_unlock(&gdb_lock);
+}
+
+/*
+ * A general handler for VM_EXITCODE_DB.
+ * Handles RFLAGS.TF exits on AMD SVM.
+ */
+void
+gdb_cpu_debug(struct vcpu *vcpu, struct vm_exit *vmexit)
+{
+	if (!gdb_active)
+		return;
+
+	/* RFLAGS.TF exit? */
+	if (vmexit->u.dbg.trace_trap) {
+		gdb_cpu_step(vcpu);
+	}
+}
+
+/*
+ * Handler for VM_EXITCODE_MTRAP reported when a vCPU single-steps via
+ * the VT-x-specific MTRAP exit.
+ */
+void
+gdb_cpu_mtrap(struct vcpu *vcpu)
+{
+	if (!gdb_active)
+		return;
+	gdb_cpu_step(vcpu);
 }
 
 static struct breakpoint *
@@ -892,12 +939,12 @@ gdb_cpu_breakpoint(struct vcpu *vcpu, struct vm_exit *vmexit)
 	int error, vcpuid;
 
 	if (!gdb_active) {
-		fprintf(stderr, "vm_loop: unexpected VMEXIT_DEBUG\n");
+		EPRINTLN("vm_loop: unexpected VMEXIT_DEBUG");
 		exit(4);
 	}
 	vcpuid = vcpu_id(vcpu);
 	pthread_mutex_lock(&gdb_lock);
-	error = guest_vaddr2paddr(vcpu, vmexit->rip, &gpa);
+	error = guest_vaddr2paddr(vcpu, guest_pc(vmexit), &gpa);
 	assert(error == 1);
 	bp = find_breakpoint(gpa);
 	if (bp != NULL) {
@@ -906,11 +953,11 @@ gdb_cpu_breakpoint(struct vcpu *vcpu, struct vm_exit *vmexit)
 		assert(vs->stepped == false);
 		assert(vs->hit_swbreak == false);
 		vs->hit_swbreak = true;
-		vm_set_register(vcpu, VM_REG_GUEST_RIP, vmexit->rip);
+		vm_set_register(vcpu, GDB_PC_REGNAME, guest_pc(vmexit));
 		for (;;) {
 			if (stopped_vcpu == -1) {
 				debug("$vCPU %d reporting breakpoint at rip %#lx\n",
-				    vcpuid, vmexit->rip);
+				    vcpuid, guest_pc(vmexit));
 				stopped_vcpu = vcpuid;
 				gdb_suspend_vcpus();
 			}
@@ -929,7 +976,7 @@ gdb_cpu_breakpoint(struct vcpu *vcpu, struct vm_exit *vmexit)
 		gdb_cpu_resume(vcpu);
 	} else {
 		debug("$vCPU %d injecting breakpoint at rip %#lx\n", vcpuid,
-		    vmexit->rip);
+		    guest_pc(vmexit));
 		error = vm_set_register(vcpu, VM_REG_GUEST_ENTRY_INST_LENGTH,
 		    vmexit->u.bpt.inst_length);
 		assert(error == 0);
@@ -942,11 +989,11 @@ gdb_cpu_breakpoint(struct vcpu *vcpu, struct vm_exit *vmexit)
 static bool
 gdb_step_vcpu(struct vcpu *vcpu)
 {
-	int error, val, vcpuid;
+	int error, vcpuid;
 
 	vcpuid = vcpu_id(vcpu);
 	debug("$vCPU %d step\n", vcpuid);
-	error = vm_get_capability(vcpu, VM_CAP_MTRAP_EXIT, &val);
+	error = _gdb_check_step(vcpu);
 	if (error < 0)
 		return (false);
 
@@ -973,15 +1020,18 @@ static void
 gdb_read_regs(void)
 {
 	uint64_t regvals[nitems(gdb_regset)];
+	int regnums[nitems(gdb_regset)];
 
+	for (size_t i = 0; i < nitems(gdb_regset); i++)
+		regnums[i] = gdb_regset[i].id;
 	if (vm_get_register_set(vcpus[cur_vcpu], nitems(gdb_regset),
-	    gdb_regset, regvals) == -1) {
+	    regnums, regvals) == -1) {
 		send_error(errno);
 		return;
 	}
 	start_packet();
-	for (size_t i = 0; i < nitems(regvals); i++)
-		append_unsigned_native(regvals[i], gdb_regsize[i]);
+	for (size_t i = 0; i < nitems(gdb_regset); i++)
+		append_unsigned_native(regvals[i], gdb_regset[i].size);
 	finish_packet();
 }
 
@@ -993,6 +1043,8 @@ gdb_read_mem(const uint8_t *data, size_t len)
 	size_t resid, todo, bytes;
 	bool started;
 	int error;
+
+	assert(len >= 1);
 
 	/* Skip 'm' */
 	data += 1;
@@ -1104,6 +1156,8 @@ gdb_write_mem(const uint8_t *data, size_t len)
 	uint8_t *cp;
 	size_t resid, todo, bytes;
 	int error;
+
+	assert(len >= 1);
 
 	/* Skip 'M' */
 	data += 1;
@@ -1236,8 +1290,8 @@ remove_all_sw_breakpoints(void)
 
 	TAILQ_FOREACH_SAFE(bp, &breakpoints, link, nbp) {
 		debug("remove breakpoint at %#lx\n", bp->gpa);
-		cp = paddr_guest2host(ctx, bp->gpa, 1);
-		*cp = bp->shadow_inst;
+		cp = paddr_guest2host(ctx, bp->gpa, sizeof(bp->shadow_inst));
+		memcpy(cp, bp->shadow_inst, sizeof(bp->shadow_inst));
 		TAILQ_REMOVE(&breakpoints, bp, link);
 		free(bp);
 	}
@@ -1253,7 +1307,7 @@ update_sw_breakpoint(uint64_t gva, int kind, bool insert)
 	uint8_t *cp;
 	int error;
 
-	if (kind != 1) {
+	if (kind != GDB_BP_SIZE) {
 		send_error(EINVAL);
 		return;
 	}
@@ -1268,7 +1322,7 @@ update_sw_breakpoint(uint64_t gva, int kind, bool insert)
 		return;
 	}
 
-	cp = paddr_guest2host(ctx, gpa, 1);
+	cp = paddr_guest2host(ctx, gpa, sizeof(bp->shadow_inst));
 
 	/* Only permit breakpoints in guest RAM. */
 	if (cp == NULL) {
@@ -1292,15 +1346,15 @@ update_sw_breakpoint(uint64_t gva, int kind, bool insert)
 			}
 			bp = malloc(sizeof(*bp));
 			bp->gpa = gpa;
-			bp->shadow_inst = *cp;
-			*cp = 0xcc;	/* INT 3 */
+			memcpy(bp->shadow_inst, cp, sizeof(bp->shadow_inst));
+			memcpy(cp, GDB_BP_INSTR, sizeof(bp->shadow_inst));
 			TAILQ_INSERT_TAIL(&breakpoints, bp, link);
 			debug("new breakpoint at %#lx\n", gpa);
 		}
 	} else {
 		if (bp != NULL) {
 			debug("remove breakpoint at %#lx\n", gpa);
-			*cp = bp->shadow_inst;
+			memcpy(cp, bp->shadow_inst, sizeof(bp->shadow_inst));
 			TAILQ_REMOVE(&breakpoints, bp, link);
 			free(bp);
 			if (TAILQ_EMPTY(&breakpoints))
@@ -1499,7 +1553,7 @@ gdb_query(const uint8_t *data, size_t len)
 
 		data += strlen("qThreadExtraInfo");
 		len -= strlen("qThreadExtraInfo");
-		if (*data != ',') {
+		if (len == 0 || *data != ',') {
 			send_error(EINVAL);
 			return;
 		}
@@ -1550,7 +1604,7 @@ handle_command(const uint8_t *data, size_t len)
 	case 'H': {
 		int tid;
 
-		if (data[1] != 'g' && data[1] != 'c') {
+		if (len < 2 || (data[1] != 'g' && data[1] != 'c')) {
 			send_error(EINVAL);
 			break;
 		}

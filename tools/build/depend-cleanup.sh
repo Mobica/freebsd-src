@@ -1,6 +1,5 @@
 #!/bin/sh
 #
-# $FreeBSD$
 #
 # Our current make(1)-based approach to dependency tracking cannot cope with
 # certain source tree changes, including:
@@ -204,3 +203,18 @@ clean_dep   lib/libc        ffsll S
 clean_dep   lib/libc        fls   S
 clean_dep   lib/libc        flsl  S
 clean_dep   lib/libc        flsll S
+
+# 20230815  28f6c2f29280    GoogleTest update
+if [ -e "$OBJTOP"/tests/sys/fs/fusefs/mockfs.o ] && \
+    grep -q '_ZN7testing8internal18g_linked_ptr_mutexE' "$OBJTOP"/tests/sys/fs/fusefs/mockfs.o; then
+	echo "Removing stale fusefs GoogleTest objects"
+	run rm -rf "$OBJTOP"/tests/sys/fs/fusefs
+fi
+
+# 20231031  0527c9bdc718    Remove forward compat ino64 stuff
+clean_dep   lib/libc        fstat         c
+clean_dep   lib/libc        fstatat       c
+clean_dep   lib/libc        fstatfs       c
+clean_dep   lib/libc        getdirentries c
+clean_dep   lib/libc        getfsstat     c
+clean_dep   lib/libc        statfs        c

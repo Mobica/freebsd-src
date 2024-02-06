@@ -1,4 +1,3 @@
-# $FreeBSD$
 
 PACKAGE=lib${LIB}
 LIB=		lzma
@@ -157,7 +156,6 @@ LIBADD+=	md pthread
 
 VERSION_DEF=	${.CURDIR}/Versions.def
 SYMBOL_MAPS=	${.CURDIR}/Symbol.map
-CFLAGS+=	-DSYMBOL_VERSIONING
 
 CLEANFILES+=	liblzma.pc
 

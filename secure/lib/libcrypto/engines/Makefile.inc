@@ -1,4 +1,3 @@
-# $FreeBSD$
 
 SHLIBDIR=	${LIBDIR}/engines-3
 
@@ -16,6 +15,8 @@ CFLAGS+=	-DL_ENDIAN
 CFLAGS+=	-DB_ENDIAN
 .endif
 CFLAGS+=	-DNDEBUG
+
+LIBADD=		crypto
 
 .PATH: ${LCRYPTO_SRC}/engines
 

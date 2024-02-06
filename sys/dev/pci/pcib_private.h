@@ -28,8 +28,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef __PCIB_PRIVATE_H__
@@ -150,7 +148,8 @@ struct pcib_softc
 
 #define	PCIB_SUPPORTED_ARI_VER	1
 
-typedef uint32_t pci_read_config_fn(int b, int s, int f, int reg, int width);
+typedef uint32_t pci_read_config_fn(int d, int b, int s, int f, int reg,
+    int width);
 
 int		host_pcib_get_busno(pci_read_config_fn read_config, int bus,
     int slot, int func, uint8_t *busnum);
@@ -160,6 +159,10 @@ struct resource *pci_domain_alloc_bus(int domain, device_t dev, int *rid,
 int		pci_domain_adjust_bus(int domain, device_t dev,
 		    struct resource *r, rman_res_t start, rman_res_t end);
 int		pci_domain_release_bus(int domain, device_t dev, int rid,
+		    struct resource *r);
+int		pci_domain_activate_bus(int domain, device_t dev, int rid,
+		    struct resource *r);
+int		pci_domain_deactivate_bus(int domain, device_t dev, int rid,
 		    struct resource *r);
 struct resource *pcib_alloc_subbus(struct pcib_secbus *bus, device_t child,
 		    int *rid, rman_res_t start, rman_res_t end, rman_res_t count,

@@ -24,8 +24,6 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <assert.h>
@@ -204,6 +202,7 @@ static void
 parse_args(int argc, char *argv[])
 {
 	int ch;
+	const char *arg;
 
 	while ((ch = getopt_long(argc, argv, "AaBb:C:cdDe:EFfhk:L:l:NnOo:pTt:v",
 		    lopts, NULL)) != -1) {
@@ -216,7 +215,10 @@ parse_args(int argc, char *argv[])
 			break;
 		case 'b':
 			opts.has_bootnum = true;
-			opts.bootnum = strtoul(optarg, NULL, 16);
+			arg = optarg;
+			if (strncasecmp(arg, "boot", 4) == 0)
+				arg += 4;
+			opts.bootnum = strtoul(arg, NULL, 16);
 			break;
 		case 'B':
 			opts.delete = true;
@@ -224,6 +226,8 @@ parse_args(int argc, char *argv[])
 		case 'C':
 			opts.copy = true;
 			opts.cp_src = strtoul(optarg, NULL, 16);
+			errx(1, "Copy not implemented");
+			break;
 		case 'c':
 			opts.create = true;
 			break;
@@ -786,6 +790,8 @@ print_loadopt_str(uint8_t *data, size_t datalen)
 	 */
 	indent = 1;
 	while (dp < edp) {
+		if (efidp_size(dp) == 0)
+			break;
 		efidp_format_device_path(buf, sizeof(buf), dp,
 		    (intptr_t)(void *)edp - (intptr_t)(void *)dp);
 		printf("%*s%s\n", indent, "", buf);
@@ -1048,7 +1054,7 @@ report_esp_device(bool do_dp, bool do_unix)
 		abspath[strlen(abspath) - strlen(relpath) - 1] = '\0';
 		printf("%s\n", abspath);
 	} else {
-		printf("%s\n", dev);
+		printf("/dev/%s\n", dev);
 	}
 	free(dev);
 	free(relpath);
@@ -1103,8 +1109,11 @@ main(int argc, char *argv[])
 	/*
 	 * find_dev can operate without any efi variables
 	 */
-	if (!efi_variables_supported() && !opts.find_dev)
-		errx(1, "efi variables not supported on this system. root? kldload efirt?");
+	if (!efi_variables_supported() && !opts.find_dev) {
+		if (errno == EACCES && geteuid() != 0)
+			errx(1, "must be run as root");
+		errx(1, "efi variables not supported on this system. kldload efirt?");
+	}
 
 	read_vars();
 

@@ -26,9 +26,6 @@
  *
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/bus.h>
@@ -53,7 +50,7 @@ struct simplebus_devinfo *simple_mfd_setup_dinfo(device_t dev, phandle_t node,
     struct simplebus_devinfo *di);
 
 #include "syscon_if.h"
-#include <dev/extres/syscon/syscon.h>
+#include <dev/syscon/syscon.h>
 
 MALLOC_DECLARE(M_SYSCON);
 

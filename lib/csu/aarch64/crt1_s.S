@@ -30,7 +30,7 @@
  */
 
 #include <machine/asm.h>
-__FBSDID("$FreeBSD$");
+#include <sys/elf_common.h>
 
 	/*
 	 * The program entry point
@@ -64,3 +64,5 @@ eprol:
 END(_start)
 
 	.section .note.GNU-stack,"",@progbits
+
+GNU_PROPERTY_AARCH64_FEATURE_1_NOTE(GNU_PROPERTY_AARCH64_FEATURE_1_VAL)

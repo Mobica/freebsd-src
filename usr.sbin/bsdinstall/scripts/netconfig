@@ -29,7 +29,6 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 #
-# $FreeBSD$
 
 BSDCFG_SHARE="/usr/share/bsdconfig"
 . $BSDCFG_SHARE/common.subr || exit 1
@@ -50,7 +49,8 @@ for IF in `ifconfig -l`; do
 	INTERFACES="$INTERFACES $IF"
 done
 
-INTERFACES="$INTERFACES $(sysctl -in net.wlan.devices)"
+WIRELESS_INTERFACES="$(sysctl -in net.wlan.devices)"
+INTERFACES="$INTERFACES${WIRELESS_INTERFACES:+ }$WIRELESS_INTERFACES"
 is_wireless_if() {
 	for IF in $(sysctl -in net.wlan.devices); do
 		if [ $IF = $1 ]; then
@@ -67,22 +67,22 @@ done
 
 if [ -z "$INTERFACES" ]; then
 	bsddialog --backtitle "$OSNAME Installer" \
-	    --title 'Network Configuration Error' \
+	    --title 'Network Configuration' \
 	    --msgbox 'No network interfaces present to configure.' 0 0
 	exit 1
 fi
 
-exec 3>&1
-INTERFACE=`echo $BSDDIALOG_ITEMS | xargs -o bsddialog --backtitle "$OSNAME Installer" --title 'Network Configuration' --menu 'Please select a network interface to configure:' 0 0 0 2>&1 1>&3`
+exec 5>&1
+INTERFACE=`echo $BSDDIALOG_ITEMS | xargs -o bsddialog --backtitle "$OSNAME Installer" --title 'Network Configuration' --menu 'Please select a network interface to configure:' 0 0 0 2>&1 1>&5`
 if [ $? -eq $BSDDIALOG_CANCEL ]; then exit 1; fi
-exec 3>&-
+exec 5>&-
 
 : > $BSDINSTALL_TMPETC/._rc.conf.net
 
 IFCONFIG_PREFIX=""
 if is_wireless_if $INTERFACE; then
 	NEXT_WLAN_IFACE=wlan0	# XXX
-	echo wlans_$INTERFACE=\"$NEXT_WLAN_IFACE\" >> $BSDINSTALL_TMPETC/._rc.conf.net
+	sysrc -f $BSDINSTALL_TMPETC/._rc.conf.net wlans_$INTERFACE="$NEXT_WLAN_IFACE"
 	IFCONFIG_PREFIX="WPA "
 	if [ ! -z $BSDINSTALL_CONFIGCURRENT ]; then
 		ifconfig $NEXT_WLAN_IFACE create wlandev $INTERFACE
@@ -116,7 +116,7 @@ fi
 # In case wlanconfig left an option and we do not support IPv4 we need to write
 # it out on its own.  We cannot write it out with IPv6 as that suffix.
 if [ ${IPV4_AVAIL} -eq 0 -a -n ${IFCONFIG_PREFIX} ]; then
-	echo ifconfig_${INTERFACE}=\"${IFCONFIG_PREFIX}\" >> $BSDINSTALL_TMPETC/._rc.conf.net
+	sysrc -f $BSDINSTALL_TMPETC/._rc.conf.net ifconfig_$INTERFACE="${IFCONFIG_PREFIX}"
 fi
 if [ ${IPV6_AVAIL} -eq 1 ]; then
 	bsddialog --backtitle "$OSNAME Installer" --title 'Network Configuration' \
@@ -183,13 +183,13 @@ else
 	exit 0
 fi
 
-exec 3>&1
+exec 5>&1
 RESOLV=$(echo "${RESOLV}" | xargs -o bsddialog --backtitle "$OSNAME Installer" \
 	--title 'Network Configuration' \
 	--mixedform 'Resolver Configuration' 0 0 0 \
-2>&1 1>&3)
+2>&1 1>&5)
 if [ $? -eq $BSDDIALOG_CANCEL ]; then exec $0; fi
-exec 3>&-
+exec 5>&-
 
 echo ${RESOLV} | tr ' ' '\n' | \
 awk '

@@ -28,9 +28,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/capsicum.h>
@@ -45,6 +42,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/vnode.h>
 #include <sys/proc.h>
 #include <sys/extattr.h>
+#include <sys/syscallsubr.h>
 
 #include <security/audit/audit.h>
 #include <security/mac/mac_framework.h>

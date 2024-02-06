@@ -1,4 +1,3 @@
-# $FreeBSD$
 #
 # Makefile for building releases and release media.
 #
@@ -76,12 +75,12 @@ VOLUME_LABEL=	FreeBSD_Install
 NOPORTS= true
 .endif
 
-EXTRA_PACKAGES=
+DISTRIBUTIONS= base.txz kernel.txz
 .if !defined(NOPORTS)
-EXTRA_PACKAGES+= ports.txz
+DISTRIBUTIONS+= ports.txz
 .endif
 .if !defined(NOSRC)
-EXTRA_PACKAGES+= src.txz
+DISTRIBUTIONS+= src.txz
 .endif
 
 RELEASE_TARGETS= ftp
@@ -119,13 +118,7 @@ clean: beforeclean
 base.txz:
 	mkdir -p ${DISTDIR}
 	cd ${WORLDDIR} && ${IMAKE} distributeworld DISTDIR=${.OBJDIR}/${DISTDIR}
-# TODO: Add NO_ROOT mode to mm-tree.sh
-.if !defined(NO_ROOT)
-# Set up mergemaster root database
-	sh ${.CURDIR}/scripts/mm-mtree.sh -m ${WORLDDIR} -F \
-	    "TARGET_ARCH=${TARGET_ARCH} TARGET=${TARGET} ${.MAKE.JOBS:D-j${.MAKE.JOBS}}" \
-	    -D "${.OBJDIR}/${DISTDIR}/base"
-.endif
+	# Bootstrap etcupdate(8) database.
 	sh ${WORLDDIR}/usr.sbin/etcupdate/etcupdate.sh extract -B \
 	    -m "${MAKE}" -M "TARGET_ARCH=${TARGET_ARCH} TARGET=${TARGET}" \
 	    -s ${WORLDDIR} -d "${.OBJDIR}/${DISTDIR}/base/var/db/etcupdate" \
@@ -291,7 +284,7 @@ mini-memstick: mini-memstick.img
 mini-memstick.img: bootonly
 	cd bootonly && sh ${.CURDIR}/${TARGET}/make-memstick.sh .${NO_ROOT:D/METALOG} ../${.TARGET}
 
-packagesystem: base.txz kernel.txz ${EXTRA_PACKAGES}
+packagesystem: ${DISTRIBUTIONS}
 	sh ${.CURDIR}/scripts/make-manifest.sh *.txz > MANIFEST
 	touch ${.TARGET}
 

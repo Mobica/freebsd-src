@@ -32,9 +32,6 @@
  * Bernd Walter <tisco@FreeBSD.org>, and other authors.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 //#include "opt_sdda.h"
 
 #include <sys/param.h>

@@ -1,7 +1,7 @@
-# $FreeBSD$
 
 .include <bsd.compiler.mk>
 
+PACKAGE=	clang
 MK_PIE:=	no	# Explicit libXXX.a references
 
 .if ${COMPILER_TYPE} == "clang"

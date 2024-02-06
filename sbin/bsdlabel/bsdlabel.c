@@ -42,21 +42,6 @@
  *	from: $NetBSD: disksubr.c,v 1.13 2000/12/17 22:39:18 pk $
  */
 
-#if 0
-#ifndef lint
-static const char copyright[] =
-"@(#) Copyright (c) 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n";
-#endif /* not lint */
-
-#ifndef lint
-static char sccsid[] = "@(#)disklabel.c	8.2 (Berkeley) 1/7/94";
-/* from static char sccsid[] = "@(#)disklabel.c	1.2 (Symmetric) 11/28/85"; */
-#endif /* not lint */
-#endif
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
 #include <stdint.h>
 #include <sys/file.h>
@@ -65,7 +50,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/disk.h>
 #define DKTYPENAMES
 #define FSTYPENAMES
-#define MAXPARTITIONS	20
+#define MAXPARTITIONS	8 /* XXX should be 20, but see PR276517 */
 #include <sys/disklabel.h>
 
 #include <unistd.h>

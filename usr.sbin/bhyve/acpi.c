@@ -24,8 +24,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 /*
@@ -37,9 +35,6 @@
  * The tables are placed in the guest's ROM area just below 1MB physical,
  * above the MPTable.
  */
-
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #include <sys/endian.h>
@@ -75,7 +70,6 @@ __FBSDID("$FreeBSD$");
 static int basl_keep_temps;
 static int basl_verbose_iasl;
 static int basl_ncpu;
-static uint32_t hpet_capabilities;
 
 /*
  * Contains the full pathname of the template to be passed
@@ -222,6 +216,7 @@ basl_fwrite_dsdt(FILE *fp)
 
 	pci_write_dsdt();
 
+#ifdef __amd64__
 	dsdt_line("");
 	dsdt_line("  Scope (_SB.PC00)");
 	dsdt_line("  {");
@@ -237,6 +232,7 @@ basl_fwrite_dsdt(FILE *fp)
 	dsdt_line("      })");
 	dsdt_line("    }");
 	dsdt_line("  }");
+#endif
 
 	vmgenc_write_dsdt();
 
@@ -330,7 +326,7 @@ basl_load(struct vmctx *ctx, int fd)
 
 	addr = calloc(1, sb.st_size);
 	if (addr == NULL)
-		return (EFAULT);
+		return (ENOMEM);
 
 	if (read(fd, addr, sb.st_size) < 0)
 		return (errno);
@@ -342,6 +338,7 @@ basl_load(struct vmctx *ctx, int fd)
 	BASL_EXEC(basl_table_create(&table, ctx, name, BASL_TABLE_ALIGNMENT));
 	BASL_EXEC(basl_table_append_bytes(table, addr, sb.st_size));
 
+	free(addr);
 	return (0);
 }
 
@@ -534,11 +531,18 @@ build_fadt(struct vmctx *const ctx)
 	return (0);
 }
 
+#ifdef __amd64__
 static int
 build_hpet(struct vmctx *const ctx)
 {
 	ACPI_TABLE_HPET hpet;
 	struct basl_table *table;
+	uint32_t hpet_capabilities;
+	int err;
+
+	err = vm_get_hpet_capabilities(ctx, &hpet_capabilities);
+	if (err != 0)
+		return (err);
 
 	BASL_EXEC(basl_table_create(&table, ctx, ACPI_SIG_HPET,
 	    BASL_TABLE_ALIGNMENT));
@@ -555,6 +559,7 @@ build_hpet(struct vmctx *const ctx)
 
 	return (0);
 }
+#endif
 
 static int
 build_madt(struct vmctx *const ctx)
@@ -724,13 +729,7 @@ build_spcr(struct vmctx *const ctx)
 int
 acpi_build(struct vmctx *ctx, int ncpu)
 {
-	int err;
-
 	basl_ncpu = ncpu;
-
-	err = vm_get_hpet_capabilities(ctx, &hpet_capabilities);
-	if (err != 0)
-		return (err);
 
 	/*
 	 * For debug, allow the user to have iasl compiler output sent
@@ -760,7 +759,9 @@ acpi_build(struct vmctx *ctx, int ncpu)
 	BASL_EXEC(build_rsdp(ctx));
 	BASL_EXEC(build_fadt(ctx));
 	BASL_EXEC(build_madt(ctx));
+#ifdef __amd64__
 	BASL_EXEC(build_hpet(ctx));
+#endif
 	BASL_EXEC(build_mcfg(ctx));
 	BASL_EXEC(build_facs(ctx));
 	BASL_EXEC(build_spcr(ctx));

@@ -28,9 +28,6 @@
  * Optimized by Bruce D. Evans.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 /**
  * Compute the exponential of x for Intel 80-bit format.  This is based on:
  *

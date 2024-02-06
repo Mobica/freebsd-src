@@ -24,8 +24,6 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _VMBUS_BRVAR_H_
@@ -131,7 +129,7 @@ void		vmbus_rxbr_deinit(struct vmbus_rxbr *rbr);
 void		vmbus_rxbr_setup(struct vmbus_rxbr *rbr, void *buf, int blen);
 int		vmbus_rxbr_peek(struct vmbus_rxbr *rbr, void *data, int dlen);
 int		vmbus_rxbr_read(struct vmbus_rxbr *rbr, void *data, int dlen,
-		    uint32_t skip);
+		    uint32_t skip, boolean_t *need_sig);
 int		vmbus_rxbr_idxadv(struct vmbus_rxbr *rbr, uint32_t idx_adv,
 		    boolean_t *need_sig);
 int		vmbus_rxbr_idxadv_peek(struct vmbus_rxbr *rbr, void *data,

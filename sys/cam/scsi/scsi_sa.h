@@ -28,14 +28,11 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef	_SCSI_SCSI_SA_H
 #define _SCSI_SCSI_SA_H 1
 
-#include <sys/cdefs.h>
 
 struct scsi_read_block_limits
 {

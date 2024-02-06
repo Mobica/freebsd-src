@@ -17,7 +17,6 @@
  * information: Portions Copyright [yyyy] [name of copyright owner]
  *
  * CDDL HEADER END
- * $FreeBSD$
  */
 
 /*
@@ -25,7 +24,6 @@
  * Use is subject to license terms.
  */
 
-#pragma ident	"@(#)file_write.c	1.4	07/10/09 SMI"
 
 #include "file_common.h"
 #include <inttypes.h>

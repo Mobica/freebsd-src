@@ -1,10 +1,9 @@
 # This is a generated file, do NOT edit!
 # See contrib/bmake/bsd.after-import.mk
 #
-# $FreeBSD$
-# $Id: Makefile,v 1.199 2023/06/20 17:27:20 sjg Exp $
+# $Id: Makefile,v 1.210 2024/01/08 18:28:08 sjg Exp $
 #
-# $NetBSD: Makefile,v 1.339 2023/06/20 09:25:34 rillig Exp $
+# $NetBSD: Makefile,v 1.342 2024/01/07 02:07:44 sjg Exp $
 #
 # Unit tests for make(1)
 #
@@ -221,7 +220,7 @@ TESTS+=		hanoi-include
 TESTS+=		impsrc
 TESTS+=		include-main
 TESTS+=		job-flags
-#TESTS+=		job-output-long-lines
+TESTS+=		job-output-long-lines
 TESTS+=		job-output-null
 TESTS+=		jobs-empty-commands
 TESTS+=		jobs-empty-commands-error
@@ -253,7 +252,7 @@ TESTS+=		opt-debug-graph1
 TESTS+=		opt-debug-graph2
 TESTS+=		opt-debug-graph3
 TESTS+=		opt-debug-hash
-#TESTS+=		opt-debug-jobs
+TESTS+=		opt-debug-jobs
 TESTS+=		opt-debug-lint
 TESTS+=		opt-debug-loud
 TESTS+=		opt-debug-meta
@@ -473,8 +472,24 @@ BROKEN_TESTS+= opt-debug-x-trace
 BROKEN_TESTS+= sh-flags
 .endif
 
+.if ${UTC_1:Uno} == ""
+# this will not work if UTC_1 is set empty
+BROKEN_TESTS+= varmod-localtime
+.endif
+
 .if ${.MAKE.OS:NDarwin} == ""
 BROKEN_TESTS+= shell-ksh
+.endif
+
+.if ${.MAKE.OS:MIRIX*} != ""
+BROKEN_TESTS+= \
+	cmd-interrupt \
+	deptgt-interrupt \
+	job-output-null \
+	opt-chdir \
+	opt-debug-x-trace \
+	sh-leading-hyphen \
+
 .endif
 
 .if ${.MAKE.OS} == "SCO_SV"
@@ -604,6 +619,7 @@ SED_CMDS.var-op-shell+=		${STD_SED_CMDS.shell}
 SED_CMDS.var-op-shell+=		-e '/command/s,No such.*,not found,'
 SED_CMDS.var-op-shell+=		${STD_SED_CMDS.white-space}
 SED_CMDS.vardebug+=		-e 's,${.SHELL},</path/to/shell>,'
+SED_CMDS.varmod-mtime+=		-e "s,': .*,': <ENOENT>,"
 SED_CMDS.varmod-subst-regex+=	${STD_SED_CMDS.regex}
 SED_CMDS.varparse-errors+=	${STD_SED_CMDS.timestamp}
 SED_CMDS.varname-dot-make-meta-ignore_filter+= ${SED_CMDS.meta-ignore}
@@ -643,6 +659,7 @@ STD_SED_CMDS.dg1+=	-e '/^\#.*\/mk/d'
 STD_SED_CMDS.dg1+=	-e 's,  ${DEFSYSPATH:U/usr/share/mk}$$,  <defsyspath>,'
 STD_SED_CMDS.dg1+=	-e 's,^\(\.MAKE *=\) .*,\1 <details omitted>,'
 STD_SED_CMDS.dg1+=	-e 's,^\(\.MAKE\.[A-Z_]* *=\) .*,\1 <details omitted>,'
+STD_SED_CMDS.dg1+=	-e 's,^\(\.MAKE\.JOBS\.C *=\) .*,\1 <details omitted>,'
 STD_SED_CMDS.dg1+=	-e 's,^\(MACHINE[_ARCH]* *=\) .*,\1 <details omitted>,'
 STD_SED_CMDS.dg1+=	-e 's,^\(MAKE *=\) .*,\1 <details omitted>,'
 STD_SED_CMDS.dg1+=	-e 's,^\(\.SHELL *=\) .*,\1 <details omitted>,'
@@ -807,6 +824,7 @@ _SED_CMDS+=	-e 's,${.OBJDIR},<curdir>,g' -e 's,${.OBJDIR:tA},<curdir>,g'
 _SED_CMDS+=	-e 's,^${TEST_MAKE:T:S,.,\\.,g}[][0-9]*:,make:,'
 _SED_CMDS+=	-e 's,${TEST_MAKE:S,.,\\.,g},make,'
 _SED_CMDS+=	-e 's,^usage: ${TEST_MAKE:T:S,.,\\.,g} ,usage: make ,'
+_SED_CMDS+=	-e 's,${TEST_MAKE:T:S,.,\\.,g}\(\[[1-9][0-9]*\]:\),make\1,'
 _SED_CMDS+=	-e 's,<curdir>/,,g'
 _SED_CMDS+=	-e 's,${UNIT_TESTS:S,.,\\.,g}/,,g'
 _SED_CMDS+=	-e '/MAKE_VERSION/d'

@@ -26,9 +26,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
 #include <sys/bus.h>
 #include <sys/endian.h>
@@ -63,7 +60,6 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/stdarg.h>	/* for xpt_print below */
 #include <machine/_inttypes.h>  /* for PRIu64 */
-#include "opt_cam.h"
 
 FEATURE(mmccam, "CAM-based MMC/SD/SDIO stack");
 
@@ -432,9 +428,9 @@ mmc_print_ident(struct mmc_params *ident_data, struct sbuf *sb)
 	bool space = false;
 
 	sbuf_printf(sb, "Relative addr: %08x\n", ident_data->card_rca);
-	sbuf_printf(sb, "Card features: <");
+	sbuf_cat(sb, "Card features: <");
 	if (ident_data->card_features & CARD_FEATURE_MMC) {
-		sbuf_printf(sb, "MMC");
+		sbuf_cat(sb, "MMC");
 		space = true;
 	}
 	if (ident_data->card_features & CARD_FEATURE_MEMORY) {
@@ -456,7 +452,7 @@ mmc_print_ident(struct mmc_params *ident_data, struct sbuf *sb)
 	if (ident_data->card_features & CARD_FEATURE_18V) {
 		sbuf_printf(sb, "%s1.8-Signaling", space ? " " : "");
 	}
-	sbuf_printf(sb, ">\n");
+	sbuf_cat(sb, ">\n");
 
 	if (ident_data->card_features & CARD_FEATURE_MEMORY)
 		sbuf_printf(sb, "Card memory OCR: %08x\n",

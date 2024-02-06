@@ -26,8 +26,6 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifndef _COMPAT_FREEBSD32_FREEBSD32_UTIL_H_
@@ -123,5 +121,7 @@ void	freebsd32_rusage_out(const struct rusage *s, struct rusage32 *s32);
 struct image_args;
 int freebsd32_exec_copyin_args(struct image_args *args, const char *fname,
 	    enum uio_seg segflg, uint32_t *argv, uint32_t *envv);
+
+extern int compat_freebsd_32bit;
 
 #endif /* !_COMPAT_FREEBSD32_FREEBSD32_UTIL_H_ */

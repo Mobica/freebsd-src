@@ -28,8 +28,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD$
- *
  * Private definitions for libc, libc_r and libpthread.
  *
  */
@@ -186,6 +184,7 @@ typedef enum {
 	PJT_MUTEXATTR_SETROBUST,
 	PJT_GETTHREADID_NP,
 	PJT_ATTR_GET_NP,
+	PJT_GETNAME_NP,
 	PJT_MAX
 } pjt_index_t;
 
@@ -201,6 +200,8 @@ int	_pthread_mutex_init_calloc_cb_stub(pthread_mutex_t *mutex,
 typedef int (*interpos_func_t)(void);
 interpos_func_t *__libc_interposing_slot(int interposno);
 extern interpos_func_t __libc_interposing[] __hidden;
+interpos_func_t *__libsys_interposing_slot(int interposno);
+extern interpos_func_t __libsys_interposing[] __hidden;
 
 enum {
 	INTERPOS_accept,
@@ -422,9 +423,6 @@ int		__fcntl_compat(int fd, int cmd, ...);
 int		__sys_futimens(int fd, const struct timespec *times) __hidden;
 int		__sys_utimensat(int fd, const char *path,
 		    const struct timespec *times, int flag) __hidden;
-
-/* execve() with PATH processing to implement posix_spawnp() */
-int _execvpe(const char *, char * const *, char * const *);
 
 int _elf_aux_info(int aux, void *buf, int buflen);
 struct dl_phdr_info;

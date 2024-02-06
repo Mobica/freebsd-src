@@ -39,8 +39,6 @@
  * cpufunc.h
  *
  * Prototypes for cpu, mmu and tlb related functions.
- *
- * $FreeBSD$
  */
 
 #ifndef _MACHINE_CPUFUNC_H_
@@ -180,8 +178,8 @@ void cpu_reset		(void) __attribute__((__noreturn__));
  */
 
 /* PRIMARY CACHE VARIABLES */
-extern int	arm_dcache_align;
-extern int	arm_dcache_align_mask;
+extern unsigned int	arm_dcache_align;
+extern unsigned int	arm_dcache_align_mask;
 
 #else	/* !_KERNEL */
 

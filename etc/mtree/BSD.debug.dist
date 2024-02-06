@@ -1,4 +1,3 @@
-# $FreeBSD$
 #
 # Please see the file src/etc/mtree/README before making changes to this file.
 #
@@ -29,7 +28,7 @@
             ..
             lib
                 clang
-                    16
+                    17
                         lib
                             freebsd
                             ..

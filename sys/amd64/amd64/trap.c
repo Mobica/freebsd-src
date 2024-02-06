@@ -35,13 +35,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	from: @(#)trap.c	7.4 (Berkeley) 5/13/91
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 /*
  * AMD64 Trap and System call handling
  */
@@ -1034,10 +1030,10 @@ cpu_fetch_syscall_args_fallback(struct thread *td, struct syscall_args *sa)
 		regcnt--;
 	}
 
- 	if (sa->code >= p->p_sysent->sv_size)
- 		sa->callp = &p->p_sysent->sv_table[0];
-  	else
- 		sa->callp = &p->p_sysent->sv_table[sa->code];
+	if (sa->code >= p->p_sysent->sv_size)
+		sa->callp = &nosys_sysent;
+	else
+		sa->callp = &p->p_sysent->sv_table[sa->code];
 
 	KASSERT(sa->callp->sy_narg <= nitems(sa->args),
 	    ("Too many syscall arguments!"));
@@ -1047,7 +1043,7 @@ cpu_fetch_syscall_args_fallback(struct thread *td, struct syscall_args *sa)
 	if (sa->callp->sy_narg > regcnt) {
 		params = (caddr_t)frame->tf_rsp + sizeof(register_t);
 		error = copyin(params, &sa->args[regcnt],
-	    	    (sa->callp->sy_narg - regcnt) * sizeof(sa->args[0]));
+		    (sa->callp->sy_narg - regcnt) * sizeof(sa->args[0]));
 		if (__predict_false(error != 0))
 			return (error);
 	}
@@ -1190,12 +1186,9 @@ amd64_syscall(struct thread *td, int traced)
 
 	kmsan_mark(td->td_frame, sizeof(*td->td_frame), KMSAN_STATE_INITED);
 
-#ifdef DIAGNOSTIC
-	if (!TRAPF_USERMODE(td->td_frame)) {
-		panic("syscall");
-		/* NOT REACHED */
-	}
-#endif
+	KASSERT(TRAPF_USERMODE(td->td_frame),
+	    ("%s: not from user mode", __func__));
+
 	syscallenter(td);
 
 	/*

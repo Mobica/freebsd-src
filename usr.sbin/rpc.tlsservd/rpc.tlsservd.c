@@ -32,9 +32,6 @@
  * the server side of kernel RPC-over-TLS by Rick Macklem.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/linker.h>

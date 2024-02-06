@@ -32,14 +32,10 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #ifndef _NETINET_SCTP_OS_BSD_H_
 #define _NETINET_SCTP_OS_BSD_H_
-/*
- * includes
- */
+
+#include <sys/cdefs.h>
 #include "opt_inet6.h"
 #include "opt_inet.h"
 #include "opt_sctp.h"
@@ -222,13 +218,6 @@ MALLOC_DECLARE(SCTP_M_MCORE);
 	} while (0)
 
 #define SCTP_FREE(var, type)	free(var, type)
-
-#define SCTP_MALLOC_SONAME(var, type, size) \
-	do { \
-		var = (type)malloc(size, M_SONAME, M_WAITOK | M_ZERO); \
-	} while (0)
-
-#define SCTP_FREE_SONAME(var)	free(var, M_SONAME)
 
 #define SCTP_PROCESS_STRUCT struct proc *
 

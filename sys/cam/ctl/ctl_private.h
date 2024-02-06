@@ -31,7 +31,6 @@
  * POSSIBILITY OF SUCH DAMAGES.
  *
  * $Id: //depot/users/kenm/FreeBSD-test2/sys/cam/ctl/ctl_private.h#7 $
- * $FreeBSD$
  */
 /*
  * CAM Target Layer driver private data structures/definitions.
@@ -42,6 +41,7 @@
 #ifndef	_CTL_PRIVATE_H_
 #define	_CTL_PRIVATE_H_
 
+#include <sys/sysctl.h>
 #include <cam/scsi/scsi_all.h>
 #include <cam/scsi/scsi_cd.h>
 #include <cam/scsi/scsi_da.h>

@@ -1,5 +1,4 @@
 /*	$NetBSD: uaudio.c,v 1.91 2004/11/05 17:46:14 kent Exp $	*/
-/*	$FreeBSD$ */
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
@@ -34,8 +33,6 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 /*
  * USB audio specs: http://www.usb.org/developers/devclass_docs/audio10.pdf
  *                  http://www.usb.org/developers/devclass_docs/frmts10.pdf
@@ -1202,7 +1199,12 @@ uaudio_attach_sub(device_t dev, kobj_class_t mixer_class, kobj_class_t chan_clas
 
 	mixer_hwvol_init(dev);
 
-	snprintf(status, sizeof(status), "at ? %s", PCM_KLDSTRING(snd_uaudio));
+	device_set_descf(dev, "%s %s",
+	    usb_get_manufacturer(sc->sc_udev),
+	    usb_get_product(sc->sc_udev));
+
+	snprintf(status, sizeof(status), "on %s",
+	    device_get_nameunit(device_get_parent(dev)));
 
 	if (pcm_register(dev, sc,
 	    (sc->sc_play_chan[i].num_alt > 0) ? 1 : 0,
@@ -6227,10 +6229,10 @@ uaudio_hid_detach(struct uaudio_softc *sc)
 	usbd_transfer_unsetup(sc->sc_hid.xfer, UAUDIO_HID_N_TRANSFER);
 }
 
-DRIVER_MODULE_ORDERED(uaudio, uhub, uaudio_driver, NULL, NULL, SI_ORDER_ANY);
-MODULE_DEPEND(uaudio, usb, 1, 1, 1);
-MODULE_DEPEND(uaudio, sound, SOUND_MINVER, SOUND_PREFVER, SOUND_MAXVER);
-MODULE_DEPEND(uaudio, hid, 1, 1, 1);
-MODULE_VERSION(uaudio, 1);
+DRIVER_MODULE_ORDERED(snd_uaudio, uhub, uaudio_driver, NULL, NULL, SI_ORDER_ANY);
+MODULE_DEPEND(snd_uaudio, usb, 1, 1, 1);
+MODULE_DEPEND(snd_uaudio, sound, SOUND_MINVER, SOUND_PREFVER, SOUND_MAXVER);
+MODULE_DEPEND(snd_uaudio, hid, 1, 1, 1);
+MODULE_VERSION(snd_uaudio, 1);
 USB_PNP_HOST_INFO(uaudio_devs);
 USB_PNP_HOST_INFO(uaudio_vendor_midi);

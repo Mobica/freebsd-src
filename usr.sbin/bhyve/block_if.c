@@ -25,12 +25,7 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
-
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #ifndef WITHOUT_CAPSICUM
@@ -1029,7 +1024,7 @@ blockif_pause(struct blockif_ctxt *bc)
 	pthread_mutex_unlock(&bc->bc_mtx);
 
 	if (!bc->bc_rdonly && blockif_flush_bc(bc))
-		fprintf(stderr, "%s: [WARN] failed to flush backing file.\r\n",
+		EPRINTLN("%s: [WARN] failed to flush backing file.",
 			__func__);
 }
 

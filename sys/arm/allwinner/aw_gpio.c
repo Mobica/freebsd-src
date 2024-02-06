@@ -28,8 +28,6 @@
  * SUCH DAMAGE.
  *
  */
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,9 +52,9 @@ __FBSDID("$FreeBSD$");
 
 #include <arm/allwinner/aw_machdep.h>
 #include <arm/allwinner/allwinner_pinctrl.h>
-#include <dev/extres/clk/clk.h>
-#include <dev/extres/hwreset/hwreset.h>
-#include <dev/extres/regulator/regulator.h>
+#include <dev/clk/clk.h>
+#include <dev/hwreset/hwreset.h>
+#include <dev/regulator/regulator.h>
 
 #if defined(__aarch64__)
 #include "opt_soc.h"

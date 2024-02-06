@@ -1,6 +1,3 @@
-#	@(#)Makefile	8.1 (Berkeley) 6/4/93
-# $FreeBSD$
-
 .include <src.opts.mk>
 
 .include <bsd.compat.pre.mk>
@@ -13,6 +10,7 @@ SUBDIR=	${_atf} \
 	flua \
 	getty \
 	${_hyperv} \
+	kgdb \
 	${_mail.local} \
 	${_makewhatis.local} \
 	${_mknetid} \

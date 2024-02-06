@@ -27,9 +27,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -439,7 +436,7 @@ vmd_alloc_resource(device_t dev, device_t child, int type, int *rid,
 
 	switch (type) {
 	case SYS_RES_IRQ:
-		/* VMD harwdare does not support legacy interrupts. */
+		/* VMD hardware does not support legacy interrupts. */
 		if (*rid == 0)
 			return (NULL);
 		return (bus_generic_alloc_resource(dev, child, type, rid,
@@ -467,7 +464,7 @@ vmd_alloc_resource(device_t dev, device_t child, int type, int *rid,
 			    pcib_child_name(child));
 		break;
 	default:
-		/* VMD harwdare does not support I/O ports. */
+		/* VMD hardware does not support I/O ports. */
 		return (NULL);
 	}
 	rman_set_rid(res, *rid);
@@ -502,7 +499,7 @@ static int
 vmd_route_interrupt(device_t dev, device_t child, int pin)
 {
 
-	/* VMD harwdare does not support legacy interrupts. */
+	/* VMD hardware does not support legacy interrupts. */
 	return (PCI_INVALID_IRQ);
 }
 

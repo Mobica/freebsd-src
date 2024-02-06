@@ -421,20 +421,6 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 		*n_args = 0;
 		break;
 	}
-	/* sbrk */
-	case 69: {
-		struct sbrk_args *p = params;
-		iarg[a++] = p->incr; /* int */
-		*n_args = 1;
-		break;
-	}
-	/* sstk */
-	case 70: {
-		struct sstk_args *p = params;
-		iarg[a++] = p->incr; /* int */
-		*n_args = 1;
-		break;
-	}
 	/* munmap */
 	case 73: {
 		struct munmap_args *p = params;
@@ -1846,6 +1832,15 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 		uarg[a++] = (intptr_t)p->sbytes; /* off_t * */
 		iarg[a++] = p->flags; /* int */
 		*n_args = 8;
+		break;
+	}
+	/* mac_syscall */
+	case 394: {
+		struct mac_syscall_args *p = params;
+		uarg[a++] = (intptr_t)p->policy; /* const char * */
+		iarg[a++] = p->call; /* int */
+		uarg[a++] = (intptr_t)p->arg; /* void * */
+		*n_args = 3;
 		break;
 	}
 	/* ksem_close */
@@ -3327,6 +3322,52 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 		*n_args = 1;
 		break;
 	}
+	/* membarrier */
+	case 584: {
+		struct membarrier_args *p = params;
+		iarg[a++] = p->cmd; /* int */
+		uarg[a++] = p->flags; /* unsigned */
+		iarg[a++] = p->cpu_id; /* int */
+		*n_args = 3;
+		break;
+	}
+	/* timerfd_create */
+	case 585: {
+		struct timerfd_create_args *p = params;
+		iarg[a++] = p->clockid; /* int */
+		iarg[a++] = p->flags; /* int */
+		*n_args = 2;
+		break;
+	}
+	/* freebsd32_timerfd_gettime */
+	case 586: {
+		struct freebsd32_timerfd_gettime_args *p = params;
+		iarg[a++] = p->fd; /* int */
+		uarg[a++] = (intptr_t)p->curr_value; /* struct itimerspec32 * */
+		*n_args = 2;
+		break;
+	}
+	/* freebsd32_timerfd_settime */
+	case 587: {
+		struct freebsd32_timerfd_settime_args *p = params;
+		iarg[a++] = p->fd; /* int */
+		iarg[a++] = p->flags; /* int */
+		uarg[a++] = (intptr_t)p->new_value; /* const struct itimerspec32 * */
+		uarg[a++] = (intptr_t)p->old_value; /* struct itimerspec32 * */
+		*n_args = 4;
+		break;
+	}
+	/* kcmp */
+	case 588: {
+		struct kcmp_args *p = params;
+		iarg[a++] = p->pid1; /* pid_t */
+		iarg[a++] = p->pid2; /* pid_t */
+		iarg[a++] = p->type; /* int */
+		uarg[a++] = (intptr_t)p->idx1; /* uintptr_t */
+		uarg[a++] = (intptr_t)p->idx2; /* uintptr_t */
+		*n_args = 5;
+		break;
+	}
 	default:
 		*n_args = 0;
 		break;
@@ -3964,26 +4005,6 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* vfork */
 	case 66:
-		break;
-	/* sbrk */
-	case 69:
-		switch (ndx) {
-		case 0:
-			p = "int";
-			break;
-		default:
-			break;
-		};
-		break;
-	/* sstk */
-	case 70:
-		switch (ndx) {
-		case 0:
-			p = "int";
-			break;
-		default:
-			break;
-		};
 		break;
 	/* munmap */
 	case 73:
@@ -6288,6 +6309,22 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		case 7:
 			p = "int";
+			break;
+		default:
+			break;
+		};
+		break;
+	/* mac_syscall */
+	case 394:
+		switch (ndx) {
+		case 0:
+			p = "userland const char *";
+			break;
+		case 1:
+			p = "int";
+			break;
+		case 2:
+			p = "userland void *";
 			break;
 		default:
 			break;
@@ -8980,6 +9017,89 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
+	/* membarrier */
+	case 584:
+		switch (ndx) {
+		case 0:
+			p = "int";
+			break;
+		case 1:
+			p = "unsigned";
+			break;
+		case 2:
+			p = "int";
+			break;
+		default:
+			break;
+		};
+		break;
+	/* timerfd_create */
+	case 585:
+		switch (ndx) {
+		case 0:
+			p = "int";
+			break;
+		case 1:
+			p = "int";
+			break;
+		default:
+			break;
+		};
+		break;
+	/* freebsd32_timerfd_gettime */
+	case 586:
+		switch (ndx) {
+		case 0:
+			p = "int";
+			break;
+		case 1:
+			p = "userland struct itimerspec32 *";
+			break;
+		default:
+			break;
+		};
+		break;
+	/* freebsd32_timerfd_settime */
+	case 587:
+		switch (ndx) {
+		case 0:
+			p = "int";
+			break;
+		case 1:
+			p = "int";
+			break;
+		case 2:
+			p = "userland const struct itimerspec32 *";
+			break;
+		case 3:
+			p = "userland struct itimerspec32 *";
+			break;
+		default:
+			break;
+		};
+		break;
+	/* kcmp */
+	case 588:
+		switch (ndx) {
+		case 0:
+			p = "pid_t";
+			break;
+		case 1:
+			p = "pid_t";
+			break;
+		case 2:
+			p = "int";
+			break;
+		case 3:
+			p = "uintptr_t";
+			break;
+		case 4:
+			p = "uintptr_t";
+			break;
+		default:
+			break;
+		};
+		break;
 	default:
 		break;
 	};
@@ -9226,16 +9346,6 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* vfork */
 	case 66:
-	/* sbrk */
-	case 69:
-		if (ndx == 0 || ndx == 1)
-			p = "int";
-		break;
-	/* sstk */
-	case 70:
-		if (ndx == 0 || ndx == 1)
-			p = "int";
-		break;
 	/* munmap */
 	case 73:
 		if (ndx == 0 || ndx == 1)
@@ -10049,6 +10159,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;
+	/* mac_syscall */
+	case 394:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
 	/* ksem_close */
 	case 400:
 		if (ndx == 0 || ndx == 1)
@@ -10840,6 +10955,31 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* kqueuex */
 	case 583:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* membarrier */
+	case 584:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* timerfd_create */
+	case 585:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* freebsd32_timerfd_gettime */
+	case 586:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* freebsd32_timerfd_settime */
+	case 587:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* kcmp */
+	case 588:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;

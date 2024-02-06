@@ -1,4 +1,3 @@
-# $FreeBSD$
 
 .if ${MACHINE_CPUARCH} == "amd64"
 SFX= 32
@@ -71,8 +70,7 @@ SRCS+=	imgact_linux.c \
 	linux_vdso_selector_x86.c \
 	linux_x86.c \
 	linux_copyout.c \
-	linux_netlink.c \
-	opt_netlink.h
+	linux_netlink.c
 .endif
 
 .if ${MACHINE_CPUARCH} == "i386"
@@ -137,7 +135,8 @@ linux${SFX}_support.o: linux${SFX}_support.S linux${SFX}_assym.h assym.inc
 .endif
 
 linux${SFX}_genassym.o: offset.inc
-	${CC} -c ${CFLAGS:N-flto:N-fno-common} -fcommon ${.IMPSRC}
+	${CC} -c ${CFLAGS:N-flto*:N-fno-common:N-fsanitize*:N-fno-sanitize*} \
+	    -fcommon ${.IMPSRC}
 
 .if !defined(KERNBUILDDIR)
 .warning Building Linuxulator outside of a kernel does not make sense

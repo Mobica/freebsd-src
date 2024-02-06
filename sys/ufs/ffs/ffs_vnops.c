@@ -57,15 +57,10 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	from: @(#)ufs_readwrite.c	8.11 (Berkeley) 5/8/95
  * from: $FreeBSD: .../ufs/ufs_readwrite.c,v 1.96 2002/08/12 09:22:11 phk ...
- *	@(#)ffs_vnops.c	8.15 (Berkeley) 5/14/95
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_directio.h"
 #include "opt_ffs.h"
 #include "opt_ufs.h"
@@ -137,6 +132,8 @@ static vop_setextattr_t	ffs_setextattr;
 static vop_vptofh_t	ffs_vptofh;
 static vop_vput_pair_t	ffs_vput_pair;
 
+vop_fplookup_vexec_t ufs_fplookup_vexec;
+
 /* Global vfs data structures for ufs. */
 struct vop_vector ffs_vnodeops1 = {
 	.vop_default =		&ufs_vnodeops,
@@ -153,7 +150,7 @@ struct vop_vector ffs_vnodeops1 = {
 	.vop_write =		ffs_write,
 	.vop_vptofh =		ffs_vptofh,
 	.vop_vput_pair =	ffs_vput_pair,
-	.vop_fplookup_vexec =	VOP_EAGAIN,
+	.vop_fplookup_vexec =	ufs_fplookup_vexec,
 	.vop_fplookup_symlink =	VOP_EAGAIN,
 };
 VFS_VOP_VECTOR_REGISTER(ffs_vnodeops1);
@@ -194,7 +191,7 @@ struct vop_vector ffs_vnodeops2 = {
 	.vop_setextattr =	ffs_setextattr,
 	.vop_vptofh =		ffs_vptofh,
 	.vop_vput_pair =	ffs_vput_pair,
-	.vop_fplookup_vexec =	VOP_EAGAIN,
+	.vop_fplookup_vexec =	ufs_fplookup_vexec,
 	.vop_fplookup_symlink =	VOP_EAGAIN,
 };
 VFS_VOP_VECTOR_REGISTER(ffs_vnodeops2);
@@ -981,8 +978,15 @@ ffs_write(
 		 * validated the pages.
 		 */
 		if (error != 0 && (bp->b_flags & B_CACHE) == 0 &&
-		    fs->fs_bsize == xfersize)
-			vfs_bio_clrbuf(bp);
+		    fs->fs_bsize == xfersize) {
+			if (error == EFAULT && LIST_EMPTY(&bp->b_dep)) {
+				bp->b_flags |= B_INVAL | B_RELBUF | B_NOCACHE;
+				brelse(bp);
+				break;
+			} else {
+				vfs_bio_clrbuf(bp);
+			}
+		}
 
 		vfs_bio_set_flags(bp, ioflag);
 

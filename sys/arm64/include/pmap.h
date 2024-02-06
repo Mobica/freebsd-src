@@ -29,8 +29,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $FreeBSD$
  */
 
 #ifdef __arm__
@@ -131,6 +129,8 @@ extern struct pmap	kernel_pmap_store;
 	(uint64_t)(asid) << TTBR_ASID_SHIFT;			\
 })
 
+#define	PMAP_WANT_ACTIVE_CPUS_NAIVE
+
 extern vm_offset_t virtual_avail;
 extern vm_offset_t virtual_end;
 
@@ -144,7 +144,7 @@ extern vm_offset_t virtual_end;
 #define	pmap_vm_page_alloc_check(m)
 
 void	pmap_activate_vm(pmap_t);
-void	pmap_bootstrap(vm_paddr_t, vm_size_t);
+void	pmap_bootstrap(vm_size_t);
 int	pmap_change_attr(vm_offset_t va, vm_size_t size, int mode);
 int	pmap_change_prot(vm_offset_t va, vm_size_t size, vm_prot_t prot);
 void	pmap_kenter(vm_offset_t sva, vm_size_t size, vm_paddr_t pa, int mode);
@@ -192,9 +192,8 @@ pmap_vmspace_copy(pmap_t dst_pmap __unused, pmap_t src_pmap __unused)
 #if defined(KASAN) || defined(KMSAN)
 struct arm64_bootparams;
 
-void	pmap_bootstrap_san(vm_paddr_t);
+void	pmap_bootstrap_san(void);
 void	pmap_san_enter(vm_offset_t);
-void	pmap_san_bootstrap(struct arm64_bootparams *);
 #endif
 
 #endif	/* _KERNEL */

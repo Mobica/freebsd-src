@@ -27,13 +27,9 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)tcp_timer.c	8.2 (Berkeley) 5/24/95
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include "opt_inet.h"
 #include "opt_inet6.h"
 #include "opt_rss.h"
@@ -303,7 +299,7 @@ tcp_output_locked(struct tcpcb *tp)
 		KASSERT(tp->t_fb->tfb_flags & TCP_FUNC_OUTPUT_CANDROP,
 		    ("TCP stack %s requested tcp_drop(%p)",
 		    tp->t_fb->tfb_tcp_block_name, tp));
-		tp = tcp_drop(tp, rv);
+		tp = tcp_drop(tp, -rv);
 	}
 
 	return (tp != NULL);
@@ -563,7 +559,6 @@ tcp_timer_rexmt(struct tcpcb *tp)
 
 	TCP_PROBE2(debug__user, tp, PRU_SLOWTIMO);
 	CURVNET_SET(inp->inp_vnet);
-	tcp_free_sackholes(tp);
 	if (tp->t_fb->tfb_tcp_rexmit_tmr) {
 		/* The stack has a timer action too. */
 		(*tp->t_fb->tfb_tcp_rexmit_tmr)(tp);
@@ -623,8 +618,11 @@ tcp_timer_rexmt(struct tcpcb *tp)
 		 * the retransmitted packet's to_tsval to by tcp_output
 		 */
 		tp->t_flags |= TF_PREVVALID;
-	} else
+		tcp_resend_sackholes(tp);
+	} else {
 		tp->t_flags &= ~TF_PREVVALID;
+		tcp_free_sackholes(tp);
+	}
 	TCPSTAT_INC(tcps_rexmttimeo);
 	if ((tp->t_state == TCPS_SYN_SENT) ||
 	    (tp->t_state == TCPS_SYN_RECEIVED))

@@ -32,9 +32,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
 #include <sys/kdb.h>
 #include <sys/kernel.h>
@@ -245,8 +242,6 @@ rcons_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->dev = dev;
-
-	csr_set(sie, SIE_SSIE);
 
 	bus_generic_attach(sc->dev);
 

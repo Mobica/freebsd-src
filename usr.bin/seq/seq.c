@@ -31,8 +31,6 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
@@ -183,8 +181,9 @@ main(int argc, char *argv[])
 
 	for (step = 1, cur = first; incr > 0 ? cur <= last : cur >= last;
 	    cur = first + incr * step++) {
+		if (step > 1)
+			fputs(sep, stdout);
 		printf(fmt, cur);
-		fputs(sep, stdout);
 		prev = cur;
 	}
 
@@ -204,15 +203,19 @@ main(int argc, char *argv[])
 	}
 	if (strcmp(cur_print, last_print) == 0 &&
 	    strcmp(cur_print, prev_print) != 0) {
-		fputs(last_print, stdout);
 		fputs(sep, stdout);
+		fputs(last_print, stdout);
 	}
 	free(cur_print);
 	free(last_print);
 	free(prev_print);
 
-	if (term != NULL)
+	if (term != NULL) {
+		fputs(sep, stdout);
 		fputs(term, stdout);
+	}
+
+	fputs("\n", stdout);
 
 	return (0);
 }

@@ -1,4 +1,4 @@
-#	$OpenBSD: Makefile,v 1.124 2023/03/01 09:29:32 dtucker Exp $
+#	$OpenBSD: Makefile,v 1.131 2023/12/18 14:50:08 djm Exp $
 
 tests:		prep file-tests t-exec unit
 
@@ -10,12 +10,15 @@ file-tests: $(REGRESS_TARGETS)
 # Interop tests are not run by default
 interop interop-tests: t-exec-interop
 
+extra extra-tests: t-extra
+
 prep:
 	test "x${USE_VALGRIND}" = "x" || mkdir -p $(OBJ)/valgrind-out
 
 clean:
 	for F in $(CLEANFILES); do rm -f $(OBJ)$$F; done
 	rm -rf $(OBJ).putty
+	rm -rf $(OBJ).dropbear
 
 distclean:	clean
 
@@ -103,9 +106,13 @@ LTESTS= 	connect \
 		agent-restrict \
 		hostbased \
 		channel-timeout \
-		connection-timeout
+		connection-timeout \
+		match-subsystem \
+		agent-pkcs11-restrict \
+		agent-pkcs11-cert
 
 INTEROP_TESTS=	putty-transfer putty-ciphers putty-kex conch-ciphers
+INTEROP_TESTS+=	dropbear-ciphers dropbear-kex
 #INTEROP_TESTS+=ssh-com ssh-com-client ssh-com-keygen ssh-com-sftp
 
 EXTRA_TESTS=	agent-pkcs11
@@ -222,7 +229,15 @@ t12: $(OBJ)/t12.out
 
 t-exec:	${LTESTS:=.sh}
 	@if [ "x$?" = "x" ]; then exit 0; fi; \
+	_started=""; test -z "${LTESTS_FROM}" && _started=1 ;\
 	for TEST in ""$?; do \
+		if [ -z "$$_started" ] ; then \
+			if [ "x$$TEST" = "x${LTESTS_FROM}.sh" ]; then \
+				_started=1; \
+			else \
+				continue; \
+			fi ; \
+		fi ; \
 		skip=no; \
 		for t in ""$${SKIP_LTESTS}; do \
 			if [ "x$${t}.sh" = "x$${TEST}" ]; then skip=yes; fi; \
