@@ -243,12 +243,12 @@ athn_attach(struct athn_softc *sc)
 	athn_get_chipid(sc);
 
 	if ((error = athn_reset_power_on(sc)) != 0) {
-		printf("Could not reset chip\n");
+		device_printf(sc->sc_dev, "%s: could not reset chip\n",	__func__);
 		return (error);
 	}
 
 	if ((error = athn_set_power_awake(sc)) != 0) {
-		printf("Could not wakeup chip\n");
+		device_printf(sc->sc_dev, "%s: could not wakeup chip\n", __func__);
 		return (error);
 	}
 
@@ -735,6 +735,7 @@ athn_reset(struct athn_softc *sc, int cold)
 		DELAY(10);
 	}
 	if (ntries == 1000) {
+		ATHN_UNLOCK(sc);
 		DPRINTF(("RTC stuck in MAC reset\n"));
 		return (ETIMEDOUT);
 	}
