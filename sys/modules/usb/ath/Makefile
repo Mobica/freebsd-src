@@ -2,26 +2,23 @@
 
 INCDIR=${SRCTOP}/sys/compat/linuxkpi/common/include
 
-.PATH: ${SRCTOP}/sys/dev/usb/wlan ${SRCTOP}/sys/dev/athn
+.PATH: ${SRCTOP}/sys/dev/usb/wlan ${SRCTOP}/sys/dev/ath
 
 .include <src.opts.mk>
 
-KMOD    = if_athn
+KMOD    = if_ath_usb
 
 EXPORT_SYMS=    YES
 
-#SRCS=   if_athn_usb.c ar9285.c athn.c
-SRCS=   if_athn_usb_fw.c if_athn_usb.c athn_stubs.c athn.c
-SRCS+=	bus_if.h device_if.h
-SRCS+=  opt_inet.h opt_inet6.h opt_route.h opt_netlink.h
+SRCS=   if_ath_usb_fw.c
+SRCS+=	if_ath_usb_devlist.h
+# SRCS+=  opt_inet.h opt_inet6.h opt_route.h opt_netlink.h
 
 SRCS+=	${LINUXKPI_GENSRCS}
 
 CFLAGS+=        -ferror-limit=0
-# CFLAGS+=	${LINUXKPI_INCLUDES}
 CFLAGS+=	-I${INCDIR}
-CFLAGS+= 	-I${SRCTOP}/sys/dev/athn/headers
-# CFLAGS+=	-I${SRCTOP}/sys/compat/linuxkpi/dummy/include/openbsd
+# CFLAGS+= 	-I${SRCTOP}/sys/dev/athn/headers
 
 DEBUG_FLAGS+= -O0 -g
 
