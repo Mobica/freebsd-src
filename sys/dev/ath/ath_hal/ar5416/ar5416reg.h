@@ -696,6 +696,7 @@
 #define	AR_XSREV_REVISION_KIWI_11	1	/* Kiwi 1.1 */
 #define	AR_XSREV_REVISION_KIWI_12	2	/* Kiwi 1.2 */
 #define	AR_XSREV_REVISION_KIWI_13	3	/* Kiwi 1.3 */
+#define AR_XSREV_VERSION_K2         0x140	/* K2 (AR9271) */
 
 /* Owl (AR5416) */
 #define	AR_SREV_OWL(_ah) \
@@ -805,7 +806,9 @@
 	(AR_SREV_KIWI(_ah) && \
 	 AH_PRIVATE((_ah))->ah_macRev >= AR_XSREV_REVISION_KIWI_13)
 
-/* Not yet implemented chips */
-#define	AR_SREV_9271(_ah)	0
+/* K2 (9271) */
+
+#define	AR_SREV_9271(_ah) \
+	(AH_PRIVATE((_ah))->ah_macVersion == AR_XSREV_VERSION_K2)
 
 #endif /* _DEV_ATH_AR5416REG_H */
