@@ -25,9 +25,10 @@ CFLAGS+= 	-I${SRCTOP}/sys/dev/athn/headers
 
 DEBUG_FLAGS+= -O0 -g
 
-# CFLAGS+= 	-I${SRCTOP}/sys/dev/athn/include/amd64	
-# CFLAGS+= 	-I${SRCTOP}/sys/dev/athn/include/sys	
-# CFLAGS+= 	-I${SRCTOP}/sys/dev/athn/include/net80211	
+# CFLAGS+= 	-I${SRCTOP}/sys/dev/athn/include/amd64
+# CFLAGS+= 	-I${SRCTOP}/sys/dev/athn/include/sys
+# CFLAGS+= 	-I${SRCTOP}/sys/dev/athn/include/net80211
+
 
 CWARNFLAGS+=	${NO_WUNUSED_BUT_SET_VARIABLE}	
 CWARNFLAGS+=	${NO_WUNUSED_PARAMETER}	
