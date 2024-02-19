@@ -179,6 +179,8 @@ ath_hal_mac_name(struct ath_hal *ah)
 		if (AH_PRIVATE(ah)->ah_ispcie)
 			return "AR9287";
 		return "AR9227";
+	case AR_XSREV_VERSION_K2:
+		return "AR9271";
 	case AR_SREV_VERSION_AR9380:
 		if (ah->ah_macRev >= AR_SREV_REVISION_AR9580_10)
 			return "AR9580";
