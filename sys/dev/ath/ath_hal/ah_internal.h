@@ -393,6 +393,7 @@ struct ath_hal_private {
 	uint16_t	ah_analog2GhzRev;	/* 5GHz radio revision */
 	uint32_t	ah_flags;		/* misc flags */
 	uint8_t		ah_ispcie;		/* PCIE, special treatment */
+	uint8_t		ah_isusb;		/* USB device */
 	uint8_t		ah_devType;		/* card type - CB, PCI, PCIe */
 
 	HAL_OPMODE	ah_opmode;		/* operating mode from reset */

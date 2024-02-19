@@ -224,6 +224,7 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	    (val & AR_XSREV_VERSION) >> AR_XSREV_TYPE_S;
 	AH_PRIVATE(ah)->ah_macRev = MS(val, AR_XSREV_REVISION);
 	AH_PRIVATE(ah)->ah_ispcie = (val & AR_XSREV_TYPE_HOST_MODE) == 0;
+	AH_PRIVATE(ah)->ah_isusb = TRUE;
 
 	/* setup common ini data; rf backends handle remainder */
 	if (AR_SREV_KITE_12_OR_LATER(ah)) {
