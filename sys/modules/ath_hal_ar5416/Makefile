@@ -69,6 +69,10 @@ SRCS+=	ar9280.c ar9280_attach.c ar9280_olc.c
 SRCS+=	ar9285.c ar9285_reset.c ar9285_attach.c ar9285_cal.c ar9285_phy.c
 SRCS+=	ar9285_diversity.c ar9285_btcoex.c
 
+# + AR9271 - K2
+SRCS+=	ar9271.c ar9271_attach.c ar9271_cal.c ar9271_phy.c
+SRCS+=	ar9271_diversity.c ar9271_btcoex.c
+
 # + AR9287 - Kiwi
 .PATH:  ${SRCTOP}/sys/dev/ath/ath_hal
 SRCS+=  ah_eeprom_9287.c

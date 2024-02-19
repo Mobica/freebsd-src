@@ -180,8 +180,8 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	ah->ah_setAntennaSwitch		= ar9271SetAntennaSwitch;
 	ah->ah_configPCIE		= ar9285ConfigPCIE;
 	ah->ah_disablePCIE		= ar9285DisablePCIE;
-	ah->ah_setTxPower		= ar9271SetTransmitPower;
-	ah->ah_setBoardValues		= ar9271SetBoardValues;
+	ah->ah_setTxPower		= ar9285SetTransmitPower;
+	ah->ah_setBoardValues		= ar9285SetBoardValues;
 	ah->ah_btCoexSetParameter	= ar9271BTCoexSetParameter;
 	ah->ah_divLnaConfGet		= ar9271_antdiv_comb_conf_get;
 	ah->ah_divLnaConfSet		= ar9271_antdiv_comb_conf_set;
