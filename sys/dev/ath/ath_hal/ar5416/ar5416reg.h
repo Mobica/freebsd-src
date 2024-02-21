@@ -566,6 +566,8 @@
 #define	AR9285_GPIO_IN_VAL_S	12
 #define	AR9287_GPIO_IN_VAL	0x003FF800
 #define	AR9287_GPIO_IN_VAL_S	11
+#define	AR9271_GPIO_IN_VAL	0x00FF0000
+#define	AR9271_GPIO_IN_VAL_S	16
 
 #define	AR_GPIO_OE_OUT_DRV	0x3	/* 2 bit mask shifted by 2*bitpos */
 #define	AR_GPIO_OE_OUT_DRV_NO	0x0	/* tristate */
