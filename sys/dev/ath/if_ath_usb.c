@@ -660,7 +660,7 @@ ath_usb_attachhook(device_t self)
 	if (error != 0) {
 		return;
 	}
-	#else
+	#endif
 
 	usc->sc_ath_attached = 1;
 #if OpenBSD_IEEE80211_API
