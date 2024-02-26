@@ -18,7 +18,7 @@
 /*
  * USB front-end for Atheros AR9271 and AR7010 chipsets.
  */
-
+#include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 
 /* $OpenBSD: usbdevs.h,v 1.768 2023/05/10 18:26:43 miod Exp $ */
