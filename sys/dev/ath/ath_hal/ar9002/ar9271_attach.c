@@ -497,17 +497,17 @@ ar9271Probe(uint16_t vendorid, uint16_t devid)
 {
 	if (vendorid == USB_VENDOR_ATHEROS2) {
 		if ((devid == USB_PRODUCT_ATHEROS2_AR9271_1) ||
-		(devid == USB_PRODUCT_ATHEROS2_AR9271_2) ||
-		(devid == USB_PRODUCT_ATHEROS2_AR9271_3))
+		    (devid == USB_PRODUCT_ATHEROS2_AR9271_2) ||
+		    (devid == USB_PRODUCT_ATHEROS2_AR9271_3))
 			return "Atheros 9271";
 	}
 	if (vendorid == USB_VENDOR_AZUREWAVE) {
 		if ((devid == USB_PRODUCT_AZUREWAVE_AR9271_1) ||
-		(devid == USB_PRODUCT_AZUREWAVE_AR9271_2) ||
-		(devid == USB_PRODUCT_AZUREWAVE_AR9271_3) ||
-		(devid == USB_PRODUCT_AZUREWAVE_AR9271_4) ||
-		(devid == USB_PRODUCT_AZUREWAVE_AR9271_5) ||
-		(devid == USB_PRODUCT_AZUREWAVE_AR9271_6))
+		    (devid == USB_PRODUCT_AZUREWAVE_AR9271_2) ||
+		    (devid == USB_PRODUCT_AZUREWAVE_AR9271_3) ||
+		    (devid == USB_PRODUCT_AZUREWAVE_AR9271_4) ||
+		    (devid == USB_PRODUCT_AZUREWAVE_AR9271_5) ||
+		    (devid == USB_PRODUCT_AZUREWAVE_AR9271_6))
 			return "Atheros 9271 AZUREWAVE";
 	}
 	if (vendorid == USB_VENDOR_DLINK2) {
