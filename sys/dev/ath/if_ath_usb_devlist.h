@@ -19,6 +19,9 @@
  * USB front-end for Atheros AR9271 and AR7010 chipsets.
  */
 
+#ifndef __IF_ATH_USB_DEVLIST_H__
+#define __IF_ATH_USB_DEVLIST_H__
+
 #include <dev/usb/usbdi.h>
 #include "if_ath_usb_devid.h"
 
@@ -45,3 +48,5 @@ static const STRUCT_USB_HOST_ID ath_usb_devs[] = {
   { USB_VPI(USB_VENDOR_ATHEROS2, USB_PRODUCT_ATHEROS2_AR9280, ATHN_USB_FLAG_AR7010) },
   { USB_VPI(USB_VENDOR_ATHEROS2, USB_PRODUCT_ATHEROS2_AR9287, ATHN_USB_FLAG_AR7010) }
 };
+
+#endif
