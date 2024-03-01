@@ -596,7 +596,7 @@ ath_fetch_mac_kenv(struct ath_softc *sc, uint8_t *macaddr)
 	(HAL_MODE_11NG_HT40PLUS | HAL_MODE_11NG_HT40MINUS | \
 	HAL_MODE_11NA_HT40PLUS | HAL_MODE_11NA_HT40MINUS)
 int
-ath_attach(u_int16_t devid, struct ath_softc *sc)
+ath_attach(u_int16_t venid, u_int16_t devid, struct ath_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ath_hal *ah = NULL;
@@ -620,7 +620,7 @@ ath_attach(u_int16_t devid, struct ath_softc *sc)
 	bzero(&ah_config, sizeof(ah_config));
 	ath_setup_hal_config(sc, &ah_config);
 
-	ah = ath_hal_attach(devid, sc, sc->sc_st, sc->sc_sh,
+	ah = ath_hal_attach(venid, devid, sc, sc->sc_st, sc->sc_sh,
 	    sc->sc_eepromdata, &ah_config, &status);
 	if (ah == NULL) {
 		device_printf(sc->sc_dev,

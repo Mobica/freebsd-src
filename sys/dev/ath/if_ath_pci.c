@@ -63,6 +63,8 @@
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
 
+#include <dev/ath/ath_hal/ah_devid.h>	
+
 /* For EEPROM firmware */
 #ifdef	ATH_EEPROM_FIRMWARE
 #include <sys/linker.h>
@@ -279,7 +281,7 @@ ath_pci_attach(device_t dev)
 	}
 #endif /* ATH_EEPROM_FIRMWARE */
 
-	error = ath_attach(pci_get_device(dev), sc);
+	error = ath_attach(ATHEROS_VENDOR_ID, pci_get_device(dev), sc);
 	if (error == 0)					/* success */
 		return 0;
 
