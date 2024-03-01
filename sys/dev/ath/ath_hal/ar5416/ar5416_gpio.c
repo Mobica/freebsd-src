@@ -191,7 +191,9 @@ ar5416GpioGet(struct ath_hal *ah, uint32_t gpio)
 	 */
 	if (AR_SREV_KIWI_10_OR_LATER(ah))
 		bits = MS(OS_REG_READ(ah, AR_GPIO_IN_OUT), AR9287_GPIO_IN_VAL);
-	if (AR_SREV_KITE_10_OR_LATER(ah))
+	else if (AR_SREV_9271(ah))
+		bits = MS(OS_REG_READ(ah, AR_GPIO_IN_OUT), AR9271_GPIO_IN_VAL);
+	else if (AR_SREV_KITE_10_OR_LATER(ah))
 		bits = MS(OS_REG_READ(ah, AR_GPIO_IN_OUT), AR9285_GPIO_IN_VAL);
 	else if (AR_SREV_MERLIN_10_OR_LATER(ah))
 		bits = MS(OS_REG_READ(ah, AR_GPIO_IN_OUT), AR928X_GPIO_IN_VAL);
