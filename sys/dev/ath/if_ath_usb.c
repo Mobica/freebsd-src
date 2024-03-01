@@ -74,7 +74,6 @@ __FBSDID("$FreeBSD$");
 
 #include "openbsd_adapt.h"
 #include "if_ath_usb.h"
-#include "if_ath_usb_fw.h"
 
 #include "if_ath_debug.h"
 // TODO: DPRINTF from ATHN has different parameters than DPRINTF from ATH
