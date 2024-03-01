@@ -39,6 +39,8 @@
 #include "ar9002/ar9271_phy.h"
 #include "ar9002/ar9271_diversity.h"
 
+#include "if_ath_usb_devid.h"
+
 static const HAL_PERCAL_DATA ar9280_iq_cal = {		/* single sample */
 	.calName = "IQ", .calType = IQ_MISMATCH_CAL,
 	.calNumSamples	= MIN_CAL_SAMPLES,
@@ -493,12 +495,37 @@ ar9271FillCapabilityInfo(struct ath_hal *ah)
 static const char*
 ar9271Probe(uint16_t vendorid, uint16_t devid)
 {
-	//TODO: add vendor AR9271 vendor
-	// if (vendorid == ATHEROS_VENDOR_ID && devid == AR9285_DEVID_PCIE)
-	// 	return "Atheros 9285";
-	// if (vendorid == ATHEROS_VENDOR_ID && (devid == AR2427_DEVID_PCIE))
-	// 	return "Atheros 2427";
-
+	if (vendorid == USB_VENDOR_ATHEROS2) {
+		if ((devid == USB_PRODUCT_ATHEROS2_AR9271_1) ||
+		    (devid == USB_PRODUCT_ATHEROS2_AR9271_2) ||
+		    (devid == USB_PRODUCT_ATHEROS2_AR9271_3))
+			return "Atheros 9271";
+	}
+	if (vendorid == USB_VENDOR_AZUREWAVE) {
+		if ((devid == USB_PRODUCT_AZUREWAVE_AR9271_1) ||
+		    (devid == USB_PRODUCT_AZUREWAVE_AR9271_2) ||
+		    (devid == USB_PRODUCT_AZUREWAVE_AR9271_3) ||
+		    (devid == USB_PRODUCT_AZUREWAVE_AR9271_4) ||
+		    (devid == USB_PRODUCT_AZUREWAVE_AR9271_5) ||
+		    (devid == USB_PRODUCT_AZUREWAVE_AR9271_6))
+			return "Atheros 9271 AZUREWAVE";
+	}
+	if (vendorid == USB_VENDOR_DLINK2) {
+		if (devid == USB_PRODUCT_DLINK2_AR9271)
+			return "Atheros 9271 DLINK2";
+	}
+	if (vendorid == USB_VENDOR_LITEON) {
+		if (devid == USB_PRODUCT_LITEON_AR9271)
+			return "Atheros 9271 LITEON";
+	}
+	if (vendorid == USB_VENDOR_NETGEAR) {
+		if (devid == USB_PRODUCT_NETGEAR_WNA1100)
+			return "Atheros 9271 NETGEAR";
+	}
+	if (vendorid == USB_VENDOR_VIA) {
+		if (devid == USB_PRODUCT_VIA_AR9271)
+			return "Atheros 9271 VIA";
+	}
 	return AH_NULL;
 }
 AH_CHIP(AR9271, ar9271Probe, ar9271Attach);
