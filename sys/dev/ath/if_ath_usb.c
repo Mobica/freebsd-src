@@ -59,17 +59,12 @@ __FBSDID("$FreeBSD$");
 #include <net80211/ieee80211_radiotap.h>
 #include <net80211/ieee80211_ratectl.h>
 
-// #include "athreg.h"
-// #include "ar5008reg.h"
 #include "if_athvar.h"
 #include "if_ath_usb_devlist.h"
-
-// #include <openbsd/openbsd_usbdevs.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usb_device.h>
-// #include <dev/usb/usb_core.h>
 #include <dev/usb/usbdi_util.h>
 
 #include "openbsd_adapt.h"
@@ -948,7 +943,7 @@ ath_htc_rx_handle(struct ath_usb_softc *usc, uint8_t *buf, int actlen)
 	}
 
 	msg = (struct ar_htc_msg_hdr *)buf;
-	msg_id = betoh16(msg->msg_id);
+	msg_id = be16toh(msg->msg_id);
 	printf("TTTT: Rx HTC msg_id %d, wait_msg_id %d \n", msg_id, usc->wait_msg_id);
 	switch (msg_id) {
 	case AR_HTC_MSG_READY:
@@ -1597,7 +1592,7 @@ ath_usb_read_rom(struct ath_softc *sc)
 		if (error != 0)
 			break;
 		for (j = 0; j < 8; j++)
-			*eep++ = betoh32(vals[j]);
+			*eep++ = be32toh(vals[j]);
 	}
 #else
 	return 0;
@@ -1624,7 +1619,7 @@ ath_usb_read(struct ath_softc *sc, uint32_t addr)
 		device_printf(sc->sc_dev,
 					  "%s: error \n",
 					  __func__);
-	return betoh32(val);
+	return be32toh(val);
 }
 
 void
@@ -2549,7 +2544,7 @@ ath_usb_rx_wmi_ctrl(struct ath_usb_softc *usc, uint8_t *buf, int len)
 	if (__predict_false(len < sizeof(*wmi)))
 		return;
 	wmi = (struct ar_wmi_cmd_hdr *)buf;
-	cmd_id = betoh16(wmi->cmd_id);
+	cmd_id = be16toh(wmi->cmd_id);
 
 	if (!(cmd_id & AR_WMI_EVT_FLAG)) {
 		if (usc->wait_cmd_id != cmd_id)
@@ -2625,7 +2620,7 @@ ath_usb_rx_radiotap(struct ath_softc *sc, struct mbuf *m,
 	uint8_t rate;
 
 	tap->wr_flags = IEEE80211_RADIOTAP_F_FCS;
-	tap->wr_tsft = htole64(betoh64(rs->rs_tstamp));
+	tap->wr_tsft = htole64(be64toh(rs->rs_tstamp));
 	tap->wr_chan_freq = htole16(ic->ic_bss->ni_chan->ic_freq);
 	tap->wr_chan_flags = htole16(ic->ic_bss->ni_chan->ic_flags);
 	tap->wr_dbm_antsignal = rs->rs_rssi;
@@ -2707,7 +2702,7 @@ ath_usb_rx_frame(struct ath_usb_softc *usc, struct mbuf *m/*,
 	rs = mtod(m, struct ar_rx_status *);
 
 	/* Make sure that payload fits. */
-	datalen = betoh16(rs->rs_datalen);
+	datalen = be16toh(rs->rs_datalen);
 	if (__predict_false(m->m_len < sizeof(*rs) + datalen))
 		goto skip;
 
@@ -2751,7 +2746,7 @@ ath_usb_rx_frame(struct ath_usb_softc *usc, struct mbuf *m/*,
 
 	memset(&rxi, 0, sizeof(rxi));
 	rxi.rxi_rssi = rs->rs_rssi + AR_USB_DEFAULT_NF;
-	rxi.rxi_tstamp = betoh64(rs->rs_tstamp);
+	rxi.rxi_tstamp = be64toh(rs->rs_tstamp);
 
 	if (!(wh->i_fc[0] & IEEE80211_FC0_TYPE_CTL) &&
 	    (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) &&
@@ -2842,7 +2837,7 @@ ath_usb_rxeof(struct usb_xfer *xfer, struct ath_usb_data *data)
 			DPRINTF(("invalid tag 0x%x\n", hdr->tag));
 			break;
 		}
-		pktlen = letoh16(hdr->len);
+		pktlen = le16toh(hdr->len);
 		buf += sizeof(*hdr);
 		len -= sizeof(*hdr);
 #if OpenBSD_ONLY // MichalP: mbuf_list operations needs proper refactoring

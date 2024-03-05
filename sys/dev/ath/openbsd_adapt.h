@@ -49,13 +49,6 @@
  */
 #define OpenBSD_ONLY 0
 
-#include <sys/endian.h>
-// map OpenBSD endian conversion macro names to FreeBSD
-#define betoh16 be16toh
-#define betoh32 be32toh
-#define betoh64 be64toh
-#define letoh16 le16toh
-
 // map OpenBSD flag name to FreeBSD
 #define	IFF_RUNNING	IFF_DRV_RUNNING
 
