@@ -10,7 +10,7 @@ KMOD    = if_ath_usb
 
 EXPORT_SYMS=    YES
 
-SRCS=   if_ath_usb.c
+SRCS=   if_ath_usb.c if_ath_usb_fw.c
 SRCS+=	if_ath_usb_devlist.h
 # SRCS+=  opt_inet.h opt_inet6.h opt_route.h opt_netlink.h
 
