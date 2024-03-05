@@ -49,6 +49,8 @@
 
 #include <dev/ath/ath_hal/ah.h>
 #include <dev/ath/ath_hal/ah_debug.h>
+#include <dev/ath/ath_hal/ah_internal.h>
+#include <dev/ath/if_ath_usb.h>
 
 /*
  * WiSoC boards overload the bus tag with information about the
@@ -271,8 +273,14 @@ ath_hal_alq_get(struct ath_hal *ah)
 void
 ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 {
+	struct ath_hal_private *ahpriv = AH_PRIVATE(ah);
 	bus_space_tag_t tag = BUSTAG(ah);
 	bus_space_handle_t h = ah->ah_sh;
+
+	if (ahpriv->ah_isusb) {
+		ath_usb_write(ah->ah_sc, reg, val);
+		return;
+	}
 
 #ifdef	AH_DEBUG
 	/* Debug - complain if we haven't fully waken things up */
@@ -305,9 +313,15 @@ ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 u_int32_t
 ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
 {
+	struct ath_hal_private *ahpriv = AH_PRIVATE(ah);
 	bus_space_tag_t tag = BUSTAG(ah);
 	bus_space_handle_t h = ah->ah_sh;
 	u_int32_t val;
+
+	if (ahpriv->ah_isusb) {
+		val = ath_usb_read(ah->ah_sc, reg);
+		return val;
+	}
 
 #ifdef	AH_DEBUG
 	/* Debug - complain if we haven't fully waken things up */
@@ -369,8 +383,14 @@ OS_MARK(struct ath_hal *ah, u_int id, u_int32_t v)
 void
 ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 {
+	struct ath_hal_private *ahpriv = AH_PRIVATE(ah);
 	bus_space_tag_t tag = BUSTAG(ah);
 	bus_space_handle_t h = ah->ah_sh;
+
+	if (ahpriv->ah_isusb) {
+		ath_usb_write(ah->ah_sc, reg, val);
+		return;
+	}
 
 #ifdef	AH_DEBUG
 	/* Debug - complain if we haven't fully waken things up */
@@ -392,9 +412,15 @@ ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 u_int32_t
 ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
 {
+	struct ath_hal_private *ahpriv = AH_PRIVATE(ah);
 	bus_space_tag_t tag = BUSTAG(ah);
 	bus_space_handle_t h = ah->ah_sh;
 	u_int32_t val;
+
+	if (ahpriv->ah_isusb) {
+		val = ath_usb_read(ah->ah_sc, reg);
+		return val;
+	}
 
 #ifdef	AH_DEBUG
 	/* Debug - complain if we haven't fully waken things up */

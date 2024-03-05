@@ -69,7 +69,7 @@ __FBSDID("$FreeBSD$");
 
 #include "openbsd_adapt.h"
 #include "if_ath_usb_def.h"
-
+#include "if_ath_usb_fw.h"
 #include "if_ath_debug.h"
 // TODO: DPRINTF from ATHN has different parameters than DPRINTF from ATH
 #ifdef DPRINTF
@@ -503,7 +503,7 @@ ath_usb_detach(device_t self)
 	struct ath_softc *sc = &usc->sc_sc;
 
 	if (usc->sc_ath_attached)
-		ath_detach(sc);
+		//ath_detach(sc);
 
 	/* Wait for all async commands to complete. */
 	ath_usb_wait_async(usc);
@@ -587,14 +587,12 @@ ath_usb_attachhook(device_t self)
 	struct ifnet *ifp = &ic->ic_if;
 #endif
 	int s, i, error;
-#if ATHN_API
 	/* Load firmware. */
 	error = ath_usb_load_firmware(usc, &img_ver);
 	if (error != 0) {
 		printf("Could not load firmware\n");
 		return;
 	}
-#endif
 	// TODO MichalP: this can be used as a starting point for echo command or firmware command
 //	ATH_LOCK(&usc->sc_sc);
 //	device_printf(sc->sc_dev, " %s:val = %d\n", __func__, val);
@@ -1417,7 +1415,7 @@ ath_usb_htc_setup(struct ath_usb_softc *usc)
 	/* Set credits for WLAN Tx pipe. */
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.pipe_id = UE_GET_ADDR(AR_PIPE_TX_DATA);
-	cfg.credits = (usc->flags & ath_USB_FLAG_AR7010) ? 45 : 33;
+	cfg.credits = (usc->flags & ATH_USB_FLAG_AR7010) ? 45 : 33;
 
 	ATH_LOCK(&usc->sc_sc);
 

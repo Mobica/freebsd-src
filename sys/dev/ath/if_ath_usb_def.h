@@ -468,7 +468,7 @@ struct ath_usb_softc {
 	struct usb_interface	*sc_iface;
 
 	u_int				flags;
-#define ath_USB_FLAG_AR7010	0x01
+#define ATH_USB_FLAG_AR7010	0x01
 
 	struct ath_usb_rx_stream	rx_stream;
 
