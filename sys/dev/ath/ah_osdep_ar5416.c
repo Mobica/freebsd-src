@@ -42,11 +42,13 @@ extern struct ath_hal_chip AR9160_chip;
 extern struct ath_hal_chip AR9280_chip;
 extern struct ath_hal_chip AR9285_chip;
 extern struct ath_hal_chip AR9287_chip;
+extern struct ath_hal_chip AR9271_chip;
 
 extern struct ath_hal_rf RF2133_rf;
 extern struct ath_hal_rf RF9280_rf;
 extern struct ath_hal_rf RF9285_rf;
 extern struct ath_hal_rf RF9287_rf;
+extern struct ath_hal_rf RF9271_rf;
 
 static int
 ath_hal_ar5416_modevent(module_t mod __unused, int type, void *data __unused)
@@ -60,10 +62,12 @@ ath_hal_ar5416_modevent(module_t mod __unused, int type, void *data __unused)
 		ath_hal_add_chip(&AR9280_chip);
 		ath_hal_add_chip(&AR9285_chip);
 		ath_hal_add_chip(&AR9287_chip);
+		ath_hal_add_chip(&AR9271_chip);
 		ath_hal_add_rf(&RF2133_rf);
 		ath_hal_add_rf(&RF9280_rf);
 		ath_hal_add_rf(&RF9285_rf);
 		ath_hal_add_rf(&RF9287_rf);
+		ath_hal_add_rf(&RF9271_rf);
 		printf("[ar5416] loaded\n");
 		break;
 
@@ -73,10 +77,12 @@ ath_hal_ar5416_modevent(module_t mod __unused, int type, void *data __unused)
 		ath_hal_remove_chip(&AR9280_chip);
 		ath_hal_remove_chip(&AR9285_chip);
 		ath_hal_remove_chip(&AR9287_chip);
+		ath_hal_remove_chip(&AR9271_chip);
 		ath_hal_remove_rf(&RF2133_rf);
 		ath_hal_remove_rf(&RF9280_rf);
 		ath_hal_remove_rf(&RF9285_rf);
 		ath_hal_remove_rf(&RF9287_rf);
+		ath_hal_remove_rf(&RF9271_rf);
 		printf("[ar5416] unloaded\n");
 		break;
 
