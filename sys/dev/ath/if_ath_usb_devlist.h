@@ -22,6 +22,7 @@
 #ifndef __IF_ATH_USB_DEVLIST_H__
 #define __IF_ATH_USB_DEVLIST_H__
 
+#include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 #include "if_ath_usb_devid.h"
 
