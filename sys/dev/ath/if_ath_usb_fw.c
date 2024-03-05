@@ -100,7 +100,7 @@ ath_usb_transfer_firmware(struct ath_usb_softc *usc)
 
 	ATH_LOCK(&usc->sc_sc);
 
-/* Load firmware image. */
+	/* Load firmware image. */
 	ptr = (void *)fware->data;
 	addr = AR9271_FIRMWARE >> 8;
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
