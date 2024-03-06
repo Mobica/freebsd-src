@@ -397,6 +397,8 @@ ath_usb_load(struct module *m, int what, void *arg)
 DRIVER_MODULE(ath_usb, uhub, ath_usb_driver, ath_usb_load, NULL);
 MODULE_DEPEND(ath_usb, usb, 1, 1, 1);
 MODULE_DEPEND(ath_usb, wlan, 1, 1, 1);
+MODULE_DEPEND(ath_usb, ath_main, 1, 1, 1);
+MODULE_DEPEND(ath_usb, ath_hal, 1, 1, 1);
 MODULE_VERSION(ath_usb, 1);
 USB_PNP_HOST_INFO(ath_usb_devs);
 
