@@ -579,6 +579,8 @@ ath_usb_attachhook(device_t self)
 #if ATHN_API
 	struct ath_ops *ops = &sc->ops;
 #endif
+	struct usb_attach_arg *uaa =  device_get_ivars(self);
+
 	uint32_t val = 104;
 #ifdef notyet
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -646,7 +648,7 @@ ath_usb_attachhook(device_t self)
 	// TODO: MichalP needs proper FreeBSD adaptation because this uses code that is
 	//  stubbed and/or commented
 	#if 0
-	error = ath_attach(sc);
+	error = ath_attach(uaa->info.idVendor, uaa->info.idProduct, sc);
 	if (error != 0) {
 		return;
 	}

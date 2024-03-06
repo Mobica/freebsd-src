@@ -1568,8 +1568,8 @@ extern	const char *__ahdecl ath_hal_probe(uint16_t vendorid, uint16_t devid);
  * null (AH_NULL) reference will be returned and a status code will
  * be returned if the status parameter is non-zero.
  */
-extern	struct ath_hal * __ahdecl ath_hal_attach(uint16_t devid, HAL_SOFTC,
-		HAL_BUS_TAG, HAL_BUS_HANDLE, uint16_t *eepromdata,
+extern	struct ath_hal * __ahdecl ath_hal_attach(uint16_t venid, uint16_t devid,
+		HAL_SOFTC, HAL_BUS_TAG, HAL_BUS_HANDLE, uint16_t *eepromdata,
 		HAL_OPS_CONFIG *ah_config, HAL_STATUS* status);
 
 extern	const char *ath_hal_mac_name(struct ath_hal *);

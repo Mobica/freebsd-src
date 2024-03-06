@@ -20,7 +20,6 @@
 
 #include "ah.h"
 #include "ah_internal.h"
-#include "ah_devid.h"
 #include "ah_eeprom.h"			/* for 5ghz fast clock flag */
 
 #include "ar5416/ar5416reg.h"		/* NB: includes ar5212reg.h */
@@ -81,7 +80,7 @@ ath_hal_probe(uint16_t vendorid, uint16_t devid)
  * disable.
  */
 struct ath_hal*
-ath_hal_attach(uint16_t devid, HAL_SOFTC sc,
+ath_hal_attach(uint16_t venid, uint16_t devid, HAL_SOFTC sc,
 	HAL_BUS_TAG st, HAL_BUS_HANDLE sh, uint16_t *eepromdata,
 	HAL_OPS_CONFIG *ah_config,
 	HAL_STATUS *error)
@@ -94,7 +93,7 @@ ath_hal_attach(uint16_t devid, HAL_SOFTC sc,
 		struct ath_hal *ah;
 
 		/* XXX don't have vendorid, assume atheros one works */
-		if (chip->probe(ATHEROS_VENDOR_ID, devid) == AH_NULL)
+		if (chip->probe(venid, devid) == AH_NULL)
 			continue;
 		ah = chip->attach(devid, sc, st, sh, eepromdata, ah_config,
 		    error);
@@ -117,7 +116,7 @@ ath_hal_attach(uint16_t devid, HAL_SOFTC sc,
 		struct ath_hal *ah;
 
 		/* XXX don't have vendorid, assume atheros one works */
-		if (chip->probe(ATHEROS_VENDOR_ID, devid) == AH_NULL)
+		if (chip->probe(venid, devid) == AH_NULL)
 			continue;
 		ah = chip->attach(devid, sc, st, sh, eepromdata, ah_config,
 		    error);

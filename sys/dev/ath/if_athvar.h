@@ -1043,7 +1043,7 @@ struct ath_softc {
 #define	ATH_TXSTATUS_LOCK_ASSERT(_sc) \
 	mtx_assert(&(_sc)->sc_txcomplock, MA_OWNED)
 
-int	ath_attach(u_int16_t, struct ath_softc *);
+int	ath_attach(u_int16_t, u_int16_t, struct ath_softc *);
 int	ath_detach(struct ath_softc *);
 void	ath_resume(struct ath_softc *);
 void	ath_suspend(struct ath_softc *);
