@@ -32,7 +32,7 @@
 #include "ar5416/ar5416phy.h"
 
 #include "ar9002/ar9285.ini"
-#include "ar9002/ar9285v2.ini"
+#include "ar9002/ar9271.ini"
 #include "ar9002/ar9280v2.ini"		/* XXX ini for tx/rx gain */
 
 #include "ar9002/ar9285_cal.h"
