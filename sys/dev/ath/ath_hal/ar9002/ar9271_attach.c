@@ -309,20 +309,12 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	/* setup txgain table */
 	switch (ath_hal_eepromGet(ah, AR_EEP_TXGAIN_TYPE, AH_NULL)) {
 	case AR5416_EEP_TXGAIN_HIGH_POWER:
-		if (AR_SREV_9285E_20(ah))
-			HAL_INI_INIT(&ahp9271->ah_ini_txgain,
-			    ar9285Modes_XE2_0_high_power, 6);
-		else
-			HAL_INI_INIT(&ahp9271->ah_ini_txgain,
-			    ar9285Modes_high_power_tx_gain_v2, 6);
+		HAL_INI_INIT(&ahp9271->ah_ini_txgain,
+			ar9271Modes_high_power_tx_gain, 6);	
 		break;
 	case AR5416_EEP_TXGAIN_ORIG:
-		if (AR_SREV_9285E_20(ah))
-			HAL_INI_INIT(&ahp9271->ah_ini_txgain,
-			    ar9285Modes_XE2_0_normal_power, 6);
-		else
-			HAL_INI_INIT(&ahp9271->ah_ini_txgain,
-			    ar9285Modes_original_tx_gain_v2, 6);
+		HAL_INI_INIT(&ahp9271->ah_ini_txgain,
+			ar9271Modes_original_tx_gain, 6);
 		break;
 	default:
 		HALASSERT(AH_FALSE);
