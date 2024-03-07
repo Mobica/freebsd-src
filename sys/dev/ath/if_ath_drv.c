@@ -84,3 +84,4 @@ MODULE_DEPEND(if_ath, ath_dfs, 1, 1, 1);
 MODULE_DEPEND(if_ath, wlan, 1, 1, 1);
 MODULE_DEPEND(if_ath, ath_main, 1, 1, 1);
 MODULE_DEPEND(if_ath, if_ath_pci, 1, 1, 1);
+MODULE_DEPEND(if_ath, if_ath_usb, 1, 1, 1);

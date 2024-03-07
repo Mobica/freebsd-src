@@ -369,7 +369,7 @@ static device_method_t ath_usb_methods[] = {
 };
 
 static driver_t ath_usb_driver = {
-	.name = "ath",
+	.name = "if_ath_usb",
 	.methods = ath_usb_methods,
 	.size = sizeof(struct ath_usb_softc)
 };
@@ -382,10 +382,10 @@ ath_usb_load(struct module *m, int what, void *arg)
 
 	switch (what) {
 	case MOD_LOAD:
-		uprintf("ath KLD loaded.\n");
+		uprintf("[ath_usb] loaded\n");
 		break;
 	case MOD_UNLOAD:
-		uprintf("ath KLD unloaded.\n");
+		uprintf("[ath_usb] unloaded\n");
 		break;
 	default:
 		error = EOPNOTSUPP;
@@ -394,12 +394,12 @@ ath_usb_load(struct module *m, int what, void *arg)
 	return(error);
 }
 
-DRIVER_MODULE(ath_usb, uhub, ath_usb_driver, ath_usb_load, NULL);
-MODULE_DEPEND(ath_usb, usb, 1, 1, 1);
-MODULE_DEPEND(ath_usb, wlan, 1, 1, 1);
-MODULE_DEPEND(ath_usb, ath_main, 1, 1, 1);
-MODULE_DEPEND(ath_usb, ath_hal, 1, 1, 1);
-MODULE_VERSION(ath_usb, 1);
+DRIVER_MODULE(if_ath_usb, uhub, ath_usb_driver, ath_usb_load, NULL);
+MODULE_DEPEND(if_ath_usb, usb, 1, 1, 1);
+MODULE_DEPEND(if_ath_usb, wlan, 1, 1, 1);
+MODULE_DEPEND(if_ath_usb, ath_main, 1, 1, 1);
+MODULE_DEPEND(if_ath_usb, ath_hal, 1, 1, 1);
+MODULE_VERSION(if_ath_usb, 1);
 USB_PNP_HOST_INFO(ath_usb_devs);
 
 static int
