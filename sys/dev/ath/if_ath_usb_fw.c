@@ -70,7 +70,7 @@ ath_usb_get_firmware(struct ath_usb_softc *usc, struct ar_wmi_fw_version *versio
 		dd = usbd_get_device_descriptor(usc->sc_udev);
 		name = "ath-open-ar7010.bin";
 	} else
-		name = "athn-open-ar9271.bin";
+		name = "ath-open-ar9271.bin";
 	/* Read firmware image from the filesystem. */
 	fware = firmware_get(name);
 	if (fware == NULL) {
