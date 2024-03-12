@@ -442,13 +442,13 @@ ar9271FillCapabilityInfo(struct ath_hal *ah)
 
 	if (!ar5416FillCapabilityInfo(ah))
 		return AH_FALSE;
-	pCap->halNumGpioPins = 12;
-	pCap->halWowSupport = AH_TRUE;
-	pCap->halWowMatchPatternExact = AH_TRUE;
-#if 0
-	pCap->halWowMatchPatternDword = AH_TRUE;
-#endif
-	/* AR9285 has 2 antennas but is a 1x1 stream device */
+	pCap->halNumGpioPins = (AH_PRIVATE(ah)->ah_isusb) ? 16 : 12;
+	/* Wake-on-Wireless */
+	pCap->halWowSupport = AH_FALSE;
+	pCap->halWowMatchPatternExact = AH_FALSE;
+	pCap->halWowMatchPatternDword = AH_FALSE;
+
+	/* AR9271 supports one transmit and one receive traffic stream */
 	pCap->halTxStreams = 1;
 	pCap->halRxStreams = 1;
 
@@ -463,7 +463,7 @@ ar9271FillCapabilityInfo(struct ath_hal *ah)
 	pCap->halUseCombinedRadarRssi = AH_TRUE;
 #if 1
 	/* XXX bluetooth */
-	pCap->halBtCoexSupport = AH_TRUE;
+	pCap->halBtCoexSupport = AH_FALSE;
 #endif
 	pCap->halAutoSleepSupport = AH_FALSE;	/* XXX? */
 	pCap->hal4kbSplitTransSupport = AH_FALSE;
@@ -474,8 +474,8 @@ ar9271FillCapabilityInfo(struct ath_hal *ah)
 	pCap->halSpectralScanSupport = AH_TRUE;
 	pCap->halRxUsingLnaMixing = AH_TRUE;
 
-	if (AR_SREV_KITE_12_OR_LATER(ah))
-		pCap->halPSPollBroken = AH_FALSE;
+	/* TODO: Not sure. For AR9285 and AR9280 it's false for later revs */
+	pCap->halPSPollBroken = AH_FALSE;
 
 	/* Only RX STBC supported */
 	pCap->halRxStbcSupport = 1;
