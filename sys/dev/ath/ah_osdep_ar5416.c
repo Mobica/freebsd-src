@@ -100,3 +100,4 @@ DEV_MODULE(ath_hal_ar5416, ath_hal_ar5416_modevent, NULL);
 MODULE_VERSION(ath_hal_ar5416, 1);
 MODULE_DEPEND(ath_hal_ar5416, ath_hal, 1, 1, 1);
 MODULE_DEPEND(ath_hal_ar5416, ath_hal_ar5212, 1, 1, 1);
+MODULE_DEPEND(ath_hal_ar5416, if_ath_usb, 1, 1, 1);

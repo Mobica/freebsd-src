@@ -380,6 +380,8 @@ struct ath_hal_private {
 	HAL_BOOL	(*ah_eepromDiag)(struct ath_hal *, int request,
 			    const void *args, uint32_t argsize,
 			    void **result, uint32_t *resultsize);
+	uint32_t	(*ah_usb_read)(void *, uint32_t);
+	void 		(*ah_usb_write)(void *, uint32_t, uint32_t);
 
 	/*
 	 * Device revision information.
@@ -492,7 +494,10 @@ struct ath_hal_private {
 	AH_PRIVATE(_ah)->ah_getSpurChan(_ah, _ix, _is2G)
 #define	ath_hal_eepromDiag(_ah, _request, _a, _asize, _r, _rsize) \
 	AH_PRIVATE(_ah)->ah_eepromDiag(_ah, _request, _a, _asize,  _r, _rsize)
-
+#define ath_hal_usbRead(_ah, _sc, _addr) \
+	AH_PRIVATE(_ah)->ah_usb_read(_sc, _addr)
+#define ath_hal_usbWrite(_ah, _sc, _addr, _val) \
+	AH_PRIVATE(_ah)->ah_usb_write(_sc, _addr, _val)	
 #ifndef _NET_IF_IEEE80211_H_
 /*
  * Stuff that would naturally come from _ieee80211.h

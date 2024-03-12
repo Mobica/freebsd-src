@@ -278,7 +278,7 @@ ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 	bus_space_handle_t h = ah->ah_sh;
 
 	if (ahpriv->ah_isusb) {
-		ath_usb_write(ah->ah_sc, reg, val);
+		ath_hal_usbWrite(ah, ah->ah_sc, reg, val);
 		return;
 	}
 
@@ -318,10 +318,8 @@ ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
 	bus_space_handle_t h = ah->ah_sh;
 	u_int32_t val;
 
-	if (ahpriv->ah_isusb) {
-		val = ath_usb_read(ah->ah_sc, reg);
-		return val;
-	}
+	if (ahpriv->ah_isusb)
+		return ath_hal_usbRead(ah, ah->ah_sc, reg);
 
 #ifdef	AH_DEBUG
 	/* Debug - complain if we haven't fully waken things up */
@@ -388,7 +386,7 @@ ath_hal_reg_write(struct ath_hal *ah, u_int32_t reg, u_int32_t val)
 	bus_space_handle_t h = ah->ah_sh;
 
 	if (ahpriv->ah_isusb) {
-		ath_usb_write(ah->ah_sc, reg, val);
+		ath_hal_usbWrite(ah, ah->ah_sc, reg, val);
 		return;
 	}
 
@@ -417,10 +415,8 @@ ath_hal_reg_read(struct ath_hal *ah, u_int32_t reg)
 	bus_space_handle_t h = ah->ah_sh;
 	u_int32_t val;
 
-	if (ahpriv->ah_isusb) {
-		val = ath_usb_read(ah->ah_sc, reg);
-		return val;
-	}
+	if (ahpriv->ah_isusb)
+		return ath_hal_usbRead(ah, ah->ah_sc, reg);
 
 #ifdef	AH_DEBUG
 	/* Debug - complain if we haven't fully waken things up */
