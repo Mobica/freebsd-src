@@ -40,6 +40,7 @@
 #include "ar9002/ar9271_diversity.h"
 
 #include "if_ath_usb_devid.h"
+#include "if_ath_usb.h"
 
 static const HAL_PERCAL_DATA ar9280_iq_cal = {		/* single sample */
 	.calName = "IQ", .calType = IQ_MISMATCH_CAL,
@@ -201,6 +202,10 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 
 	ahp->ah_maxTxTrigLev		= MAX_TX_FIFO_THRESHOLD >> 1;
 
+	AH_PRIVATE(ah)->ah_isusb	= TRUE;
+	AH_PRIVATE(ah)->ah_usb_read	= (void *)ath_usb_read;
+	AH_PRIVATE(ah)->ah_usb_write	= (void *)ath_usb_write;
+
 	if (!ar5416SetResetReg(ah, HAL_RESET_POWER_ON)) {
 		/* reset chip */
 		HALDEBUG(ah, HAL_DEBUG_ANY, "%s: couldn't reset chip\n",
@@ -226,7 +231,6 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	    (val & AR_XSREV_VERSION) >> AR_XSREV_TYPE_S;
 	AH_PRIVATE(ah)->ah_macRev = MS(val, AR_XSREV_REVISION);
 	AH_PRIVATE(ah)->ah_ispcie = (val & AR_XSREV_TYPE_HOST_MODE) == 0;
-	AH_PRIVATE(ah)->ah_isusb = TRUE;
 
 	/* setup common ini data; rf backends handle remainder */
 	if (AR_SREV_KITE_12_OR_LATER(ah)) {
@@ -446,7 +450,6 @@ ar9271FillCapabilityInfo(struct ath_hal *ah)
 	/* Wake-on-Wireless */
 	pCap->halWowSupport = AH_FALSE;
 	pCap->halWowMatchPatternExact = AH_FALSE;
-	pCap->halWowMatchPatternDword = AH_FALSE;
 
 	/* AR9271 supports one transmit and one receive traffic stream */
 	pCap->halTxStreams = 1;

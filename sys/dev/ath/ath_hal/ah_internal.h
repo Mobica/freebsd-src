@@ -29,6 +29,7 @@
 
 #include <net80211/_ieee80211.h>
 #include <sys/queue.h>			/* XXX for reasons */
+#include "ah_osdep.h"
 
 #ifndef NBBY
 #define	NBBY	8			/* number of bits/byte */
@@ -380,6 +381,8 @@ struct ath_hal_private {
 	HAL_BOOL	(*ah_eepromDiag)(struct ath_hal *, int request,
 			    const void *args, uint32_t argsize,
 			    void **result, uint32_t *resultsize);
+	uint32_t	(*ah_usb_read)(HAL_SOFTC *, uint32_t);
+	void 		(*ah_usb_write)(HAL_SOFTC *, uint32_t, uint32_t);
 
 	/*
 	 * Device revision information.
@@ -492,7 +495,10 @@ struct ath_hal_private {
 	AH_PRIVATE(_ah)->ah_getSpurChan(_ah, _ix, _is2G)
 #define	ath_hal_eepromDiag(_ah, _request, _a, _asize, _r, _rsize) \
 	AH_PRIVATE(_ah)->ah_eepromDiag(_ah, _request, _a, _asize,  _r, _rsize)
-
+#define ath_hal_usbRead(_ah, _addr) \
+	AH_PRIVATE(_ah)->ah_usb_read(_ah->ah_sc, _addr)
+#define ath_hal_usbWrite(_ah, _addr, _val) \
+	AH_PRIVATE(_ah)->ah_usb_write(_ah->ah_sc, _addr, _val)	
 #ifndef _NET_IF_IEEE80211_H_
 /*
  * Stuff that would naturally come from _ieee80211.h
