@@ -35,7 +35,7 @@
 #include "ar9002/ar9271.ini"
 #include "ar9002/ar9280v2.ini"		/* XXX ini for tx/rx gain */
 
-#include "ar9002/ar9285_cal.h"
+#include "ar9002/ar9271_cal.h"
 #include "ar9002/ar9271_phy.h"
 #include "ar9002/ar9271_diversity.h"
 
@@ -71,9 +71,9 @@ static const HAL_PERCAL_DATA ar9280_adc_init_dc_cal = {
 	.calPostProc	= ar5416AdcDcCalibration
 };
 
-static void ar9285ConfigPCIE(struct ath_hal *ah, HAL_BOOL restore,
+static void ar9271ConfigPCIE(struct ath_hal *ah, HAL_BOOL restore,
 		HAL_BOOL power_off);
-static void ar9285DisablePCIE(struct ath_hal *ah);
+static void ar9271DisablePCIE(struct ath_hal *ah);
 static HAL_BOOL ar9271FillCapabilityInfo(struct ath_hal *ah);
 static void ar9271WriteIni(struct ath_hal *ah,
 	const struct ieee80211_channel *chan);
@@ -181,10 +181,10 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	AH5416(ah)->ah_btCoexSetDiversity = ar9271BTCoexAntennaDiversity;
 
 	ah->ah_setAntennaSwitch		= ar9271SetAntennaSwitch;
-	ah->ah_configPCIE		= ar9285ConfigPCIE;
-	ah->ah_disablePCIE		= ar9285DisablePCIE;
-	ah->ah_setTxPower		= ar9285SetTransmitPower;
-	ah->ah_setBoardValues		= ar9285SetBoardValues;
+	ah->ah_configPCIE		= ar9271ConfigPCIE;
+	ah->ah_disablePCIE		= ar9271DisablePCIE;
+	ah->ah_setTxPower		= ar9271SetTransmitPower;
+	ah->ah_setBoardValues		= ar9271SetBoardValues;
 	ah->ah_btCoexSetParameter	= ar9271BTCoexSetParameter;
 	ah->ah_divLnaConfGet		= ar9271_antdiv_comb_conf_get;
 	ah->ah_divLnaConfSet		= ar9271_antdiv_comb_conf_set;
@@ -246,12 +246,8 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	}
 	ar5416AttachPCIE(ah);
 
-	//TODO: Check if below methods supports ar9271 or use a copy - ar9271_hw_pa_cal
-	/* Attach methods that require MAC version/revision info */
-	if (AR_SREV_KITE_12_OR_LATER(ah))
-		AH5416(ah)->ah_cal_initcal      = ar9285InitCalHardware;
-	if (AR_SREV_KITE_11_OR_LATER(ah))
-		AH5416(ah)->ah_cal_pacal       	= ar9002_hw_pa_cal;
+	AH5416(ah)->ah_cal_initcal      = ar9271InitCalHardware;
+	AH5416(ah)->ah_cal_pacal       	= ar9002_hw_pa_cal;
 
 	ecode = ath_hal_v4kEepromAttach(ah);
 	if (ecode != HAL_OK)
@@ -396,12 +392,12 @@ bad:
 }
 
 static void
-ar9285ConfigPCIE(struct ath_hal *ah, HAL_BOOL restore, HAL_BOOL power_off)
+ar9271ConfigPCIE(struct ath_hal *ah, HAL_BOOL restore, HAL_BOOL power_off)
 {
 }
 
 static void
-ar9285DisablePCIE(struct ath_hal *ah)
+ar9271DisablePCIE(struct ath_hal *ah)
 {
 }
 

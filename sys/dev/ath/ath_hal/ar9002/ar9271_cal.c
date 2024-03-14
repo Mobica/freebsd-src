@@ -263,8 +263,7 @@ HAL_BOOL
 ar9271InitCalHardware(struct ath_hal *ah,
     const struct ieee80211_channel *chan)
 {
-	if (AR_SREV_KITE(ah) && AR_SREV_KITE_10_OR_LATER(ah) &&
-	    (! ar9271_hw_clc(ah, chan)))
+	if (AR_SREV_9271(ah) && (! ar9271_hw_clc(ah, chan)))
 		return AH_FALSE;
 
 	return AH_TRUE;
