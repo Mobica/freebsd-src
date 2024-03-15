@@ -388,7 +388,7 @@ enum {
 #define ath_USB_RX_LIST_COUNT	1
 #define ath_USB_TX_LIST_COUNT	(8 + 1)		/* NB: +1 for beacons. */
 
-#define ath_USB_HOST_CMD_RING_COUNT	32
+#define ATH_USB_HOST_CMD_RING_COUNT	32
 
 #define ath_USB_RXBUFSZ	(8 * 1024)	/* XXX Linux 16K */
 #define ath_USB_TXBUFSZ			\
@@ -396,7 +396,7 @@ enum {
 	  sizeof(struct ar_htc_frame_hdr) +	\
 	  sizeof(struct ar_tx_frame) +		\
 	  IEEE80211_MAX_LEN + 3) & ~3)
-#define ath_USB_TXCMDSZ	512
+#define ATH_USB_TXCMDSZ	512
 
 #define ath_USB_TX_TIMEOUT	5000	/* ms */
 #define ath_USB_CMD_TIMEOUT	1000	/* ms */
@@ -452,15 +452,15 @@ struct ath_usb_aggr_cmd {
 };
 
 struct ath_usb_host_cmd_ring {
-	struct ath_usb_host_cmd	cmd[ath_USB_HOST_CMD_RING_COUNT];
+	struct ath_usb_host_cmd	cmd[ATH_USB_HOST_CMD_RING_COUNT];
 	int				cur;
 	int				next;
 	int				queued;
 };
 
 struct ath_usb_softc {
-	struct ath_softc		sc_sc;
-#define usb_dev	sc_sc.sc_dev
+	struct ath_softc		*sc_sc;
+#define usb_dev	sc_sc->sc_dev
 	int				sc_ath_attached;
 
 	/* USB specific goo. */
@@ -489,7 +489,7 @@ struct ath_usb_softc {
 //	struct ath_usb_host_cmd_ring	cmdq;
 	struct ath_usb_data		rx_data[ath_USB_RX_LIST_COUNT];
 	struct ath_usb_data		tx_data[ath_USB_TX_LIST_COUNT];
-	struct ath_usb_data		tx_cmd[ath_USB_HOST_CMD_RING_COUNT];
+	struct ath_usb_data		tx_cmd[ATH_USB_HOST_CMD_RING_COUNT];
 //	TAILQ_HEAD(, ath_usb_tx_data)	tx_free_list;
 //	struct ath_usb_host_cmd		tx_cmd;
 //	struct ath_usb_host_cmd		*tx_bcn;
