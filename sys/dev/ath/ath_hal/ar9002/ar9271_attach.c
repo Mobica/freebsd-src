@@ -233,17 +233,10 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	AH_PRIVATE(ah)->ah_ispcie = (val & AR_XSREV_TYPE_HOST_MODE) == 0;
 
 	/* setup common ini data; rf backends handle remainder */
-	if (AR_SREV_KITE_12_OR_LATER(ah)) {
-		HAL_INI_INIT(&ahp->ah_ini_modes, ar9285Modes_v2, 6);
-		HAL_INI_INIT(&ahp->ah_ini_common, ar9285Common_v2, 2);
-		HAL_INI_INIT(&AH5416(ah)->ah_ini_pcieserdes,
-		    ar9285PciePhy_clkreq_always_on_L1_v2, 2);
-	} else {
-		HAL_INI_INIT(&ahp->ah_ini_modes, ar9285Modes, 6);
-		HAL_INI_INIT(&ahp->ah_ini_common, ar9285Common, 2);
-		HAL_INI_INIT(&AH5416(ah)->ah_ini_pcieserdes,
-		    ar9285PciePhy_clkreq_always_on_L1, 2);
-	}
+	HAL_INI_INIT(&ahp->ah_ini_modes, ar9271Modes, 6);
+	HAL_INI_INIT(&ahp->ah_ini_common, ar9285Common_v2, 2);
+	HAL_INI_INIT(&AH5416(ah)->ah_ini_pcieserdes,
+		ar9285PciePhy_clkreq_always_on_L1_v2, 2);
 	ar5416AttachPCIE(ah);
 
 	//TODO: Check if below methods supports ar9271 or use a copy - ar9271_hw_pa_cal
