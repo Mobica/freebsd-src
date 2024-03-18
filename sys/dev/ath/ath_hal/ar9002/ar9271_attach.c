@@ -234,7 +234,7 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 
 	/* setup common ini data; rf backends handle remainder */
 	HAL_INI_INIT(&ahp->ah_ini_modes, ar9271Modes, 6);
-	HAL_INI_INIT(&ahp->ah_ini_common, ar9285Common_v2, 2);
+	HAL_INI_INIT(&ahp->ah_ini_common, ar9271Common, 2);
 	HAL_INI_INIT(&AH5416(ah)->ah_ini_pcieserdes,
 		ar9285PciePhy_clkreq_always_on_L1_v2, 2);
 	ar5416AttachPCIE(ah);
