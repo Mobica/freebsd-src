@@ -31,14 +31,14 @@
 #include "ah_eeprom_v14.h"
 #include "ah_eeprom_v4k.h"
 
-#include "ar9002/ar9285.h"
+#include "ar9002/ar9271.h"
 #include "ar5416/ar5416.h"
 #include "ar5416/ar5416reg.h"
 #include "ar5416/ar5416phy.h"
 #include "ar9002/ar9002phy.h"
-#include "ar9002/ar9285phy.h"
-#include "ar9002/ar9285an.h"
-#include "ar9002/ar9285_diversity.h"
+#include "ar9002/ar9271_phy.h"
+#include "ar9002/ar9271an.h"
+#include "ar9002/ar9271_diversity.h"
 
 /* Eeprom versioning macros. Returns true if the version is equal or newer than the ver specified */ 
 #define	EEP_MINOR(_ah) \
@@ -51,17 +51,17 @@
 #define PLL_SETTLE_DELAY	300	/* 300 usec */
 #define RTC_PLL_SETTLE_DELAY    1000    /* 1 ms     */
 
-static HAL_BOOL ar9285SetPowerPerRateTable(struct ath_hal *ah,
+static HAL_BOOL ar9271SetPowerPerRateTable(struct ath_hal *ah,
 	struct ar5416eeprom_4k *pEepData, 
 	const struct ieee80211_channel *chan, int16_t *ratesArray,
 	uint16_t cfgCtl, uint16_t AntennaReduction,
 	uint16_t twiceMaxRegulatoryPower, 
 	uint16_t powerLimit);
-static HAL_BOOL ar9285SetPowerCalTable(struct ath_hal *ah,
+static HAL_BOOL ar9271SetPowerCalTable(struct ath_hal *ah,
 	struct ar5416eeprom_4k *pEepData,
 	const struct ieee80211_channel *chan,
 	int16_t *pTxPowerIndexOffset);
-static void ar9285GetGainBoundariesAndPdadcs(struct ath_hal *ah, 
+static void ar9271GetGainBoundariesAndPdadcs(struct ath_hal *ah, 
 	const struct ieee80211_channel *chan, CAL_DATA_PER_FREQ_4K *pRawDataSet,
 	uint8_t * bChans, uint16_t availPiers,
 	uint16_t tPdGainOverlap, int16_t *pMinCalPower,
@@ -69,7 +69,7 @@ static void ar9285GetGainBoundariesAndPdadcs(struct ath_hal *ah,
 	uint16_t numXpdGains);
 
 HAL_BOOL
-ar9285SetTransmitPower(struct ath_hal *ah,
+ar9271SetTransmitPower(struct ath_hal *ah,
 	const struct ieee80211_channel *chan, uint16_t *rfXpdGain)
 {
 #define POW_SM(_r, _s)     (((_r) & 0x3f) << (_s))
@@ -106,7 +106,7 @@ ar9285SetTransmitPower(struct ath_hal *ah,
         AH5416(ah)->ah_ht40PowerIncForPdadc = pModal->ht40PowerIncForPdadc;
     }
 
-    if (!ar9285SetPowerPerRateTable(ah, pEepData,  chan,
+    if (!ar9271SetPowerPerRateTable(ah, pEepData,  chan,
                                     &AH5416(ah)->ah_ratesArray[0],cfgCtl,
                                     twiceAntennaReduction,
 				    twiceMaxRegulatoryPower, powerLimit)) {
@@ -115,7 +115,7 @@ ar9285SetTransmitPower(struct ath_hal *ah,
         return AH_FALSE;
     }
 
-    if (!ar9285SetPowerCalTable(ah,  pEepData, chan, &txPowerIndexOffset)) {
+    if (!ar9271SetPowerCalTable(ah,  pEepData, chan, &txPowerIndexOffset)) {
         HALDEBUG(ah, HAL_DEBUG_ANY, "%s: unable to set power table\n",
 	    __func__);
         return AH_FALSE;
@@ -186,7 +186,7 @@ ar9285SetTransmitPower(struct ath_hal *ah,
 }
 
 static void
-ar9285SetBoardGain(struct ath_hal *ah, const MODAL_EEP4K_HEADER *pModal,
+ar9271SetBoardGain(struct ath_hal *ah, const MODAL_EEP4K_HEADER *pModal,
     const struct ar5416eeprom_4k *eep, uint8_t txRxAttenLocal)
 {
 	OS_REG_WRITE(ah, AR_PHY_SWITCH_CHAIN_0,
@@ -241,7 +241,7 @@ ar9285SetBoardGain(struct ath_hal *ah, const MODAL_EEP4K_HEADER *pModal,
  * given the channel value.
  */
 HAL_BOOL
-ar9285SetBoardValues(struct ath_hal *ah, const struct ieee80211_channel *chan)
+ar9271SetBoardValues(struct ath_hal *ah, const struct ieee80211_channel *chan)
 {
 	const HAL_EEPROM_v4k *ee = AH_PRIVATE(ah)->ah_eeprom;
 	const struct ar5416eeprom_4k *eep = &ee->ee_base;
@@ -255,10 +255,10 @@ ar9285SetBoardValues(struct ath_hal *ah, const struct ieee80211_channel *chan)
 	OS_REG_WRITE(ah, AR_PHY_SWITCH_COM, pModal->antCtrlCommon);
 
 	/* Single chain for 4K EEPROM*/
-	ar9285SetBoardGain(ah, pModal, eep, txRxAttenLocal);
+	ar9271SetBoardGain(ah, pModal, eep, txRxAttenLocal);
 
 	/* Initialize Ant Diversity settings if supported */
-	(void) ar9285SetAntennaSwitch(ah, AH5212(ah)->ah_antControl);
+	(void) ar9271SetAntennaSwitch(ah, AH5212(ah)->ah_antControl);
 
 	/* Configure TX power calibration */
 	if (pModal->version >= 2) {
@@ -393,7 +393,7 @@ ar9285SetBoardValues(struct ath_hal *ah, const struct ieee80211_channel *chan)
  */
 
 static HAL_BOOL
-ar9285SetPowerPerRateTable(struct ath_hal *ah, struct ar5416eeprom_4k *pEepData,
+ar9271SetPowerPerRateTable(struct ath_hal *ah, struct ar5416eeprom_4k *pEepData,
                            const struct ieee80211_channel *chan,
                            int16_t *ratesArray, uint16_t cfgCtl,
                            uint16_t AntennaReduction, 
@@ -561,7 +561,7 @@ ar9285SetPowerPerRateTable(struct ath_hal *ah, struct ar5416eeprom_4k *pEepData,
 }
 
 static HAL_BOOL
-ar9285SetPowerCalTable(struct ath_hal *ah, struct ar5416eeprom_4k *pEepData,
+ar9271SetPowerCalTable(struct ath_hal *ah, struct ar5416eeprom_4k *pEepData,
 	const struct ieee80211_channel *chan, int16_t *pTxPowerIndexOffset)
 {
     CAL_DATA_PER_FREQ_4K *pRawDataset;
@@ -609,7 +609,7 @@ ar9285SetPowerCalTable(struct ath_hal *ah, struct ar5416eeprom_4k *pEepData,
         if (pEepData->baseEepHeader.txMask & (1 << i)) {
             pRawDataset = pEepData->calPierData2G[i];
 
-            ar9285GetGainBoundariesAndPdadcs(ah,  chan, pRawDataset,
+            ar9271GetGainBoundariesAndPdadcs(ah,  chan, pRawDataset,
                                              pCalBChans, numPiers,
                                              pdGainOverlap_t2,
                                              &tMinCalPower, gainBoundaries,
@@ -634,7 +634,7 @@ ar9285SetPowerCalTable(struct ath_hal *ah, struct ar5416eeprom_4k *pEepData,
 }
 
 static void
-ar9285GetGainBoundariesAndPdadcs(struct ath_hal *ah, 
+ar9271GetGainBoundariesAndPdadcs(struct ath_hal *ah, 
                                  const struct ieee80211_channel *chan,
 				 CAL_DATA_PER_FREQ_4K *pRawDataSet,
                                  uint8_t * bChans,  uint16_t availPiers,

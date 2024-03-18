@@ -45,9 +45,9 @@ struct ath_hal_9271 {
 
 HAL_BOOL ar9271RfAttach(struct ath_hal *, HAL_STATUS *);
 
-extern	HAL_BOOL ar9285SetTransmitPower(struct ath_hal *,
+extern	HAL_BOOL ar9271SetTransmitPower(struct ath_hal *,
 		const struct ieee80211_channel *, uint16_t *);
-extern HAL_BOOL ar9285SetBoardValues(struct ath_hal *,
+extern HAL_BOOL ar9271SetBoardValues(struct ath_hal *,
 		const struct ieee80211_channel *);
 
 /* ar9285_btcoex.h */
