@@ -63,11 +63,6 @@ ar9271_hw_pa_calib(struct ath_hal *ah, HAL_BOOL is_reset)
 		{ 0x7838, 0 },
 	};
 
-	/* PA CAL is not needed for high power solution */
-	if (ath_hal_eepromGet(ah, AR_EEP_TXGAIN_TYPE, AH_NULL) ==
-	    AR5416_EEP_TXGAIN_HIGH_POWER)
-		return;
-
 	HALDEBUG(ah, HAL_DEBUG_PERCAL, "Running PA Calibration\n");
 
 	for (i = 0; i < N(regList); i++)
