@@ -247,7 +247,7 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	ar5416AttachPCIE(ah);
 
 	AH5416(ah)->ah_cal_initcal      = ar9271InitCalHardware;
-	AH5416(ah)->ah_cal_pacal       	= ar9002_hw_pa_cal;
+	AH5416(ah)->ah_cal_pacal       	= ar9271_hw_pa_cal;
 
 	ecode = ath_hal_v4kEepromAttach(ah);
 	if (ecode != HAL_OK)
