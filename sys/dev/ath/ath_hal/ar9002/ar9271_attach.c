@@ -236,7 +236,7 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	HAL_INI_INIT(&ahp->ah_ini_modes, ar9271Modes, 6);
 	HAL_INI_INIT(&ahp->ah_ini_common, ar9271Common, 2);
 	HAL_INI_INIT(&AH5416(ah)->ah_ini_pcieserdes,
-		ar9285PciePhy_clkreq_always_on_L1_v2, 2);
+		ar9271NonPciePhy_clkreq, 2);
 	ar5416AttachPCIE(ah);
 
 	//TODO: Check if below methods supports ar9271 or use a copy - ar9271_hw_pa_cal
