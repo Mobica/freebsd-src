@@ -41,6 +41,7 @@
 
 #include "if_ath_usb_devid.h"
 #include "if_ath_usb.h"
+
 static const HAL_PERCAL_DATA ar9280_iq_cal = {		/* single sample */
 	.calName = "IQ", .calType = IQ_MISMATCH_CAL,
 	.calNumSamples	= MIN_CAL_SAMPLES,
@@ -205,8 +206,6 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	AH_PRIVATE(ah)->ah_ispcie	= FALSE;
 	AH_PRIVATE(ah)->ah_usb_read	= (void *)ath_usb_read;
 	AH_PRIVATE(ah)->ah_usb_write	= (void *)ath_usb_write;
-	HALDEBUG(ah, HAL_DEBUG_ANY, "%s: dupa1\n",
-		    __func__);
 
 	if (!ar5416SetResetReg(ah, HAL_RESET_POWER_ON)) {
 		/* reset chip */
@@ -215,8 +214,6 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 		ecode = HAL_EIO;
 		goto bad;
 	}
-HALDEBUG(ah, HAL_DEBUG_ANY, "%s: dupa2\n",
-		    __func__);
 
 	if (!ar5416SetPowerMode(ah, HAL_PM_AWAKE, AH_TRUE)) {
 		HALDEBUG(ah, HAL_DEBUG_ANY, "%s: couldn't wakeup chip\n",
@@ -224,8 +221,6 @@ HALDEBUG(ah, HAL_DEBUG_ANY, "%s: dupa2\n",
 		ecode = HAL_EIO;
 		goto bad;
 	}
-	HALDEBUG(ah, HAL_DEBUG_ANY, "%s: dupa3\n",
-		    __func__);
 
 	/* Read Revisions from Chips before taking out of reset */
 	val = OS_REG_READ(ah, AR_SREV);
@@ -238,8 +233,6 @@ HALDEBUG(ah, HAL_DEBUG_ANY, "%s: dupa2\n",
 	    (val & AR_XSREV_VERSION) >> AR_XSREV_TYPE_S;
 	AH_PRIVATE(ah)->ah_macRev = MS(val, AR_XSREV_REVISION);
 	AH_PRIVATE(ah)->ah_ispcie = (val & AR_XSREV_TYPE_HOST_MODE) == 0;
-HALDEBUG(ah, HAL_DEBUG_ANY, "%s: dupa4\n",
-		    __func__);
 
 	/* setup common ini data; rf backends handle remainder */
 	HAL_INI_INIT(&ahp->ah_ini_modes, ar9271Modes, 6);
@@ -247,8 +240,6 @@ HALDEBUG(ah, HAL_DEBUG_ANY, "%s: dupa4\n",
 	HAL_INI_INIT(&AH5416(ah)->ah_ini_pcieserdes,
 		ar9271NonPciePhy_clkreq, 2);
 	ar5416AttachPCIE(ah);
-HALDEBUG(ah, HAL_DEBUG_ANY, "%s: dupa5\n",
-		    __func__);
 
 	AH5416(ah)->ah_cal_initcal      = ar9271InitCalHardware;
 	AH5416(ah)->ah_cal_pacal       	= ar9271_hw_pa_cal;
