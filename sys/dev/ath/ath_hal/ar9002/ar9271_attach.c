@@ -203,7 +203,6 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	ahp->ah_maxTxTrigLev		= MAX_TX_FIFO_THRESHOLD >> 1;
 
 	AH_PRIVATE(ah)->ah_isusb	= TRUE;
-	AH_PRIVATE(ah)->ah_ispcie	= FALSE;
 	AH_PRIVATE(ah)->ah_usb_read	= (void *)ath_usb_read;
 	AH_PRIVATE(ah)->ah_usb_write	= (void *)ath_usb_write;
 
