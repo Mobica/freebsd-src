@@ -38,7 +38,7 @@
 #include "ar5416/ar5416phy.h"
 #include "ar9002/ar9002phy.h"
 #include "ar9002/ar9285phy.h"
-#include "ar9002/ar9285an.h"
+#include "ar9002/ar9271an.h"
 
 #include "ar9002/ar9271_cal.h"
 
@@ -62,11 +62,6 @@ ar9271_hw_pa_calib(struct ath_hal *ah, HAL_BOOL is_reset)
 		{ 0x783c, 0 },
 		{ 0x7838, 0 },
 	};
-
-	/* PA CAL is not needed for high power solution */
-	if (ath_hal_eepromGet(ah, AR_EEP_TXGAIN_TYPE, AH_NULL) ==
-	    AR5416_EEP_TXGAIN_HIGH_POWER)
-		return;
 
 	HALDEBUG(ah, HAL_DEBUG_PERCAL, "Running PA Calibration\n");
 
@@ -92,30 +87,25 @@ ar9271_hw_pa_calib(struct ath_hal *ah, HAL_BOOL is_reset)
 	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G1, AR9285_AN_RF2G1_PDPAOUT, 0);
 	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G8, AR9285_AN_RF2G8_PADRVGN2TAB0, 7);
 	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G7, AR9285_AN_RF2G7_PADRVGN2TAB0, 0);
-	ccomp_org = MS(OS_REG_READ(ah, AR9285_AN_RF2G6), AR9285_AN_RF2G6_CCOMP);
-	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G6, AR9285_AN_RF2G6_CCOMP, 0xf);
+	ccomp_org = OS_REG_READ(ah, AR9285_AN_RF2G3);
+	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G3, AR9271_AN_RF2G3_CCOMP, 0xfff);
 
 	OS_REG_WRITE(ah, AR9285_AN_TOP2, 0xca0358a0);
 	OS_DELAY(30);
-	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G6, AR9285_AN_RF2G6_OFFS, 0);
-	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G3, AR9285_AN_RF2G3_PDVCCOMP, 0);
+	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G6, AR9271_AN_RF2G6_OFFS, 0);
 
 	for (i = 6; i > 0; i--) {
-		regVal = OS_REG_READ(ah, 0x7834);
-		regVal |= (1 << (19 + i));
-		OS_REG_WRITE(ah, 0x7834, regVal);
+		regVal = OS_REG_READ(ah, AR9285_AN_RF2G6);
+		regVal |= (1 << (AR9271_AN_RF2G6_OFFS_S + i));
+		OS_REG_WRITE(ah, AR9285_AN_RF2G6, regVal);
 		OS_DELAY(1);
-		regVal = OS_REG_READ(ah, 0x7834);
-		regVal &= (~(0x1 << (19 + i)));
-		reg_field = MS(OS_REG_READ(ah, 0x7840), AR9285_AN_RXTXBB1_SPARE9);
-		regVal |= (reg_field << (19 + i));
-		OS_REG_WRITE(ah, 0x7834, regVal);
+		regVal = OS_REG_READ(ah, AR9285_AN_RF2G6);
+		regVal &= (~(0x1 << (AR9271_AN_RF2G6_OFFS_S + i)));
+		reg_field = MS(OS_REG_READ(ah, AR9285_AN_RF2G9), AR9285_AN_RXTXBB1_SPARE9);
+		regVal |= (reg_field << (AR9271_AN_RF2G6_OFFS_S + i));
+		OS_REG_WRITE(ah, AR9285_AN_RF2G6, regVal);
 	}
 
-	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G3, AR9285_AN_RF2G3_PDVCCOMP, 1);
-	OS_DELAY(1);
-	reg_field = MS(OS_REG_READ(ah, AR9285_AN_RF2G9), AR9285_AN_RXTXBB1_SPARE9);
-	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G3, AR9285_AN_RF2G3_PDVCCOMP, reg_field);
 	offs_6_1 = MS(OS_REG_READ(ah, AR9285_AN_RF2G6), AR9285_AN_RF2G6_OFFS);
 	offs_0   = MS(OS_REG_READ(ah, AR9285_AN_RF2G3), AR9285_AN_RF2G3_PDVCCOMP);
 
@@ -138,17 +128,17 @@ ar9271_hw_pa_calib(struct ath_hal *ah, HAL_BOOL is_reset)
 	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G6, AR9285_AN_RF2G6_OFFS, offs_6_1);
 	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G3, AR9285_AN_RF2G3_PDVCCOMP, offs_0);
 
-	regVal = OS_REG_READ(ah, 0x7834);
+	regVal = OS_REG_READ(ah, AR9285_AN_RF2G6);
 	regVal |= 0x1;
-	OS_REG_WRITE(ah, 0x7834, regVal);
-	regVal = OS_REG_READ(ah, 0x9808);
+	OS_REG_WRITE(ah, AR9285_AN_RF2G6, regVal);
+	regVal = OS_REG_READ(ah, AR_PHY_TESTCTRL);
 	regVal &= (~(0x1 << 27));
-	OS_REG_WRITE(ah, 0x9808, regVal);
+	OS_REG_WRITE(ah, AR_PHY_TESTCTRL, regVal);
 
 	for (i = 0; i < N(regList); i++)
 		OS_REG_WRITE(ah, regList[i][0], regList[i][1]);
 
-	OS_REG_RMW_FIELD(ah, AR9285_AN_RF2G6, AR9285_AN_RF2G6_CCOMP, ccomp_org);
+	OS_REG_WRITE(ah, AR9285_AN_RF2G3, ccomp_org);
 }
 
 void
