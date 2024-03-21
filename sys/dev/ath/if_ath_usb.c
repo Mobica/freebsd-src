@@ -531,7 +531,7 @@ ath_usb_detach(device_t self)
 #if ATHN_API
 	ath_usb_unload_firmware();
 #endif
-	free(usc);
+	free(usc, M_TEMP);
 	printf("ath_usb_detach called \n");
 	return (0);
 }
