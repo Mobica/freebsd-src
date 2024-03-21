@@ -639,7 +639,6 @@ extern	void *ath_hal_malloc(size_t);
 extern	void ath_hal_free(void *);
 
 /* common debugging interfaces */
-#define AH_DEBUG
 #ifdef AH_DEBUG
 #include "ah_debug.h"
 extern	int ath_hal_debug;	/* Global debug flags */
