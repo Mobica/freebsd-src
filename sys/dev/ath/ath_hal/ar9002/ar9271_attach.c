@@ -220,6 +220,7 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 		ecode = HAL_EIO;
 		goto bad;
 	}
+
 	/* Read Revisions from Chips before taking out of reset */
 	val = OS_REG_READ(ah, AR_SREV);
 	HALDEBUG(ah, HAL_DEBUG_ATTACH,

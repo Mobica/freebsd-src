@@ -98,7 +98,7 @@ ath_usb_transfer_firmware(struct ath_usb_softc *usc)
 	int s, mlen;
 	int error = 0;
 
-	ATH_LOCK(&usc->sc_sc);
+	ATH_LOCK(usc->sc_sc);
 
 	/* Load firmware image. */
 	ptr = (void *)fware->data;
@@ -115,9 +115,9 @@ ath_usb_transfer_firmware(struct ath_usb_softc *usc)
 		USETW(req.wValue, addr);
 		USETW(req.wLength, mlen);
 
-		error = usbd_do_request(usc->sc_udev, &usc->sc_sc.sc_mtx, &req, ptr);
+		error = usbd_do_request(usc->sc_udev, &usc->sc_sc->sc_mtx, &req, ptr);
 		if (error != 0) {
-			ATH_UNLOCK(&usc->sc_sc);
+			ATH_UNLOCK(usc->sc_sc);
 			ath_usb_unload_firmware();
 			return (error);
 		}
@@ -131,7 +131,7 @@ ath_usb_transfer_firmware(struct ath_usb_softc *usc)
 		addr = AR7010_FIRMWARE_TEXT >> 8;
 	else {
 		addr = AR9271_FIRMWARE_TEXT >> 8;
-		device_printf(usc->sc_sc.sc_dev, "%s: selected device: AR9271\n", __func__);
+		device_printf(usc->sc_sc->sc_dev, "%s: selected device: AR9271\n", __func__);
 	}
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 	req.bRequest = AR_FW_DOWNLOAD_COMP;
@@ -140,18 +140,19 @@ ath_usb_transfer_firmware(struct ath_usb_softc *usc)
 	USETW(req.wLength, 0);
 
 	usc->wait_msg_id = AR_HTC_MSG_READY;
-	error = usbd_do_request(usc->sc_udev, &usc->sc_sc.sc_mtx, &req, NULL);
+	error = usbd_do_request(usc->sc_udev, &usc->sc_sc->sc_mtx, &req, NULL);
 
 	/* Wait at most 1 second for firmware to boot. */
-	device_printf(usc->sc_sc.sc_dev, "%s: Waiting for firmware to boot\n", __func__);
-	if (error == 0 && usc->wait_msg_id != 0)
-		error = msleep(&usc->wait_msg_id, &usc->sc_sc.sc_mtx, PCATCH, "athnfw", hz);
-
-	if (usc->wait_msg_id == 0) {
-		device_printf(usc->sc_sc.sc_dev, "%s: Firmware booted successfully!\n", __func__);
+	device_printf(usc->sc_sc->sc_dev, "%s: Waiting for firmware to boot\n", __func__);
+	if (error == 0 && usc->wait_msg_id != 0){
+		error = msleep(&usc->wait_msg_id, &usc->sc_sc->sc_mtx, PCATCH, "athnfw", hz);
 	}
 
-	ATH_UNLOCK(&usc->sc_sc);
+	if (usc->wait_msg_id == 0) {
+		device_printf(usc->sc_sc->sc_dev, "%s: Firmware booted successfully!\n", __func__);
+	}
+
+	ATH_UNLOCK(usc->sc_sc);
 
 	ath_usb_unload_firmware();
 
