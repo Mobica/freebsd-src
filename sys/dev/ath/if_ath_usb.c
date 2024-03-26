@@ -1122,9 +1122,8 @@ ath_if_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 			STAILQ_INSERT_TAIL(&usc->sc_cmd_inactive, cmd, next);
 		}
 		if (usc->wait_msg_id == AR_WMI_CMD_MSG)
-		{
 			STAILQ_INSERT_TAIL(&usc->sc_cmd_inactive, cmd, next);
-		}
+		
 		/* FALLTHROUGH */
 	case USB_ST_SETUP:
 tr_setup:
