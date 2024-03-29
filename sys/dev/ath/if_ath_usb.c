@@ -495,16 +495,44 @@ ath_usb_attach(device_t self)
 					 UE_GET_ADDR(eaddr), UE_GET_DIR(eaddr) == UE_DIR_OUT ?  "output" : "input", ep);
 	}
 
-	if (ath_usb_open_pipes(usc) != 0)
-		return error;
+	error = ath_usb_open_pipes(usc);
+	if (error != 0)
+		goto bad;
+
+	/*
+	 * Setup DMA descriptor area.
+	 */
+	if (bus_dma_tag_create(bus_get_dma_tag(sc->sc_dev),	/* parent */
+			       1, 0,				/* alignment, bounds */
+			       BUS_SPACE_MAXADDR_32BIT,		/* lowaddr */
+			       BUS_SPACE_MAXADDR,		/* highaddr */
+			       NULL, NULL,			/* filter, filterarg */
+			       0x3ffff,				/* maxsize XXX */
+			       ATH_MAX_SCATTER,			/* nsegments */
+			       0x3ffff,				/* maxsegsize XXX */
+			       BUS_DMA_ALLOCNOW,		/* flags */
+			       NULL,				/* lockfunc */
+			       NULL,				/* lockarg */
+			       &sc->sc_dmat)) {
+		device_printf(sc->sc_dev, "cannot allocate DMA tag\n");
+		error = ENXIO;
+		goto bad1;
+	}
 
 	/* Allocate xfer for firmware commands. */
-	if (ath_usb_alloc_tx_cmd(usc) != 0)
-		return error;
+	error = ath_usb_alloc_tx_cmd(usc);
+	if (error != 0)
+		goto bad2;
 
 	ath_usb_attachhook(self);
 
 	return 0;
+bad2:
+	bus_dma_tag_destroy(sc->sc_dmat);
+bad1:
+	ath_usb_close_pipes(usc);
+bad:
+	return error;
 }
 
 static int
@@ -528,6 +556,8 @@ ath_usb_detach(device_t self)
 	ath_usb_free_tx_cmd(usc);
 	ath_usb_free_tx_list(usc);
 	ath_usb_free_rx_list(usc);
+
+	bus_dma_tag_destroy(sc->sc_dmat);
 #if ATHN_API
 	ath_usb_unload_firmware();
 #endif
