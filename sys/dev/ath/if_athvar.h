@@ -607,6 +607,8 @@ struct ath_softc {
 	char			sc_tx_mtx_name[32];
 	struct mtx		sc_tx_ic_mtx;	/* TX queue mutex */
 	char			sc_tx_ic_mtx_name[32];
+	struct mtx		sc_usb_mtx;	/* USB access mutex */
+	char			sc_usb_mtx_name[32];
 	struct taskqueue	*sc_tq;		/* private task queue */
 	struct ath_hal		*sc_ah;		/* Atheros HAL */
 	struct ath_ratectrl	*sc_rc;		/* tx rate control support */
@@ -1043,7 +1045,18 @@ struct ath_softc {
 #define	ATH_TXSTATUS_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_txcomplock)
 #define	ATH_TXSTATUS_LOCK_ASSERT(_sc) \
 	mtx_assert(&(_sc)->sc_txcomplock, MA_OWNED)
-
+#define ATH_USB_LOCK_INIT(_sc) do { \
+	snprintf((_sc)->sc_usb_mtx_name,				\
+	    sizeof((_sc)->sc_usb_mtx_name),				\
+	    "%s USB lock",						\
+	    device_get_nameunit((_sc)->sc_dev));			\
+	mtx_init(&sc->sc_usb_mtx, sc->sc_usb_mtx_name, NULL, \
+	MTX_DEF); \
+} while (0)
+#define ATH_USB_LOCK_DESTROY(_sc) mtx_destroy(&(_sc)->sc_usb_mtx)
+#define ATH_USB_LOCK(_sc) mtx_lock(&(_sc)->sc_usb_mtx)
+#define ATH_USB_UNLOCK(_sc) mtx_unlock(&(_sc)->sc_usb_mtx)
+#define ATH_USB_LOCK_ASSERT(_sc) mtx_assert(&(_sc)->sc_usb_mtx, MA_OWNED)
 int	ath_attach(u_int16_t, u_int16_t, struct ath_softc *);
 int	ath_detach(struct ath_softc *);
 void	ath_resume(struct ath_softc *);

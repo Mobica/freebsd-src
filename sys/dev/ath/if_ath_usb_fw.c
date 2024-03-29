@@ -98,7 +98,7 @@ ath_usb_transfer_firmware(struct ath_usb_softc *usc)
 	int s, mlen;
 	int error = 0;
 
-	ATH_LOCK(usc->sc_sc);
+	ATH_USB_LOCK(usc->sc_sc);
 
 	/* Load firmware image. */
 	ptr = (void *)fware->data;
@@ -117,7 +117,7 @@ ath_usb_transfer_firmware(struct ath_usb_softc *usc)
 
 		error = usbd_do_request(usc->sc_udev, &usc->sc_sc->sc_mtx, &req, ptr);
 		if (error != 0) {
-			ATH_UNLOCK(usc->sc_sc);
+			ATH_USB_UNLOCK(usc->sc_sc);
 			ath_usb_unload_firmware();
 			return (error);
 		}
@@ -152,7 +152,7 @@ ath_usb_transfer_firmware(struct ath_usb_softc *usc)
 		device_printf(usc->sc_sc->sc_dev, "%s: Firmware booted successfully!\n", __func__);
 	}
 
-	ATH_UNLOCK(usc->sc_sc);
+	ATH_USB_UNLOCK(usc->sc_sc);
 
 	ath_usb_unload_firmware();
 
