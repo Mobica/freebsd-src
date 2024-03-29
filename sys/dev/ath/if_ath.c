@@ -1383,9 +1383,9 @@ ath_attach(u_int16_t venid, u_int16_t devid, struct ath_softc *sc)
 	/*
 	 * Put it to sleep for now.
 	 */
-	ATH_LOCK(sc);
+	//ATH_LOCK(sc);
 	ath_power_setpower(sc, HAL_PM_FULL_SLEEP, 1);
-	ATH_UNLOCK(sc);
+	//ATH_UNLOCK(sc);
 
 	return 0;
 bad2:

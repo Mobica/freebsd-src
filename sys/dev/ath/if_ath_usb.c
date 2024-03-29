@@ -271,7 +271,7 @@ static void ath_if_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error);
 static void ath_if_bulk_rx_callback(struct usb_xfer *xfer, usb_error_t error);
 static void ath_if_bulk_tx_callback(struct usb_xfer *xfer, usb_error_t error);
 
-static struct usb_config ath_if_config[ath_N_XFER] = {
+static struct usb_config ath_if_config[ATH_N_XFER] = {
         [ath_BULK_TX] = { // MichalP: standard I/O
                 .type = UE_BULK,
                 .endpoint = AR_PIPE_TX_DATA,
@@ -462,7 +462,7 @@ ath_usb_attach(device_t self)
 	sc->ops.write = ath_usb_write;
 	sc->ops.write_barrier = ath_usb_write_barrier;
 #endif
-	//mtx_init(&sc->sc_mtx, device_get_nameunit(self), MTX_NETWORK_LOCK, MTX_DEF);
+	//mtx_init(&sc->sc_usb_mtx, device_get_nameunit(self), MTX_NETWORK_LOCK, MTX_DEF);
 
 	ATH_LOCK_INIT(sc);
 	ATH_USB_LOCK_INIT(sc);
@@ -477,7 +477,7 @@ ath_usb_attach(device_t self)
 	TASK_INIT(&sc->sc_task, 0, ath_usb_task, sc);
 #endif
 	error = usbd_transfer_setup(uaa->device, &uaa->info.bIfaceIndex, usc->sc_xfer, ath_if_config,
-								ath_N_XFER, usc, &sc->sc_mtx);
+								ATH_N_XFER, usc, &sc->sc_usb_mtx);
 	if (error) {
 		device_printf(sc->sc_dev,
 					  "could not allocate USB transfers, err=%s\n",
@@ -555,7 +555,7 @@ ath_usb_detach(device_t self)
 	/* Wait for all async commands to complete. */
 	ath_usb_wait_async(usc);
 	
-	usbd_transfer_unsetup(usc->sc_xfer, ath_N_XFER);
+	usbd_transfer_unsetup(usc->sc_xfer, ATH_N_XFER);
 	
 	/* Abort and close Tx/Rx pipes. */
 	ath_usb_close_pipes(usc);
@@ -896,7 +896,7 @@ ath_usb_alloc_tx_list(struct ath_usb_softc *usc)
 
 	STAILQ_INIT(&usc->sc_tx_inactive);
 
-	for (i = 0; i != ath_N_XFER; i++) {
+	for (i = 0; i != ATH_N_XFER; i++) {
 		STAILQ_INIT(&usc->sc_tx_active[i]);
 		STAILQ_INIT(&usc->sc_tx_pending[i]);
 	}
@@ -915,7 +915,7 @@ ath_usb_free_tx_list(struct ath_usb_softc *usc)
 
 	STAILQ_INIT(&usc->sc_tx_inactive);
 
-	for (i = 0; i != ath_N_XFER; i++) {
+	for (i = 0; i != ATH_N_XFER; i++) {
 		STAILQ_INIT(&usc->sc_tx_active[i]);
 		STAILQ_INIT(&usc->sc_tx_pending[i]);
 	}
@@ -1514,7 +1514,7 @@ ath_usb_htc_setup(struct ath_usb_softc *usc)
 	usc->wait_msg_id = AR_HTC_MSG_CONF_PIPE_RSP;
 	error = ath_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
 	if (error == 0 && usc->wait_msg_id != 0)
-		error = msleep(&usc->wait_msg_id, &usc->sc_sc->sc_mtx, PCATCH, "athhtc",
+		error = msleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athhtc",
 					   hz);
 	usc->wait_msg_id = 0;
 
@@ -1564,7 +1564,7 @@ ath_usb_htc_connect_svc(struct ath_usb_softc *usc, uint16_t svc_id,
 	error = ath_usb_htc_msg(usc, AR_HTC_MSG_CONN_SVC, &msg, sizeof(msg));
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0)
-		error = msleep(&usc->wait_msg_id, &usc->sc_sc->sc_mtx, PCATCH, "athhtc", hz * 2);
+		error = msleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athhtc", hz * 2);
 	usc->wait_msg_id = 0;
 
 	ATH_USB_UNLOCK(usc->sc_sc);
@@ -1607,14 +1607,14 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		return -1;
 	}
 	STAILQ_REMOVE_HEAD(&usc->sc_cmd_inactive, next);
-
+	ATH_USB_LOCK(sc);
 	while (usc->wait_cmd_id) {
 		/*
 		 * The previous USB transfer is not done yet. We can't use
 		 * data->xfer until it is done or we'll cause major confusion
 		 * in the USB stack.
 		 */
-		msleep(&usc->wait_msg_id, &usc->sc_sc->sc_mtx, PCATCH, "athwmx", hz);
+		msleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmx", hz);
 	}
 	xferlen = sizeof(*htc) + sizeof(*wmi) + ilen;
 	data->buflen = xferlen;
@@ -1635,14 +1635,13 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	usc->wait_cmd_id = cmd_id;
 	usc->obuf = obuf;
 	STAILQ_INSERT_TAIL(&usc->sc_cmd_pending, data, next);
-	ATH_USB_LOCK(sc);
 	usbd_transfer_start(usc->sc_xfer[ath_BULK_CMD]);
 
 	/*
 	 * Wait for WMI command complete interrupt. In case it does not fire
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
-	error = msleep(&usc->wait_cmd_id, &usc->sc_sc->sc_mtx, PCATCH, "athwmi", 2*hz);
+	error = msleep(&usc->wait_cmd_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmi", 2*hz);
 	if (error == EWOULDBLOCK) {
 		printf("%s: firmware command 0x%x timed out\n",
 			device_get_name(usc->usb_dev), cmd_id);

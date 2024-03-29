@@ -1050,7 +1050,7 @@ struct ath_softc {
 	    sizeof((_sc)->sc_usb_mtx_name),				\
 	    "%s USB lock",						\
 	    device_get_nameunit((_sc)->sc_dev));			\
-	mtx_init(&sc->sc_usb_mtx, sc->sc_usb_mtx_name, NULL, \
+	mtx_init(&sc->sc_usb_mtx, (_sc)->sc_usb_mtx_name, MTX_NETWORK_LOCK, \
 	MTX_DEF); \
 } while (0)
 #define ATH_USB_LOCK_DESTROY(_sc) mtx_destroy(&(_sc)->sc_usb_mtx)
