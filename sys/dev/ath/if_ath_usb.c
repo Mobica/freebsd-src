@@ -446,6 +446,7 @@ ath_usb_attach(device_t self)
 	sc->usc = usc;
 	usc->sc_sc = sc;
 	usc->sc_udev = uaa->device;
+	usc->no_buffer_write = TRUE;
 	sc->sc_dev = self;
 	ic->ic_name = device_get_nameunit(self);
 
@@ -525,6 +526,7 @@ ath_usb_attach(device_t self)
 		goto bad2;
 
 	ath_usb_attachhook(self);
+	usc->no_buffer_write = FALSE;
 
 	return 0;
 bad2:
@@ -1706,7 +1708,8 @@ ath_usb_write(struct ath_softc *sc, uint32_t addr, uint32_t val)
 
 	usc->wbuf[usc->wcount].addr = htobe32(addr);
 	usc->wbuf[usc->wcount].val  = htobe32(val);
-	if (++usc->wcount == AR_MAX_WRITE_COUNT)
+
+	if ((++usc->wcount == AR_MAX_WRITE_COUNT) || (usc->no_buffer_write))
 		ath_usb_write_barrier(sc);
 }
 

@@ -525,6 +525,7 @@ struct ath_usb_softc {
 	void				(*sc_node_free)(struct ieee80211com *,
 					    struct ieee80211_node *);
 	int				sc_key_tasks;
+	bool				no_buffer_write;
 };
 
 #endif
