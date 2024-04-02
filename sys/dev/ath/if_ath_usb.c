@@ -540,6 +540,12 @@ bad2:
 bad1:
 	ath_usb_close_pipes(usc);
 bad:
+	ATH_TXSTATUS_LOCK_DESTROY(sc);
+	ATH_USB_LOCK_DESTROY(sc);
+	ATH_PCU_LOCK_DESTROY(sc);
+	ATH_RX_LOCK_DESTROY(sc);
+	ATH_TX_LOCK_DESTROY(sc);
+	ATH_LOCK_DESTROY(sc);
 	return error;
 }
 
