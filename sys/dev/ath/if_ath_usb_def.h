@@ -382,7 +382,7 @@ enum {
 	ath_BULK_RX,
 	ath_BULK_IRQ,
 	ath_BULK_CMD,
-	ath_N_XFER
+	ATH_N_XFER
 };
 
 #define ath_USB_RX_LIST_COUNT	1
@@ -484,7 +484,7 @@ struct ath_usb_softc {
 	void				*obuf;
 	struct ar_htc_msg_conn_svc_rsp	*msg_conn_svc_rsp;
 
-	struct usb_xfer	*sc_xfer[ath_N_XFER];
+	struct usb_xfer	*sc_xfer[ATH_N_XFER];
 
 //	struct ath_usb_host_cmd_ring	cmdq;
 	struct ath_usb_data		rx_data[ath_USB_RX_LIST_COUNT];
@@ -498,9 +498,9 @@ struct ath_usb_softc {
 
 	STAILQ_HEAD(, ath_usb_data)	sc_rx_active;
 	STAILQ_HEAD(, ath_usb_data)	sc_rx_inactive;
-	STAILQ_HEAD(, ath_usb_data)	sc_tx_active[ath_N_XFER];
+	STAILQ_HEAD(, ath_usb_data)	sc_tx_active[ATH_N_XFER];
 	STAILQ_HEAD(, ath_usb_data)	sc_tx_inactive;
-	STAILQ_HEAD(, ath_usb_data)	sc_tx_pending[ath_N_XFER];
+	STAILQ_HEAD(, ath_usb_data)	sc_tx_pending[ATH_N_XFER];
 
 	STAILQ_HEAD(, ath_usb_data)	sc_cmd_active;
 	STAILQ_HEAD(, ath_usb_data)	sc_cmd_inactive;
@@ -512,7 +512,7 @@ struct ath_usb_softc {
 	uint8_t				ep_cab;
 	uint8_t				ep_uapsd;
 	uint8_t				ep_mgmt;
-	uint8_t				ep_data[ath_N_XFER];
+	uint8_t				ep_data[ATH_N_XFER];
 
 	/* 
 	 * Firmware cannot handle more than 8 STAs.

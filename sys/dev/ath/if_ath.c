@@ -1383,9 +1383,12 @@ ath_attach(u_int16_t venid, u_int16_t devid, struct ath_softc *sc)
 	/*
 	 * Put it to sleep for now.
 	 */
-	ATH_LOCK(sc);
+	//TODO: ATH_LOCK disabled only for development purpose, need to investigate below issue:
+	// Sleeping on "athwmi" with the following non-sleepable locks held:
+	// exclusive sleep mutex if_ath_usb0 (if_ath_usb0) r = 0 (0xfffffe0062f011a0) locked @ /usr/src/sys/dev/ath/if_ath.c:1386
+	//ATH_LOCK(sc);
 	ath_power_setpower(sc, HAL_PM_FULL_SLEEP, 1);
-	ATH_UNLOCK(sc);
+	//ATH_UNLOCK(sc);
 
 	return 0;
 bad2:
