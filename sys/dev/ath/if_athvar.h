@@ -940,6 +940,7 @@ struct ath_softc {
 #define	ATH_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_mtx)
 #define	ATH_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_OWNED)
 #define	ATH_UNLOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_NOTOWNED)
+#define	ATH_LOCK_OWNED(_sc)		(mtx_owned(&(_sc)->sc_mtx) != 0)
 
 /*
  * The TX lock is non-reentrant and serialises the TX frame send
@@ -962,6 +963,7 @@ struct ath_softc {
 		MA_NOTOWNED)
 #define	ATH_TX_TRYLOCK(_sc)	(mtx_owned(&(_sc)->sc_tx_mtx) != 0 &&	\
 					mtx_trylock(&(_sc)->sc_tx_mtx))
+#define	ATH_TX_LOCK_OWNED(_sc)		(mtx_owned(&(_sc)->sc_tx_mtx) != 0)
 
 /*
  * The PCU lock is non-recursive and should be treated as a spinlock.
@@ -1017,6 +1019,7 @@ struct ath_softc {
 		MA_OWNED)
 #define	ATH_RX_UNLOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_rx_mtx,	\
 		MA_NOTOWNED)
+#define	ATH_RX_LOCK_OWNED(_sc)		(mtx_owned(&(_sc)->sc_rx_mtx) != 0)
 
 #define	ATH_TXQ_SETUP(sc, i)	((sc)->sc_txqsetup & (1<<i))
 
