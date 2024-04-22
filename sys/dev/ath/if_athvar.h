@@ -997,6 +997,7 @@ struct ath_softc {
 		MA_OWNED)
 #define	ATH_PCU_UNLOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_pcu_mtx,	\
 		MA_NOTOWNED)
+#define	ATH_PCU_LOCK_OWNED(_sc)		(mtx_owned(&(_sc)->sc_pcu_mtx) != 0)
 
 /*
  * The RX lock is primarily a(nother) workaround to ensure that the
@@ -1035,6 +1036,7 @@ struct ath_softc {
 	mtx_assert(&(_sc)->sc_txbuflock, MA_OWNED)
 #define	ATH_TXBUF_UNLOCK_ASSERT(_sc) \
 	mtx_assert(&(_sc)->sc_txbuflock, MA_NOTOWNED)
+#define	ATH_TXBUF_LOCK_OWNED(_sc)		(mtx_owned(&(_sc)->sc_txbuflock) != 0)
 
 #define	ATH_TXSTATUS_LOCK_INIT(_sc) do { \
 	snprintf((_sc)->sc_txcompname, sizeof((_sc)->sc_txcompname), \
@@ -1048,6 +1050,8 @@ struct ath_softc {
 #define	ATH_TXSTATUS_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_txcomplock)
 #define	ATH_TXSTATUS_LOCK_ASSERT(_sc) \
 	mtx_assert(&(_sc)->sc_txcomplock, MA_OWNED)
+#define	ATH_TXSTATUS_LOCK_OWNED(_sc)		(mtx_owned(&(_sc)->sc_txcomplock) != 0)
+
 #define ATH_USB_LOCK_INIT(_sc) do { \
 	snprintf((_sc)->sc_usb_mtx_name,				\
 	    sizeof((_sc)->sc_usb_mtx_name),				\
