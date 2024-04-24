@@ -1521,7 +1521,9 @@ ath_usb_htc_setup(struct ath_usb_softc *usc)
 	error = ath_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
 	if (error == 0 && usc->wait_msg_id != 0)
 		error = msleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athhtc",
-					   hz);
+		 			   hz); 
+		// error = msleep(&usc->wait_msg_id, &Giant, PCATCH, "athhtc",
+		// 			   hz);
 	usc->wait_msg_id = 0;
 
 	ATH_USB_UNLOCK(usc->sc_sc);
@@ -1570,6 +1572,7 @@ ath_usb_htc_connect_svc(struct ath_usb_softc *usc, uint16_t svc_id,
 	error = ath_usb_htc_msg(usc, AR_HTC_MSG_CONN_SVC, &msg, sizeof(msg));
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0)
+		// error = msleep(&usc->wait_msg_id, &Giant, PCATCH, "athhtc", hz * 2);
 		error = msleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athhtc", hz * 2);
 	usc->wait_msg_id = 0;
 
@@ -1620,7 +1623,8 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		 * data->xfer until it is done or we'll cause major confusion
 		 * in the USB stack.
 		 */
-		msleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmx", hz);
+		msleep(&usc->wait_msg_id, &Giant, PCATCH, "athwmx", hz);//zmienic na giant i w ..._usb_fw.c bo to jest niezależne od tego co Rafał robi
+		// msleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmx", hz);//zmienic na giant i w ..._usb_fw.c bo to jest niezależne od tego co Rafał robi
 	}
 	xferlen = sizeof(*htc) + sizeof(*wmi) + ilen;
 	data->buflen = xferlen;
@@ -1648,6 +1652,7 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
 	error = msleep(&usc->wait_cmd_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmi", 2*hz);
+	// error = msleep(&usc->wait_cmd_id, &Giant, PCATCH, "athwmi", 2*hz);
 	if (error == EWOULDBLOCK) {
 		printf("%s: firmware command 0x%x timed out\n",
 			device_get_name(usc->usb_dev), cmd_id);
