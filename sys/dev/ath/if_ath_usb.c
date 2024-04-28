@@ -25,6 +25,7 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/types.h>
+#include <sys/proc.h>
 #include <sys/param.h>
 #include <sys/limits.h>
 #include <sys/mutex.h>
@@ -42,6 +43,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/kdb.h>
 #include <sys/queue.h>
 #include <sys/taskqueue.h>
+#include <sys/_cpuset.h>
+#include <sys/cpuset.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -136,6 +139,9 @@ ar9271_load_ani(struct ath_softc *sc)
 	AR_WRITE_BARRIER(sc);
 #endif	/* Nath_USB */
 }
+
+int	kern_cpuset_setaffinity(struct thread *td, cpulevel_t level,
+	    cpuwhich_t which, id_t id, cpuset_t *maskp);
 
 void		ath_usb_attachhook(device_t self);
 int		ath_usb_open_pipes(struct ath_usb_softc *);
@@ -464,6 +470,8 @@ ath_usb_attach(device_t self)
 #endif
 	//mtx_init(&sc->sc_usb_mtx, device_get_nameunit(self), MTX_NETWORK_LOCK, MTX_DEF);
 
+	lockinit(&sc->sc_lock, PCATCH, "Main Lock2", hz, LK_CANRECURSE);
+	sx_init(&sc->sc_sx_lock, "SX Lock");
 	ATH_LOCK_INIT(sc);
 	ATH_USB_LOCK_INIT(sc);
  	ATH_PCU_LOCK_INIT(sc);
@@ -471,13 +479,22 @@ ath_usb_attach(device_t self)
  	ATH_TX_LOCK_INIT(sc);
  	ATH_TXSTATUS_LOCK_INIT(sc);
 
+	{
+		struct thread *td = curthread;
+		cpuset_t cpuset;
+		int cpu = 6;
+		CPU_ZERO(&cpuset);
+  		CPU_SET(cpu, &cpuset);
+		kern_cpuset_setaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, &cpuset);
+	}
+
 #if ATHN_API
 	// MichalP calib_to timeout missing don't know how to put it all together
 	TIMEOUT_TASK_INIT(taskqueue_thread, &sc->scan_to, 0, ath_usb_next_scan, sc);
 	TASK_INIT(&sc->sc_task, 0, ath_usb_task, sc);
 #endif
 	error = usbd_transfer_setup(uaa->device, &uaa->info.bIfaceIndex, usc->sc_xfer, ath_if_config,
-								ATH_N_XFER, usc, &sc->sc_usb_mtx);
+								ATH_N_XFER, usc, (struct mtx *)&sc->sc_usb_mtx);
 	if (error) {
 		device_printf(sc->sc_dev,
 					  "could not allocate USB transfers, err=%s\n",
@@ -488,6 +505,8 @@ ath_usb_attach(device_t self)
 		ATH_RX_LOCK_DESTROY(sc);
 		ATH_TX_LOCK_DESTROY(sc);
 		ATH_LOCK_DESTROY(sc);
+		lockdestroy(&sc->sc_lock);
+		sx_destroy(&sc->sc_sx_lock);
 		return error;
 	}
 
@@ -546,6 +565,8 @@ bad:
 	ATH_RX_LOCK_DESTROY(sc);
 	ATH_TX_LOCK_DESTROY(sc);
 	ATH_LOCK_DESTROY(sc);
+	lockdestroy(&sc->sc_lock);
+	sx_destroy(&sc->sc_sx_lock);
 	return error;
 }
 
@@ -581,6 +602,8 @@ ath_usb_detach(device_t self)
 	ATH_RX_LOCK_DESTROY(sc);
 	ATH_TX_LOCK_DESTROY(sc);
 	ATH_LOCK_DESTROY(sc);
+	lockdestroy(&sc->sc_lock);
+	sx_destroy(&sc->sc_sx_lock);
 	free(usc, M_TEMP);
 	printf("ath_usb_detach called \n");
 	return (0);
@@ -593,7 +616,7 @@ ath_usb_get_fw_ver(struct ath_softc *sc, struct ar_wmi_fw_version *version)
 	struct ar_wmi_fw_version cmd_rsp;
 	int error;
 
-	device_printf(sc->sc_dev, "%s: called \n", __func__);
+	// device_printf(sc->sc_dev, "%s: called \n", __func__);
 
 	ATH_USB_LOCK(usc->sc_sc);
 	error = ath_usb_wmi_xcmd(usc, AR_WMI_GET_FW_VERSION, NULL, 0, version);
@@ -619,7 +642,7 @@ ath_usb_verify_fw_ver(struct ath_softc *sc, struct ar_wmi_fw_version *img_ver)
 	struct ar_wmi_fw_version fw_ver;
 	int error;
 
-	device_printf(sc->sc_dev, "%s: called \n", __func__);
+	// device_printf(sc->sc_dev, "%s: called \n", __func__);
 
 	error = ath_usb_get_fw_ver(sc, &fw_ver);
 
@@ -1111,7 +1134,7 @@ ath_if_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 	}
 	/* FALLTHROUGH */
 	case USB_ST_SETUP:
-		printf("USB_ST_SETUP called\n");
+		// printf("USB_ST_SETUP called\n");
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 		break;
@@ -1520,7 +1543,7 @@ ath_usb_htc_setup(struct ath_usb_softc *usc)
 	usc->wait_msg_id = AR_HTC_MSG_CONF_PIPE_RSP;
 	error = ath_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
 	if (error == 0 && usc->wait_msg_id != 0)
-		error = msleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athhtc",
+		error = mtx_sleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athhtc",
 					   hz);
 	usc->wait_msg_id = 0;
 
@@ -1570,7 +1593,7 @@ ath_usb_htc_connect_svc(struct ath_usb_softc *usc, uint16_t svc_id,
 	error = ath_usb_htc_msg(usc, AR_HTC_MSG_CONN_SVC, &msg, sizeof(msg));
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0)
-		error = msleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athhtc", hz * 2);
+		error = mtx_sleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athhtc", hz * 2);
 	usc->wait_msg_id = 0;
 
 	ATH_USB_UNLOCK(usc->sc_sc);
@@ -1604,7 +1627,28 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct ar_wmi_cmd_hdr *wmi;
 	int xferlen, error;
 
+	int ieee80211_mutex_owned = 0;
+	int ath_mutex_owned = 0;
+	int ath_pcu_mutex_owned = 0;
+
+	if(mtx_owned(&sc->sc_pcu_mtx))
+	{
+		ATH_PCU_UNLOCK(sc);
+		ath_pcu_mutex_owned = 1;
+	}
+
+	if(mtx_owned(&sc->sc_mtx))
+	{
+		ATH_UNLOCK(sc);
+		ath_mutex_owned = 1;
+	}
+
 	//ATH_USB_LOCK_ASSERT(sc);
+	if(mtx_owned(&sc->sc_ic.ic_comlock.mtx))
+	{
+		IEEE80211_UNLOCK(&sc->sc_ic);
+		ieee80211_mutex_owned = 1;
+	}
 
 	data = STAILQ_FIRST(&usc->sc_cmd_inactive);
 	if (data == NULL) {
@@ -1613,14 +1657,17 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		return -1;
 	}
 	STAILQ_REMOVE_HEAD(&usc->sc_cmd_inactive, next);
-	ATH_USB_LOCK(sc);
+
+	// sx_slock( &usc->sc_sc->sc_sx_lock);
+		ATH_USB_LOCK(sc);
 	while (usc->wait_cmd_id) {
 		/*
 		 * The previous USB transfer is not done yet. We can't use
 		 * data->xfer until it is done or we'll cause major confusion
 		 * in the USB stack.
 		 */
-		msleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmx", hz);
+		// mtx_sleep(&usc->wait_msg_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmx", hz);
+		DELAY(30000);
 	}
 	xferlen = sizeof(*htc) + sizeof(*wmi) + ilen;
 	data->buflen = xferlen;
@@ -1641,20 +1688,22 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	usc->wait_cmd_id = cmd_id;
 	usc->obuf = obuf;
 	STAILQ_INSERT_TAIL(&usc->sc_cmd_pending, data, next);
+
 	usbd_transfer_start(usc->sc_xfer[ath_BULK_CMD]);
 
 	/*
 	 * Wait for WMI command complete interrupt. In case it does not fire
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
-	error = msleep(&usc->wait_cmd_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmi", 2*hz);
+	error = mtx_sleep(&usc->wait_cmd_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmi", 2*hz);
 	if (error == EWOULDBLOCK) {
 		printf("%s: firmware command 0x%x timed out\n",
 			device_get_name(usc->usb_dev), cmd_id);
 		error = ETIMEDOUT;
 	}
 
-	device_printf(sc->sc_dev, "%s: aftersleep\n", __func__);
+
+	// device_printf(sc->sc_dev, "%s: aftersleep\n", __func__);
 
 	/*
 	 * Both the WMI command and transfer are done or have timed out.
@@ -1663,8 +1712,28 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	usc->obuf = NULL;
 	usc->wait_msg_id = 0;
 	usc->wait_cmd_id = 0;
+
 	wakeup(&usc->wait_cmd_id);
+	// sx_sunlock(&usc->sc_sc->sc_sx_lock);
 	ATH_USB_UNLOCK(sc);
+
+		
+	if(ieee80211_mutex_owned == 1)
+	{
+		IEEE80211_LOCK(&sc->sc_ic);
+	}
+
+	if(ath_mutex_owned == 1)
+	{
+		ATH_LOCK(sc);
+	}
+
+	if(ath_pcu_mutex_owned == 1)
+	{
+		ATH_PCU_LOCK(sc);
+	}
+
+	// IEEE80211_LOCK(ic);
 	return (error);
 }
 
@@ -1703,7 +1772,7 @@ ath_usb_read(struct ath_softc *sc, uint32_t addr)
 	uint32_t val;
 	int error;
 
-	device_printf(sc->sc_dev, "%s: called \n", __func__);
+	// device_printf(sc->sc_dev, "%s: called \n", __func__);
 
 	/* Flush pending writes for strict consistency. */
 	ath_usb_write_barrier(sc);

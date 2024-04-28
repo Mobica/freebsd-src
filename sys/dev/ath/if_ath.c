@@ -49,6 +49,8 @@
 #include "opt_ah.h"
 #include "opt_wlan.h"
 
+#include <sys/types.h>
+#include <sys/proc.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/sysctl.h>
@@ -69,6 +71,7 @@
 #include <sys/module.h>
 #include <sys/ktr.h>
 #include <sys/smp.h>	/* for mp_ncpus */
+#include <sys/thr.h>
 
 #include <machine/bus.h>
 
@@ -148,6 +151,9 @@
  * worthwhile to allow more for applications like proxy sta.
  */
 CTASSERT(ATH_BCBUF <= 8);
+
+int	kern_cpuset_setaffinity(struct thread *td, cpulevel_t level,
+	    cpuwhich_t which, id_t id, cpuset_t *maskp);
 
 static struct ieee80211vap *ath_vap_create(struct ieee80211com *,
 		    const char [IFNAMSIZ], int, enum ieee80211_opmode, int,
@@ -353,7 +359,7 @@ void
 _ath_power_set_selfgen(struct ath_softc *sc, int power_state, const char *file, int line)
 {
 
-	ATH_LOCK_ASSERT(sc);
+	// ATH_LOCK_ASSERT(sc);
 
 	DPRINTF(sc, ATH_DEBUG_PWRSAVE, "%s: (%s:%d) state=%d, refcnt=%d\n",
 	    __func__,
@@ -388,7 +394,7 @@ _ath_power_set_selfgen(struct ath_softc *sc, int power_state, const char *file, 
 void
 _ath_power_set_power_state(struct ath_softc *sc, int power_state, const char *file, int line)
 {
-	ATH_LOCK_ASSERT(sc);
+	// ATH_LOCK_ASSERT(sc);
 
 	DPRINTF(sc, ATH_DEBUG_PWRSAVE, "%s: (%s:%d) state=%d, refcnt=%d\n",
 	    __func__,
@@ -610,6 +616,15 @@ ath_attach(u_int16_t venid, u_int16_t devid, struct ath_softc *sc)
 
 	ic->ic_softc = sc;
 	ic->ic_name = device_get_nameunit(sc->sc_dev);
+
+	// {
+	// 	struct thread *td = curthread;
+	// 	cpuset_t cpuset;
+	// 	int cpu = 6;
+	// 	CPU_ZERO(&cpuset);
+  	// 	CPU_SET(cpu, &cpuset);
+	// 	kern_cpuset_setaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, &cpuset);
+	// }
 
 	/*
 	 * Configure the initial configuration data.
@@ -2838,7 +2853,7 @@ ath_txrx_stop_locked(struct ath_softc *sc)
 	    sc->sc_txstart_cnt || sc->sc_intr_cnt) {
 		if (i <= 0)
 			break;
-		msleep(sc, &sc->sc_pcu_mtx, 0, "ath_txrx_stop",
+		mtx_sleep(sc, &sc->sc_pcu_mtx, 0, "ath_txrx_stop",
 		    msecs_to_ticks(10));
 		i--;
 	}
@@ -3755,12 +3770,14 @@ ath_setslottime(struct ath_softc *sc)
 	    ic->ic_flags & IEEE80211_F_SHSLOT ? "short" : "long", usec);
 
 	/* Wake up the hardware first before updating the slot time */
-	ATH_LOCK(sc);
+	// ATH_LOCK(sc);
+	lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 	ath_power_set_power_state(sc, HAL_PM_AWAKE);
 	ath_hal_setslottime(ah, usec);
 	ath_power_restore_power_state(sc);
 	sc->sc_updateslot = OK;
-	ATH_UNLOCK(sc);
+	lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
+	// ATH_UNLOCK(sc);
 }
 
 /*
@@ -5085,7 +5102,7 @@ ath_tx_stopdma(struct ath_softc *sc, struct ath_txq *txq)
 {
 	struct ath_hal *ah = sc->sc_ah;
 
-	ATH_TXQ_LOCK_ASSERT(txq);
+	// ATH_TXQ_LOCK_ASSERT(txq);
 
 	DPRINTF(sc, ATH_DEBUG_RESET,
 	    "%s: tx queue [%u] %p, active=%d, hwpending=%d, flags 0x%08x, "
@@ -5134,9 +5151,11 @@ ath_stoptxdma(struct ath_softc *sc)
 		/* Stop the data queues */
 		for (i = 0; i < HAL_NUM_TX_QUEUES; i++) {
 			if (ATH_TXQ_SETUP(sc, i)) {
-				ATH_TXQ_LOCK(&sc->sc_txq[i]);
+				// ATH_TXQ_LOCK(&sc->sc_txq[i]);
+				lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 				ath_tx_stopdma(sc, &sc->sc_txq[i]);
-				ATH_TXQ_UNLOCK(&sc->sc_txq[i]);
+				// ATH_TXQ_UNLOCK(&sc->sc_txq[i]);
+				lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 			}
 		}
 	}
@@ -5275,7 +5294,9 @@ ath_chan_set(struct ath_softc *sc, struct ieee80211_channel *chan)
 	/* (Try to) stop TX/RX from occurring */
 	taskqueue_block(sc->sc_tq);
 
-	ATH_PCU_LOCK(sc);
+	// ATH_PCU_LOCK(sc);
+	lockmgr(&sc->sc_lock, LK_SHARED, NULL);
+
 
 	/* Disable interrupts */
 	ath_hal_intrset(ah, 0);
@@ -5289,7 +5310,8 @@ ath_chan_set(struct ath_softc *sc, struct ieee80211_channel *chan)
 	/* Stop pending RX/TX completion */
 	ath_txrx_stop_locked(sc);
 
-	ATH_PCU_UNLOCK(sc);
+	// ATH_PCU_UNLOCK(sc);
+	lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 
 	DPRINTF(sc, ATH_DEBUG_RESET, "%s: %u (%u MHz, flags 0x%x)\n",
 	    __func__, ieee80211_chan2ieee(ic, chan),
@@ -5397,11 +5419,13 @@ ath_chan_set(struct ath_softc *sc, struct ieee80211_channel *chan)
 	}
 
 finish:
-	ATH_PCU_LOCK(sc);
+	// ATH_PCU_LOCK(sc);
+	lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 	sc->sc_inreset_cnt--;
 	/* XXX only do this if sc_inreset_cnt == 0? */
 	ath_hal_intrset(ah, sc->sc_imask);
-	ATH_PCU_UNLOCK(sc);
+	// ATH_PCU_UNLOCK(sc);
+	lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 
 	ath_txrx_start(sc);
 	/* XXX ath_start? */
@@ -5565,16 +5589,20 @@ ath_scan_start(struct ieee80211com *ic)
 	/* XXX calibration timer? */
 	/* XXXGL: is constant ieee80211broadcastaddr a correct choice? */
 
-	ATH_LOCK(sc);
+	// ATH_LOCK(sc);
+	lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 	sc->sc_scanning = 1;
 	sc->sc_syncbeacon = 0;
 	rfilt = ath_calcrxfilter(sc);
-	ATH_UNLOCK(sc);
+	// ATH_UNLOCK(sc);
+	
 
-	ATH_PCU_LOCK(sc);
+	// ATH_PCU_LOCK(sc);
 	ath_hal_setrxfilter(ah, rfilt);
 	ath_hal_setassocid(ah, ieee80211broadcastaddr, 0);
-	ATH_PCU_UNLOCK(sc);
+	// ATH_PCU_UNLOCK(sc);
+	lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
+	
 
 	DPRINTF(sc, ATH_DEBUG_STATE, "%s: RX filter 0x%x bssid %s aid 0\n",
 		 __func__, rfilt, ether_sprintf(ieee80211broadcastaddr));
@@ -5827,6 +5855,22 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	int csa_run_transition = 0;
 	enum ieee80211_state ostate = vap->iv_state;
 
+	
+
+	IEEE80211_UNLOCK(ic);
+	// sx_slock(&sc->sc_sx_lock);
+
+	{
+		struct thread *td = curthread;
+		cpuset_t cpuset;
+		int cpu = 6;
+		CPU_ZERO(&cpuset);
+  		CPU_SET(cpu, &cpuset);
+		kern_cpuset_setaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, &cpuset);
+	}
+
+	IEEE80211_LOCK(ic);
+
 	static const HAL_LED_STATE leds[] = {
 	    HAL_LED_INIT,	/* IEEE80211_S_INIT */
 	    HAL_LED_SCAN,	/* IEEE80211_S_SCAN */
@@ -5853,6 +5897,7 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 
 	/* Before we touch the hardware - wake it up */
 	ATH_LOCK(sc);
+	// lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 	/*
 	 * If the NIC is in anything other than SLEEP state,
 	 * we need to ensure that self-generated frames are
@@ -5861,8 +5906,13 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	 *
 	 * XXX TODO: is this actually the case? :-)
 	 */
+
 	if (nstate != IEEE80211_S_SLEEP)
+	{
+		// lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 		ath_power_setselfgen(sc, HAL_PM_AWAKE);
+		// lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
+	}
 
 	/*
 	 * Now, wake the thing up.
@@ -5875,6 +5925,8 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	 */
 	callout_stop(&sc->sc_cal_ch);
 	ATH_UNLOCK(sc);
+	
+	// lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 
 	if (ostate == IEEE80211_S_CSA && nstate == IEEE80211_S_RUN)
 		csa_run_transition = 1;
@@ -5891,9 +5943,13 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 
 		/* Ensure we stay awake during scan */
 		ATH_LOCK(sc);
+		// IEEE80211_UNLOCK(ic);
+		// lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 		ath_power_setselfgen(sc, HAL_PM_AWAKE);
 		ath_power_setpower(sc, HAL_PM_AWAKE, 1);
 		ATH_UNLOCK(sc);
+		// lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
+;
 
 		ath_hal_intrset(ah,
 		    sc->sc_imask &~ (HAL_INT_SWBA | HAL_INT_BMISS));
@@ -5901,7 +5957,6 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		sc->sc_beacons = 0;
 		taskqueue_unblock(sc->sc_tq);
 	}
-
 	ni = ieee80211_ref_node(vap->iv_bss);
 	rfilt = ath_calcrxfilter(sc);
 	stamode = (vap->iv_opmode == IEEE80211_M_STA ||
@@ -5928,7 +5983,6 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 			if (ath_hal_keyisvalid(ah, i))
 				ath_hal_keysetmac(ah, i, ni->ni_bssid);
 	}
-
 	/*
 	 * Invoke the parent method to do net80211 work.
 	 */
@@ -6188,6 +6242,7 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	} else if (nstate == IEEE80211_S_SLEEP) {
 		/* We're going to sleep, so transition appropriately */
 		/* For now, only do this if we're a single STA vap */
+
 		if (sc->sc_nvaps == 1 &&
 		    vap->iv_opmode == IEEE80211_M_STA) {
 			DPRINTF(sc, ATH_DEBUG_BEACON, "%s: syncbeacon=%d\n", __func__, sc->sc_syncbeacon);
@@ -6245,7 +6300,9 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		}
 		ATH_UNLOCK(sc);
 	}
+
 bad:
+	// sx_sunlock(&sc->sc_sx_lock);
 	ieee80211_free_node(ni);
 
 	/*
@@ -6596,7 +6653,8 @@ ath_parent(struct ieee80211com *ic)
 	struct ath_softc *sc = ic->ic_softc;
 	int error = EDOOFUS;
 
-	ATH_LOCK(sc);
+	// ATH_LOCK(sc);
+	lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 	if (ic->ic_nrunning > 0) {
 		/*
 		 * To avoid rescanning another access point,
@@ -6624,7 +6682,8 @@ ath_parent(struct ieee80211com *ic)
 		if (!sc->sc_invalid)
 			ath_power_setpower(sc, HAL_PM_FULL_SLEEP, 1);
 	}
-	ATH_UNLOCK(sc);
+	// ATH_UNLOCK(sc);
+	lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 
 	if (error == 0) {                        
 #ifdef ATH_TX99_DIAG

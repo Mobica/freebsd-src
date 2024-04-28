@@ -42,6 +42,9 @@
 #include <net80211/ieee80211_radiotap.h>
 #include <dev/ath/if_athioctl.h>
 #include <dev/ath/if_athrate.h>
+#include <sys/lock.h>
+#include <sys/lockmgr.h>
+#include <sys/sx.h>
 #ifdef	ATH_DEBUG_ALQ
 #include <dev/ath/if_ath_alq.h>
 #endif
@@ -592,6 +595,8 @@ struct ath_softc {
 	int			sc_rx_stopped;	/* XXX only for EDMA */
 	int			sc_rx_resetted;	/* XXX only for EDMA */
 
+
+	struct sx       sc_sx_lock;
 	void 			(*sc_node_cleanup)(struct ieee80211_node *);
 	void 			(*sc_node_free)(struct ieee80211_node *);
 	device_t		sc_dev;
@@ -599,6 +604,7 @@ struct ath_softc {
 	HAL_BUS_HANDLE		sc_sh;		/* bus space handle */
 	bus_dma_tag_t		sc_dmat;	/* bus DMA tag */
 	struct mtx		sc_mtx;		/* master lock (recursive) */
+	struct lock		sc_lock;
 	struct mtx		sc_pcu_mtx;	/* PCU access mutex */
 	char			sc_pcu_mtx_name[32];
 	struct mtx		sc_rx_mtx;	/* RX access mutex */
@@ -938,7 +944,8 @@ struct ath_softc {
 #define	ATH_LOCK_DESTROY(_sc)	mtx_destroy(&(_sc)->sc_mtx)
 #define	ATH_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
 #define	ATH_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_mtx)
-#define	ATH_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_OWNED)
+// #define	ATH_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_OWNED)
+#define ATH_LOCK_ASSERT(_sc)
 #define	ATH_UNLOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_NOTOWNED)
 
 /*

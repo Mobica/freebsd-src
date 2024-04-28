@@ -1392,7 +1392,8 @@ ath_legacy_stoprecv(struct ath_softc *sc, int dodelay)
 		((_pa) - (_sc)->sc_rxdma.dd_desc_paddr)))
 	struct ath_hal *ah = sc->sc_ah;
 
-	ATH_RX_LOCK(sc);
+	// ATH_RX_LOCK(sc);
+	lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 
 	ath_hal_stoppcurecv(ah);	/* disable PCU */
 	ath_hal_setrxfilter(ah, 0);	/* clear recv filter */
@@ -1433,7 +1434,8 @@ ath_legacy_stoprecv(struct ath_softc *sc, int dodelay)
 
 	sc->sc_rxlink = NULL;		/* just in case */
 
-	ATH_RX_UNLOCK(sc);
+	// ATH_RX_UNLOCK(sc);
+	lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 #undef PA2DESC
 }
 
@@ -1452,7 +1454,8 @@ ath_legacy_startrecv(struct ath_softc *sc)
 	struct ath_hal *ah = sc->sc_ah;
 	struct ath_buf *bf;
 
-	ATH_RX_LOCK(sc);
+	// ATH_RX_LOCK(sc);
+	lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 
 	/*
 	 * XXX should verify these are already all NULL!
@@ -1480,7 +1483,8 @@ ath_legacy_startrecv(struct ath_softc *sc)
 	ath_mode_init(sc);		/* set filters, etc. */
 	ath_hal_startpcurecv(ah, (!! sc->sc_scanning));	/* re-enable PCU/DMA engine */
 
-	ATH_RX_UNLOCK(sc);
+	// ATH_RX_UNLOCK(sc);
+	lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 	return 0;
 }
 
