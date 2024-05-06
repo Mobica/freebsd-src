@@ -5857,20 +5857,23 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 
 	
 
-	IEEE80211_UNLOCK(ic);
-	// sx_slock(&sc->sc_sx_lock);
+	// ATH_UNLOCK(sc);
 
-	{
-		struct thread *td = curthread;
-		cpuset_t cpuset;
-		int cpu = 6;
-		CPU_ZERO(&cpuset);
-  		CPU_SET(cpu, &cpuset);
-		kern_cpuset_setaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, &cpuset);
-	}
+	// IEEE80211_UNLOCK(ic);
+	// // sx_slock(&sc->sc_sx_lock);
 
-	IEEE80211_LOCK(ic);
+	// {
+	// 	struct thread *td = curthread;
+	// 	cpuset_t cpuset;
+	// 	int cpu = 6;
+	// 	CPU_ZERO(&cpuset);
+  	// 	CPU_SET(cpu, &cpuset);
+	// 	kern_cpuset_setaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, &cpuset);
+	// }
 
+	// IEEE80211_LOCK(ic);
+
+	// ATH_LOCK(sc);
 	static const HAL_LED_STATE leds[] = {
 	    HAL_LED_INIT,	/* IEEE80211_S_INIT */
 	    HAL_LED_SCAN,	/* IEEE80211_S_SCAN */
@@ -5896,7 +5899,13 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	IEEE80211_LOCK_ASSERT(ic);
 
 	/* Before we touch the hardware - wake it up */
-	ATH_LOCK(sc);
+	// ATH_LOCK(sc);
+	int mtx_lock_owned = 0;
+	if(!mtx_owned(&sc->sc_mtx))
+	{
+		mtx_lock(&sc->sc_mtx);
+		mtx_lock_owned = 1;
+	}
 	// lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 	/*
 	 * If the NIC is in anything other than SLEEP state,
@@ -5924,7 +5933,9 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	 * ATH_LOCK held.
 	 */
 	callout_stop(&sc->sc_cal_ch);
-	ATH_UNLOCK(sc);
+	// ATH_UNLOCK(sc);
+	if(mtx_lock_owned)
+		mtx_unlock(&sc->sc_mtx);
 	
 	// lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 
@@ -5942,12 +5953,14 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		 */
 
 		/* Ensure we stay awake during scan */
-		ATH_LOCK(sc);
+		// ATH_LOCK(sc);
+		mtx_lock(&sc->sc_mtx);
 		// IEEE80211_UNLOCK(ic);
 		// lockmgr(&sc->sc_lock, LK_SHARED, NULL);
 		ath_power_setselfgen(sc, HAL_PM_AWAKE);
 		ath_power_setpower(sc, HAL_PM_AWAKE, 1);
-		ATH_UNLOCK(sc);
+		// ATH_UNLOCK(sc);
+		mtx_unlock(&sc->sc_mtx);
 		// lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 ;
 
@@ -6290,7 +6303,8 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		 *
 		 * So do kick off the cal timer to get NF/ANI going.
 		 */
-		ATH_LOCK(sc);
+		// ATH_LOCK(sc);
+		mtx_lock(&sc->sc_mtx);
 		if (ath_longcalinterval != 0) {
 			/* start periodic recalibration timer */
 			callout_reset(&sc->sc_cal_ch, 1, ath_calibrate, sc);
@@ -6298,7 +6312,8 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 			DPRINTF(sc, ATH_DEBUG_CALIBRATE,
 			    "%s: calibration disabled\n", __func__);
 		}
-		ATH_UNLOCK(sc);
+		// ATH_UNLOCK(sc);
+		mtx_unlock(&sc->sc_mtx);
 	}
 
 bad:
@@ -6309,9 +6324,11 @@ bad:
 	 * Restore the power state - either to what it was, or
 	 * to network_sleep if it's alright.
 	 */
-	ATH_LOCK(sc);
+	// ATH_LOCK(sc);
+	mtx_lock(&sc->sc_mtx);
 	ath_power_restore_power_state(sc);
-	ATH_UNLOCK(sc);
+	// ATH_UNLOCK(sc);
+	mtx_unlock(&sc->sc_mtx);
 	return error;
 }
 

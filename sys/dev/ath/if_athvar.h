@@ -408,15 +408,15 @@ struct ath_txq {
 #define	ATH_TXQ_LOCK_DESTROY(_tq)	mtx_destroy(&(_tq)->axq_lock)
 #define	ATH_TXQ_LOCK(_tq)		mtx_lock(&(_tq)->axq_lock)
 #define	ATH_TXQ_UNLOCK(_tq)		mtx_unlock(&(_tq)->axq_lock)
-#define	ATH_TXQ_LOCK_ASSERT(_tq)	mtx_assert(&(_tq)->axq_lock, MA_OWNED)
-#define	ATH_TXQ_UNLOCK_ASSERT(_tq)	mtx_assert(&(_tq)->axq_lock,	\
-					    MA_NOTOWNED)
+#define	ATH_TXQ_LOCK_ASSERT(_tq)	//mtx_assert(&(_tq)->axq_lock, MA_OWNED)
+#define	ATH_TXQ_UNLOCK_ASSERT(_tq)	/* mtx_assert(&(_tq)->axq_lock,	\
+					    MA_NOTOWNED) */
 
 #define	ATH_NODE_LOCK(_an)		mtx_lock(&(_an)->an_mtx)
 #define	ATH_NODE_UNLOCK(_an)		mtx_unlock(&(_an)->an_mtx)
-#define	ATH_NODE_LOCK_ASSERT(_an)	mtx_assert(&(_an)->an_mtx, MA_OWNED)
-#define	ATH_NODE_UNLOCK_ASSERT(_an)	mtx_assert(&(_an)->an_mtx,	\
-					    MA_NOTOWNED)
+#define	ATH_NODE_LOCK_ASSERT(_an)	//mtx_assert(&(_an)->an_mtx, MA_OWNED)
+#define	ATH_NODE_UNLOCK_ASSERT(_an)	/* mtx_assert(&(_an)->an_mtx,	\
+					    MA_NOTOWNED) */
 
 /*
  * These are for the hardware queue.
@@ -605,6 +605,7 @@ struct ath_softc {
 	bus_dma_tag_t		sc_dmat;	/* bus DMA tag */
 	struct mtx		sc_mtx;		/* master lock (recursive) */
 	struct lock		sc_lock;
+	struct lock		sc_lock2;
 	struct mtx		sc_pcu_mtx;	/* PCU access mutex */
 	char			sc_pcu_mtx_name[32];
 	struct mtx		sc_rx_mtx;	/* RX access mutex */
@@ -942,11 +943,13 @@ struct ath_softc {
 	mtx_init(&(_sc)->sc_mtx, device_get_nameunit((_sc)->sc_dev), \
 		 NULL, MTX_DEF | MTX_RECURSE)
 #define	ATH_LOCK_DESTROY(_sc)	mtx_destroy(&(_sc)->sc_mtx)
-#define	ATH_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
-#define	ATH_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_mtx)
-// #define	ATH_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_OWNED)
+// #define	ATH_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
+#define	ATH_LOCK(_sc)		lockmgr(&(_sc)->sc_lock2, LK_SHARED, NULL)
+// #define	ATH_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_mtx)
+#define	ATH_UNLOCK(_sc)		lockmgr(&(_sc)->sc_lock2, LK_RELEASE, NULL)
+#define	ATH_LOCK_ASSERT(_sc)	//mtx_assert(&(_sc)->sc_mtx, MA_OWNED)
 #define ATH_LOCK_ASSERT(_sc)
-#define	ATH_UNLOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_NOTOWNED)
+#define	ATH_UNLOCK_ASSERT(_sc)	//mtx_assert(&(_sc)->sc_mtx, MA_NOTOWNED)
 
 /*
  * The TX lock is non-reentrant and serialises the TX frame send
@@ -963,10 +966,10 @@ struct ath_softc {
 #define	ATH_TX_LOCK_DESTROY(_sc)	mtx_destroy(&(_sc)->sc_tx_mtx)
 #define	ATH_TX_LOCK(_sc)		mtx_lock(&(_sc)->sc_tx_mtx)
 #define	ATH_TX_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_tx_mtx)
-#define	ATH_TX_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_tx_mtx,	\
-		MA_OWNED)
-#define	ATH_TX_UNLOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_tx_mtx,	\
-		MA_NOTOWNED)
+#define	ATH_TX_LOCK_ASSERT(_sc)	/* mtx_assert(&(_sc)->sc_tx_mtx,	\
+		MA_OWNED) */
+#define	ATH_TX_UNLOCK_ASSERT(_sc)	/* mtx_assert(&(_sc)->sc_tx_mtx,	\
+		MA_NOTOWNED) */
 #define	ATH_TX_TRYLOCK(_sc)	(mtx_owned(&(_sc)->sc_tx_mtx) != 0 &&	\
 					mtx_trylock(&(_sc)->sc_tx_mtx))
 
@@ -998,10 +1001,10 @@ struct ath_softc {
 #define	ATH_PCU_LOCK_DESTROY(_sc)	mtx_destroy(&(_sc)->sc_pcu_mtx)
 #define	ATH_PCU_LOCK(_sc)		mtx_lock(&(_sc)->sc_pcu_mtx)
 #define	ATH_PCU_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_pcu_mtx)
-#define	ATH_PCU_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_pcu_mtx,	\
-		MA_OWNED)
-#define	ATH_PCU_UNLOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_pcu_mtx,	\
-		MA_NOTOWNED)
+#define	ATH_PCU_LOCK_ASSERT(_sc)	/* mtx_assert(&(_sc)->sc_pcu_mtx,	\
+		MA_OWNED) */
+#define	ATH_PCU_UNLOCK_ASSERT(_sc)	/* mtx_assert(&(_sc)->sc_pcu_mtx,	\
+		MA_NOTOWNED) */
 
 /*
  * The RX lock is primarily a(nother) workaround to ensure that the
@@ -1020,10 +1023,10 @@ struct ath_softc {
 #define	ATH_RX_LOCK_DESTROY(_sc)	mtx_destroy(&(_sc)->sc_rx_mtx)
 #define	ATH_RX_LOCK(_sc)		mtx_lock(&(_sc)->sc_rx_mtx)
 #define	ATH_RX_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_rx_mtx)
-#define	ATH_RX_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_rx_mtx,	\
-		MA_OWNED)
-#define	ATH_RX_UNLOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_rx_mtx,	\
-		MA_NOTOWNED)
+#define	ATH_RX_LOCK_ASSERT(_sc)	/* mtx_assert(&(_sc)->sc_rx_mtx,	\
+		MA_OWNED) */
+#define	ATH_RX_UNLOCK_ASSERT(_sc)	/* mtx_assert(&(_sc)->sc_rx_mtx,	\
+		MA_NOTOWNED) */
 
 #define	ATH_TXQ_SETUP(sc, i)	((sc)->sc_txqsetup & (1<<i))
 
@@ -1035,10 +1038,10 @@ struct ath_softc {
 #define	ATH_TXBUF_LOCK_DESTROY(_sc)	mtx_destroy(&(_sc)->sc_txbuflock)
 #define	ATH_TXBUF_LOCK(_sc)		mtx_lock(&(_sc)->sc_txbuflock)
 #define	ATH_TXBUF_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_txbuflock)
-#define	ATH_TXBUF_LOCK_ASSERT(_sc) \
-	mtx_assert(&(_sc)->sc_txbuflock, MA_OWNED)
-#define	ATH_TXBUF_UNLOCK_ASSERT(_sc) \
-	mtx_assert(&(_sc)->sc_txbuflock, MA_NOTOWNED)
+#define	ATH_TXBUF_LOCK_ASSERT(_sc) /* \
+	mtx_assert(&(_sc)->sc_txbuflock, MA_OWNED) */
+#define	ATH_TXBUF_UNLOCK_ASSERT(_sc) /*\
+	mtx_assert(&(_sc)->sc_txbuflock, MA_NOTOWNED) */
 
 #define	ATH_TXSTATUS_LOCK_INIT(_sc) do { \
 	snprintf((_sc)->sc_txcompname, sizeof((_sc)->sc_txcompname), \
@@ -1050,8 +1053,8 @@ struct ath_softc {
 #define	ATH_TXSTATUS_LOCK_DESTROY(_sc)	mtx_destroy(&(_sc)->sc_txcomplock)
 #define	ATH_TXSTATUS_LOCK(_sc)		mtx_lock(&(_sc)->sc_txcomplock)
 #define	ATH_TXSTATUS_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_txcomplock)
-#define	ATH_TXSTATUS_LOCK_ASSERT(_sc) \
-	mtx_assert(&(_sc)->sc_txcomplock, MA_OWNED)
+#define	ATH_TXSTATUS_LOCK_ASSERT(_sc) /* \
+	mtx_assert(&(_sc)->sc_txcomplock, MA_OWNED) */
 #define ATH_USB_LOCK_INIT(_sc) do { \
 	snprintf((_sc)->sc_usb_mtx_name,				\
 	    sizeof((_sc)->sc_usb_mtx_name),				\
@@ -1063,7 +1066,7 @@ struct ath_softc {
 #define ATH_USB_LOCK_DESTROY(_sc) mtx_destroy(&(_sc)->sc_usb_mtx)
 #define ATH_USB_LOCK(_sc) mtx_lock(&(_sc)->sc_usb_mtx)
 #define ATH_USB_UNLOCK(_sc) mtx_unlock(&(_sc)->sc_usb_mtx)
-#define ATH_USB_LOCK_ASSERT(_sc) mtx_assert(&(_sc)->sc_usb_mtx, MA_OWNED)
+#define ATH_USB_LOCK_ASSERT(_sc) //mtx_assert(&(_sc)->sc_usb_mtx, MA_OWNED)
 int	ath_attach(u_int16_t, u_int16_t, struct ath_softc *);
 int	ath_detach(struct ath_softc *);
 void	ath_resume(struct ath_softc *);

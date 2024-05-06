@@ -818,6 +818,8 @@ ar5416AniGetListenTime(struct ath_hal *ah)
 	int good;
 	HAL_SURVEY_SAMPLE hs;
 
+	ath_hal_printf(ah, "%s: Scanning/Listenning\n", __func__);
+
 	/*
 	 * We shouldn't see ah_curchan be NULL, but just in case..
 	 */

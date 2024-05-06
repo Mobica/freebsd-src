@@ -471,6 +471,7 @@ ath_usb_attach(device_t self)
 	//mtx_init(&sc->sc_usb_mtx, device_get_nameunit(self), MTX_NETWORK_LOCK, MTX_DEF);
 
 	lockinit(&sc->sc_lock, PCATCH, "Main Lock2", hz, LK_CANRECURSE);
+	lockinit(&sc->sc_lock2, PCATCH, "Main Lock3", hz, LK_CANRECURSE);
 	sx_init(&sc->sc_sx_lock, "SX Lock");
 	ATH_LOCK_INIT(sc);
 	ATH_USB_LOCK_INIT(sc);
@@ -479,14 +480,14 @@ ath_usb_attach(device_t self)
  	ATH_TX_LOCK_INIT(sc);
  	ATH_TXSTATUS_LOCK_INIT(sc);
 
-	{
-		struct thread *td = curthread;
-		cpuset_t cpuset;
-		int cpu = 6;
-		CPU_ZERO(&cpuset);
-  		CPU_SET(cpu, &cpuset);
-		kern_cpuset_setaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, &cpuset);
-	}
+	// {
+	// 	struct thread *td = curthread;
+	// 	cpuset_t cpuset;
+	// 	int cpu = 1;
+	// 	CPU_ZERO(&cpuset);
+  	// 	CPU_SET(cpu, &cpuset);
+	// 	kern_cpuset_setaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, &cpuset);
+	// }
 
 #if ATHN_API
 	// MichalP calib_to timeout missing don't know how to put it all together
@@ -506,6 +507,7 @@ ath_usb_attach(device_t self)
 		ATH_TX_LOCK_DESTROY(sc);
 		ATH_LOCK_DESTROY(sc);
 		lockdestroy(&sc->sc_lock);
+		lockdestroy(&sc->sc_lock2);
 		sx_destroy(&sc->sc_sx_lock);
 		return error;
 	}
@@ -1639,7 +1641,8 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	if(mtx_owned(&sc->sc_mtx))
 	{
-		ATH_UNLOCK(sc);
+		// ATH_UNLOCK(sc);
+		mtx_unlock(&sc->sc_mtx);
 		ath_mutex_owned = 1;
 	}
 
@@ -1702,7 +1705,6 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		error = ETIMEDOUT;
 	}
 
-
 	// device_printf(sc->sc_dev, "%s: aftersleep\n", __func__);
 
 	/*
@@ -1716,7 +1718,6 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	wakeup(&usc->wait_cmd_id);
 	// sx_sunlock(&usc->sc_sc->sc_sx_lock);
 	ATH_USB_UNLOCK(sc);
-
 		
 	if(ieee80211_mutex_owned == 1)
 	{
@@ -1725,7 +1726,8 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	if(ath_mutex_owned == 1)
 	{
-		ATH_LOCK(sc);
+		// ATH_LOCK(sc);
+		mtx_lock(&sc->sc_mtx);
 	}
 
 	if(ath_pcu_mutex_owned == 1)

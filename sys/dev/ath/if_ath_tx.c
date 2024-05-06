@@ -2436,9 +2436,11 @@ ath_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
 	ATH_PCU_UNLOCK(sc);
 
 	/* Wake the hardware up already */
-	ATH_LOCK(sc);
+	// ATH_LOCK(sc);
+	mtx_lock(&sc->sc_mtx);
 	ath_power_set_power_state(sc, HAL_PM_AWAKE);
-	ATH_UNLOCK(sc);
+	// ATH_UNLOCK(sc);
+	mtx_unlock(&sc->sc_mtx);
 
 	ATH_TX_LOCK(sc);
 
@@ -2517,9 +2519,11 @@ ath_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
 	ATH_PCU_UNLOCK(sc);
 
 	/* Put the hardware back to sleep if required */
-	ATH_LOCK(sc);
+	// ATH_LOCK(sc);
+	mtx_lock(&sc->sc_mtx);
 	ath_power_restore_power_state(sc);
-	ATH_UNLOCK(sc);
+	// ATH_UNLOCK(sc);
+	mtx_unlock(&sc->sc_mtx);
 
 	return 0;
 
@@ -2541,9 +2545,11 @@ bad:
 	ATH_PCU_UNLOCK(sc);
 
 	/* Put the hardware back to sleep if required */
-	ATH_LOCK(sc);
+	// ATH_LOCK(sc);
+	mtx_lock(&sc->sc_mtx);
 	ath_power_restore_power_state(sc);
-	ATH_UNLOCK(sc);
+	// ATH_UNLOCK(sc);
+	mtx_unlock(&sc->sc_mtx);
 
 badbad:
 	ATH_KTR(sc, ATH_KTR_TX, 2, "ath_raw_xmit: bad0: m=%p, params=%p",
