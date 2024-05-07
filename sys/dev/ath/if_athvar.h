@@ -595,7 +595,7 @@ struct ath_softc {
 	int			sc_rx_stopped;	/* XXX only for EDMA */
 	int			sc_rx_resetted;	/* XXX only for EDMA */
 
-
+	struct cv       sc_cv_condition_variable;
 	struct sx       sc_sx_lock;
 	void 			(*sc_node_cleanup)(struct ieee80211_node *);
 	void 			(*sc_node_free)(struct ieee80211_node *);

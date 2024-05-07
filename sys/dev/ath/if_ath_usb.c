@@ -45,6 +45,9 @@ __FBSDID("$FreeBSD$");
 #include <sys/taskqueue.h>
 #include <sys/_cpuset.h>
 #include <sys/cpuset.h>
+#include <sys/signal.h>
+       #include	<sys/proc.h>
+       #include	<sys/signalvar.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -470,6 +473,7 @@ ath_usb_attach(device_t self)
 #endif
 	//mtx_init(&sc->sc_usb_mtx, device_get_nameunit(self), MTX_NETWORK_LOCK, MTX_DEF);
 
+	cv_init(&sc->sc_cv_condition_variable, "Condition Variable");
 	lockinit(&sc->sc_lock, PCATCH, "Main Lock2", hz, LK_CANRECURSE);
 	lockinit(&sc->sc_lock2, PCATCH, "Main Lock3", hz, LK_CANRECURSE);
 	sx_init(&sc->sc_sx_lock, "SX Lock");
@@ -509,6 +513,7 @@ ath_usb_attach(device_t self)
 		lockdestroy(&sc->sc_lock);
 		lockdestroy(&sc->sc_lock2);
 		sx_destroy(&sc->sc_sx_lock);
+		cv_destroy(&sc->sc_cv_condition_variable);
 		return error;
 	}
 
@@ -569,6 +574,7 @@ bad:
 	ATH_LOCK_DESTROY(sc);
 	lockdestroy(&sc->sc_lock);
 	sx_destroy(&sc->sc_sx_lock);
+	cv_destroy(&sc->sc_cv_condition_variable);
 	return error;
 }
 
@@ -606,6 +612,7 @@ ath_usb_detach(device_t self)
 	ATH_LOCK_DESTROY(sc);
 	lockdestroy(&sc->sc_lock);
 	sx_destroy(&sc->sc_sx_lock);
+	cv_destroy(&sc->sc_cv_condition_variable);
 	free(usc, M_TEMP);
 	printf("ath_usb_detach called \n");
 	return (0);
@@ -1633,6 +1640,8 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	int ath_mutex_owned = 0;
 	int ath_pcu_mutex_owned = 0;
 
+
+
 	if(mtx_owned(&sc->sc_pcu_mtx))
 	{
 		ATH_PCU_UNLOCK(sc);
@@ -1698,12 +1707,18 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 * Wait for WMI command complete interrupt. In case it does not fire
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
-	error = mtx_sleep(&usc->wait_cmd_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmi", 2*hz);
-	if (error == EWOULDBLOCK) {
-		printf("%s: firmware command 0x%x timed out\n",
-			device_get_name(usc->usb_dev), cmd_id);
-		error = ETIMEDOUT;
-	}
+	// error = mtx_sleep(&usc->wait_cmd_id, &usc->sc_sc->sc_usb_mtx, PCATCH, "athwmi", 2*hz);
+	// error = cv_timedwait_sig(&sc->sc_cv_condition_variable, &usc->sc_sc->sc_usb_mtx, 2*hz);
+	// // cv_wait_sig(&sc->sc_cv_condition_variable, &usc->sc_sc->sc_usb_mtx);
+	// if (error == EWOULDBLOCK) {
+	// 	printf("%s: firmware command 0x%x timed out\n",
+	// 		device_get_name(usc->usb_dev), cmd_id);
+	// 	error = ETIMEDOUT;
+	// }
+
+	cursig(curthread);
+
+	error = 0;
 
 	// device_printf(sc->sc_dev, "%s: aftersleep\n", __func__);
 
