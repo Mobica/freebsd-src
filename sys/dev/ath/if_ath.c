@@ -2745,7 +2745,15 @@ ath_init(struct ath_softc *sc)
 		__func__, sc->sc_imask);
 
 	sc->sc_running = 1;
-	callout_reset(&sc->sc_wd_ch, hz, ath_watchdog, sc);
+
+    // Commented out due to RNDBOLT02-40 issue.
+    // It's a problem related to adding USB access to ath driver needed for AR9271.
+    // The watchdog calls ath_hal_gethangstate() -> ... -> ar5416GetDiagState() -> ath_usb_read() -> ath_usb_wmi_xcmd().
+    // It causes sleeping in a function used in a callout which is forbidden in FreeBSD.
+    // We decided to disable watchdog temporarly.
+    //
+    //callout_reset(&sc->sc_wd_ch, hz, ath_watchdog, sc);
+    
 	ath_hal_intrset(ah, sc->sc_imask);
 
 	ath_power_restore_power_state(sc);
