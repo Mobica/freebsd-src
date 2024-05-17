@@ -98,7 +98,7 @@ ar5416SetPowerModeSleep(struct ath_hal *ah, int setChip)
 		if (! AR_SREV_HOWL(ah))
 			OS_REG_WRITE(ah, AR_RC, AR_RC_AHB|AR_RC_HOSTIF);
 		/* Shutdown chip. Active low */
-		if (! AR_SREV_OWL(ah))
+		if (!AR_SREV_OWL(ah) && !AR_SREV_9271(ah))
 			OS_REG_CLR_BIT(ah, AR_RTC_RESET, AR_RTC_RESET_EN);
 	}
 }

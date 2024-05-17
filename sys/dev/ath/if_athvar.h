@@ -899,6 +899,8 @@ struct ath_softc {
 				    struct ieee80211_tx_ampdu *tap,
 				    int status);
 
+
+	// WMI command
 	/*
 	 * Powersave state tracking.
 	 *
@@ -940,7 +942,7 @@ struct ath_softc {
 #define	ATH_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_mtx)
 #define	ATH_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_OWNED)
 #define	ATH_UNLOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_mtx, MA_NOTOWNED)
-#define	ATH_LOCK_OWNED(_sc)		(mtx_owned(&(_sc)->sc_mtx) != 0)
+#define	ATH_LOCK_OWNED(_sc)	(mtx_owned(&(_sc)->sc_mtx) != 0)
 
 /*
  * The TX lock is non-reentrant and serialises the TX frame send
@@ -995,6 +997,8 @@ struct ath_softc {
 #define	ATH_PCU_UNLOCK(_sc)		mtx_unlock(&(_sc)->sc_pcu_mtx)
 #define	ATH_PCU_LOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_pcu_mtx,	\
 		MA_OWNED)
+#define	ATH_PCU_LOCK_OWNED(_sc)		(mtx_owned(&(_sc)->sc_pcu_mtx) != 0)	
+	
 #define	ATH_PCU_UNLOCK_ASSERT(_sc)	mtx_assert(&(_sc)->sc_pcu_mtx,	\
 		MA_NOTOWNED)
 #define	ATH_PCU_LOCK_OWNED(_sc)		(mtx_owned(&(_sc)->sc_pcu_mtx) != 0)
@@ -1050,7 +1054,7 @@ struct ath_softc {
 #define	ATH_TXSTATUS_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_txcomplock)
 #define	ATH_TXSTATUS_LOCK_ASSERT(_sc) \
 	mtx_assert(&(_sc)->sc_txcomplock, MA_OWNED)
-#define	ATH_TXSTATUS_LOCK_OWNED(_sc)		(mtx_owned(&(_sc)->sc_txcomplock) != 0)
+#define	ATH_TXSTATUS_LOCK_OWNED(_sc)	(mtx_owned(&(_sc)->sc_txcomplock) != 0)
 
 #define ATH_USB_LOCK_INIT(_sc) do { \
 	snprintf((_sc)->sc_usb_mtx_name,				\
@@ -1093,6 +1097,14 @@ void	ath_intr(void *);
 	((*(_ah)->ah_setBssIdMask)((_ah), (_mask)))
 #define	ath_hal_intrset(_ah, _mask) \
 	((*(_ah)->ah_setInterrupts)((_ah), (_mask)))
+
+#define ath_hal_usbWmiXcmd(_ah, _usc, _cmd_id, _ibuf, _ilen, _obuf) \
+	((*(_ah)->ah_usb_wmi_xcmd)(_usc, _cmd_id, _ibuf, _ilen, _obuf))	
+	// ((*(_ah)->ah_usb_wmi_xcmd)(_ah->ah_sc->usc, _cmd_id, _ibuf, _ilen, _obuf))	
+
+#define ath_hal_usbWmiCmd(_ah, _usc, _cmd_id) \
+	ath_hal_usbWmiXcmd(_ah, _usc, _cmd_id, NULL, 0, NULL)	
+
 #define	ath_hal_intrget(_ah) \
 	((*(_ah)->ah_getInterrupts)((_ah)))
 #define	ath_hal_intrpend(_ah) \

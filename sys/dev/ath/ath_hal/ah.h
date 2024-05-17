@@ -1546,6 +1546,9 @@ struct ath_hal {
 				HAL_ANT_COMB_CONFIG *);
 	void	    __ahdecl(*ah_divLnaConfSet)(struct ath_hal *,
 				HAL_ANT_COMB_CONFIG *);
+
+	int	    __ahdecl(*ah_usb_wmi_xcmd)(void *, uint16_t, void *, int, void *);
+
 };
 
 /* 

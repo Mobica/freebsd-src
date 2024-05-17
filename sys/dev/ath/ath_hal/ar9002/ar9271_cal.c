@@ -144,12 +144,10 @@ ar9271_hw_pa_calib(struct ath_hal *ah, HAL_BOOL is_reset)
 void
 ar9271_hw_pa_cal(struct ath_hal *ah, HAL_BOOL is_reset)
 {
-	if (AR_SREV_KITE_11_OR_LATER(ah)) {
-		if (is_reset || !AH9271(ah)->pacal_info.skipcount)
-			ar9271_hw_pa_calib(ah, is_reset);
-		else
-			AH9271(ah)->pacal_info.skipcount--;
-	}
+	if (is_reset || !AH9271(ah)->pacal_info.skipcount)
+		ar9271_hw_pa_calib(ah, is_reset);
+	else
+		AH9271(ah)->pacal_info.skipcount--;	
 }
 
 /* Carrier leakage Calibration fix */

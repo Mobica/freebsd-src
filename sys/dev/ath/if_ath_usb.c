@@ -560,9 +560,9 @@ ath_usb_detach(device_t self)
 
 	/* Wait for all async commands to complete. */
 	ath_usb_wait_async(usc);
-	
+
 	usbd_transfer_unsetup(usc->sc_xfer, ATH_N_XFER);
-	
+
 	/* Abort and close Tx/Rx pipes. */
 	ath_usb_close_pipes(usc);
 
@@ -672,8 +672,8 @@ ath_usb_attachhook(device_t self)
 	if (error != 0)
 		return;
 
-// TODO: MikolajF:I couldn't read a FW version before the firmware upload because 
-// the module never responded to the WMI request, even if I moved the htc setup 
+// TODO: MikolajF:I couldn't read a FW version before the firmware upload because
+// the module never responded to the WMI request, even if I moved the htc setup
 // before loading the FW. I don't know why, but checking it at this point is not
 //  useful and adds to the initialization time. It's not critical and can be
 // investigated or ignored in the future.
@@ -992,7 +992,7 @@ char * epType_str(uint8_t bmAttributes) {
 	}
 }
 
-static boolean_t 
+static boolean_t
 ath_htc_rx_handle(struct ath_usb_softc *usc, uint8_t *buf, int actlen)
 {
 	struct ar_htc_msg_hdr *msg;
@@ -1107,11 +1107,11 @@ ath_if_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 				actlen -= htc->control[0];
 			}
 			ath_usb_rx_wmi_ctrl(usc, buf, actlen);
-		}	
+		}
 	}
 	/* FALLTHROUGH */
 	case USB_ST_SETUP:
-		printf("USB_ST_SETUP called\n");
+	//	printf("USB_ST_SETUP called\n");
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 		break;
@@ -1173,7 +1173,7 @@ ath_if_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 		}
 		if (usc->wait_msg_id == AR_WMI_CMD_MSG)
 			STAILQ_INSERT_TAIL(&usc->sc_cmd_inactive, cmd, next);
-		
+
 		/* FALLTHROUGH */
 	case USB_ST_SETUP:
 tr_setup:
@@ -1252,7 +1252,7 @@ ath_if_bulk_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 		STAILQ_INSERT_TAIL(&usc->sc_rx_inactive, data, next);
 		/* FALLTHROUGH */
 	case USB_ST_SETUP:
-		device_printf(sc->sc_dev, "%s: USB_ST_SETUP called \n", __func__);
+	//	device_printf(sc->sc_dev, "%s: USB_ST_SETUP called \n", __func__);
 	tr_setup:
 		device_printf(sc->sc_dev, "%s: USB_ST_SETUP after goto called \n", __func__);
 		data = STAILQ_FIRST(&usc->sc_rx_inactive);
@@ -1610,7 +1610,21 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	int ath_pcu_mtx_owned = ATH_PCU_LOCK_OWNED(sc);
 	int ath_txbuf_mtx_owned = ATH_TXBUF_LOCK_OWNED(sc);
 	int ath_txstatus_mtx_owned = ATH_TXSTATUS_LOCK_OWNED(sc);
+	int ieee80211_mutex_owned = mtx_owned(&sc->sc_ic.ic_comlock.mtx);
+	int giant_owned = mtx_owned(&Giant) != 0;
 
+	// int mtx_owned_cnt = ath_mtx_owned + ath_tx_mtx_owned + ath_rx_mtx_owned + ath_pcu_mtx_owned + ath_txstatus_mtx_owned + giant_owned;
+	// if( mtx_owned_cnt > 1)
+	// 	device_printf(sc->sc_dev, "%s: *********** More than 1 mtx owned: %d\n", __func__, mtx_owned_cnt);
+
+	#if 0
+	device_printf(sc->sc_dev, "%s: *********** ATH_LOCK_OWNED: %d\n",
+					  __func__,ath_mtx_owned);
+	device_printf(sc->sc_dev, "%s: *********** ATH_TX_LOCK_OWNED: %d\n",
+					  __func__,ath_tx_mtx_owned);
+	device_printf(sc->sc_dev, "%s: *********** ATH_RX_LOCK_OWNED: %d\n",
+					  __func__,ath_rx_mtx_owned);
+	#endif
 	//ATH_USB_LOCK_ASSERT(sc);
 
 	data = STAILQ_FIRST(&usc->sc_cmd_inactive);
@@ -1620,36 +1634,24 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		return -1;
 	}
 	STAILQ_REMOVE_HEAD(&usc->sc_cmd_inactive, next);
-	if (ath_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_LOCK_OWNED: %d\n",
-					  __func__,ath_mtx_owned);
+
+	if (ath_mtx_owned)
 		ATH_UNLOCK(sc);
-	}
-	if (ath_tx_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_TX_LOCK_OWNED: %d\n",
-					  __func__,ath_tx_mtx_owned);
+	if (ath_tx_mtx_owned)
 		ATH_TX_UNLOCK(sc);
-	}
-	if (ath_rx_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_RX_LOCK_OWNED: %d\n",
-					  __func__,ath_rx_mtx_owned);
+	if (ath_rx_mtx_owned)
 		ATH_RX_UNLOCK(sc);
-	}
-	if (ath_pcu_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_PCU_LOCK_OWNED: %d\n",
-					  __func__,ath_pcu_mtx_owned);
+	if (ath_pcu_mtx_owned)
 		ATH_PCU_UNLOCK(sc);
-	}
-	if (ath_txbuf_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_TXBUF_LOCK_OWNED: %d\n",
-					  __func__,ath_txbuf_mtx_owned);
+	if (ath_txbuf_mtx_owned)
 		ATH_TXBUF_UNLOCK(sc);
-	}
-	if (ath_txstatus_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_TXSTATUS_LOCK_OWNED: %d\n",
-					  __func__,ath_txstatus_mtx_owned);
+	if (ath_txstatus_mtx_owned)
 		ATH_TXSTATUS_UNLOCK(sc);
-	}
+	if (ieee80211_mutex_owned)
+		mtx_unlock(&sc->sc_ic.ic_comlock.mtx);
+	if (giant_owned)
+		mtx_unlock(&Giant);
+
 	ATH_USB_LOCK(sc);
 	while (usc->wait_cmd_id) {
 		/*
@@ -1691,7 +1693,7 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		error = ETIMEDOUT;
 	}
 
-	device_printf(sc->sc_dev, "%s: aftersleep\n", __func__);
+	// device_printf(sc->sc_dev, "%s: aftersleep\n", __func__);
 
 	/*
 	 * Both the WMI command and transfer are done or have timed out.
@@ -1713,8 +1715,11 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	if (ath_txbuf_mtx_owned)
 		ATH_TXBUF_LOCK(sc);
 	if (ath_txstatus_mtx_owned)
-		ATH_TXSTATUS_UNLOCK(sc);
-	
+		ATH_TXSTATUS_LOCK(sc);
+	if (ieee80211_mutex_owned)
+		mtx_lock(&sc->sc_ic.ic_comlock.mtx);
+	if (giant_owned)
+		mtx_lock(&Giant);
 	return (error);
 }
 
@@ -1753,7 +1758,7 @@ ath_usb_read(struct ath_softc *sc, uint32_t addr)
 	uint32_t val;
 	int error;
 
-	device_printf(sc->sc_dev, "%s: called \n", __func__);
+	// device_printf(sc->sc_dev, "%s: called \n", __func__);
 
 	/* Flush pending writes for strict consistency. */
 	ath_usb_write_barrier(sc);
@@ -1763,8 +1768,8 @@ ath_usb_read(struct ath_softc *sc, uint32_t addr)
 	    &addr, sizeof(addr), &val);
 	if (error != 0)
 		device_printf(sc->sc_dev,
-					  "%s: error \n",
-					  __func__);
+					  "%s: error: %d \n",
+					  __func__, error);
 	return be32toh(val);
 }
 
@@ -2472,7 +2477,7 @@ ath_usb_updateedca_cb(struct ath_usb_softc *usc, void *arg)
 	int s;
 
 	s = splnet();
-#if ATHN_API	
+#if ATHN_API
 	ath_updateedca(&usc->sc_sc->sc_ic);
 #endif
 	splx(s);
@@ -2495,7 +2500,7 @@ ath_usb_updateslot_cb(struct ath_usb_softc *usc, void *arg)
 	int s;
 
 	s = splnet();
-#if ATHN_API	
+#if ATHN_API
 	ath_updateslot(&usc->sc_sc->sc_ic);
 #endif
 	splx(s);
@@ -2535,7 +2540,7 @@ ath_usb_set_key_cb(struct ath_usb_softc *usc, void *arg)
 
 	s = splnet();
 	ath_usb_write_barrier(usc->sc_sc);
-#if ATHN_API	
+#if ATHN_API
 	ath_set_key(ic, cmd->ni, cmd->key);
 #endif
 #if OpenBSD_IEEE80211_API
@@ -2577,7 +2582,7 @@ ath_usb_delete_key_cb(struct ath_usb_softc *usc, void *arg)
 	int s;
 
 	s = splnet();
-#if ATHN_API	
+#if ATHN_API
 	ath_delete_key(ic, cmd->ni, cmd->key);
 #endif
 #if OpenBSD_IEEE80211_API

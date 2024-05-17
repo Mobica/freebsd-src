@@ -64,6 +64,7 @@ static void ar5416MarkPhyInactive(struct ath_hal *ah);
 static void ar5416SetIFSTiming(struct ath_hal *ah,
    const struct ieee80211_channel *chan);
 
+
 /*
  * Places the device in and out of reset and then places sane
  * values in the registers based on EEPROM config, initialization
@@ -615,7 +616,7 @@ ar5416InitDMA(struct ath_hal *ah)
 		 * avoid data/delimiter underruns
 		 */
 		OS_REG_WRITE(ah, AR_PCU_TXBUF_CTRL, AR_9285_PCU_TXBUF_CTRL_USABLE_SIZE);
-	else
+	else if (!AR_SREV_9271(ah))
 		OS_REG_WRITE(ah, AR_PCU_TXBUF_CTRL, AR_PCU_TXBUF_CTRL_USABLE_SIZE);
 }
 
@@ -1422,16 +1423,20 @@ ar5416SetReset(struct ath_hal *ah, int type)
     if (AR_SREV_HOWL(ah))
         OS_DELAY(50);
 
-    if (AR_SREV_HOWL(ah)) {
+    if (AR_SREV_HOWL(ah) || AR_SREV_9271(ah)) {
                 uint32_t mask;
                 mask = OS_REG_READ(ah, AR_CFG);
                 if (mask & (AR_CFG_SWRB | AR_CFG_SWTB | AR_CFG_SWRG)) {
+	//		device_printf(NULL,  "CFG Byte Swap Set 0x%x\n", mask);
+
                         HALDEBUG(ah, HAL_DEBUG_RESET,
                                 "CFG Byte Swap Set 0x%x\n", mask);
                 } else {
                         mask =  
                                 INIT_CONFIG_STATUS | AR_CFG_SWRB | AR_CFG_SWTB;
                         OS_REG_WRITE(ah, AR_CFG, mask);
+	//		device_printf(NULL,  "Setting CFG 0x%x\n", OS_REG_READ(ah, AR_CFG));
+
                         HALDEBUG(ah, HAL_DEBUG_RESET,
                                 "Setting CFG 0x%x\n", OS_REG_READ(ah, AR_CFG));
                 }
@@ -1445,8 +1450,8 @@ ar5416SetReset(struct ath_hal *ah, int type)
 #ifndef AH_NEED_DESC_SWAP
 			mask |= AR_CFG_SWTD;
 #endif
-			HALDEBUG(ah, HAL_DEBUG_RESET,
-			    "%s Applying descriptor swap\n", __func__);
+	//		device_printf(NULL,
+	//		    "%s Applying descriptor swap\n", __func__);
 			OS_REG_WRITE(ah, AR_CFG, mask);
 		} else
 			OS_REG_WRITE(ah, AR_CFG, INIT_CONFIG_STATUS);

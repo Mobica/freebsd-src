@@ -120,6 +120,49 @@
 #include <dev/ath/if_ath_ioctl.h>
 #include <dev/ath/if_ath_descdma.h>
 
+/* Wireless module interface commands. */
+#define AR_WMI_CMD_ECHO			0x001
+#define AR_WMI_CMD_ACCESS_MEMORY	0x002
+#define AR_WMI_GET_FW_VERSION		0x003
+#define AR_WMI_CMD_DISABLE_INTR		0x004
+#define AR_WMI_CMD_ENABLE_INTR		0x005
+#define AR_WMI_CMD_ATH_INIT		0x006
+#define AR_WMI_CMD_ABORT_TXQ		0x007
+#define AR_WMI_CMD_STOP_TX_DMA		0x008
+#define AR_WMI_CMD_ABORT_TX_DMA		0x009
+#define AR_WMI_CMD_DRAIN_TXQ		0x00a
+#define AR_WMI_CMD_DRAIN_TXQ_ALL	0x00b
+#define AR_WMI_CMD_START_RECV		0x00c
+#define AR_WMI_CMD_STOP_RECV		0x00d
+#define AR_WMI_CMD_FLUSH_RECV		0x00e
+#define AR_WMI_CMD_SET_MODE		0x00f
+#define AR_WMI_CMD_NODE_CREATE		0x010
+#define AR_WMI_CMD_NODE_REMOVE		0x011
+#define AR_WMI_CMD_VAP_REMOVE		0x012
+#define AR_WMI_CMD_VAP_CREATE		0x013
+#define AR_WMI_CMD_REG_READ		0x014
+#define AR_WMI_CMD_REG_WRITE		0x015
+#define AR_WMI_CMD_RC_STATE_CHANGE	0x016
+#define AR_WMI_CMD_RC_RATE_UPDATE	0x017
+#define AR_WMI_CMD_TARGET_IC_UPDATE	0x018
+#define AR_WMI_CMD_TX_AGGR_ENABLE	0x019
+#define AR_WMI_CMD_TGT_DETACH		0x020
+#define AR_WMI_CMD_NODE_UPDATE		0x021
+#define AR_WMI_CMD_INT_STATS		0x022
+#define AR_WMI_CMD_TX_STATS		0x023
+#define AR_WMI_CMD_RX_STATS		0x024
+#define AR_WMI_CMD_BITRATE_MASK		0x025
+#define AR_WMI_CMD_REG_RMW		0x026
+
+/* Wireless module interface events. */
+#define AR_WMI_EVT_TGT_RDY		0x001
+#define AR_WMI_EVT_SWBA			0x002
+#define AR_WMI_EVT_FATAL		0x003
+#define AR_WMI_EVT_TXTO			0x004
+#define AR_WMI_EVT_BMISS		0x005
+#define AR_WMI_EVT_DELBA		0x006
+#define AR_WMI_EVT_TXSTATUS		0x007
+
 #ifdef ATH_TX99_DIAG
 #include <dev/ath/ath_tx99/ath_tx99.h>
 #endif
@@ -1387,7 +1430,7 @@ ath_attach(u_int16_t venid, u_int16_t devid, struct ath_softc *sc)
 	// Sleeping on "athwmi" with the following non-sleepable locks held:
 	// exclusive sleep mutex if_ath_usb0 (if_ath_usb0) r = 0 (0xfffffe0062f011a0) locked @ /usr/src/sys/dev/ath/if_ath.c:1386
 	ATH_LOCK(sc);
-	ath_power_setpower(sc, HAL_PM_FULL_SLEEP, 1);
+	// ath_power_setpower(sc, HAL_PM_FULL_SLEEP, 1);
 	ATH_UNLOCK(sc);
 
 	return 0;
@@ -1398,6 +1441,7 @@ bad2:
 	ath_rxdma_teardown(sc);
 
 bad:
+	device_printf(sc->sc_dev, "%s: bad\n", __func__);
 	if (ah)
 		ath_hal_detach(ah);
 	sc->sc_invalid = 1;
@@ -1540,14 +1584,52 @@ ath_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 	int needbeacon, error;
 	enum ieee80211_opmode ic_opmode;
 
+	char _name[IFNAMSIZ];
+	memcpy(_name, name, IFNAMSIZ);
+	_name[IFNAMSIZ - 1]=0;
+	device_printf(sc->sc_dev, "%s: name = %s \n", __func__, _name);
 	avp = malloc(sizeof(struct ath_vap), M_80211_VAP, M_WAITOK | M_ZERO);
 	needbeacon = 0;
 	IEEE80211_ADDR_COPY(mac, mac0);
+
+
+
+
+
+	struct ar_htc_target_vif {
+		uint8_t		index;
+		uint32_t	opmode;
+	#define AR_HTC_M_IBSS		0
+	#define AR_HTC_M_STA		1
+	#define AR_HTC_M_WDS		2
+	#define AR_HTC_M_AHDEMO		3
+	#define AR_HTC_M_HOSTAP		6
+	#define AR_HTC_M_MONITOR	8
+		uint8_t		myaddr[IEEE80211_ADDR_LEN];
+		uint8_t		ath_cap;
+		uint16_t	rtsthreshold;
+		uint8_t		pad;
+
+		/* Internal state. */
+		int8_t		nodeindex;
+		void		*iv_bss;
+	} __packed;
+
+	struct ar_htc_target_vif hvif;
+	memset(&hvif, 0, sizeof(hvif));
+	hvif.index = 0;
+	IEEE80211_ADDR_COPY(hvif.myaddr, mac0);
+
+
+
+
+
 
 	ATH_LOCK(sc);
 	ic_opmode = opmode;		/* default to opmode of new vap */
 	switch (opmode) {
 	case IEEE80211_M_STA:
+		hvif.opmode = htobe32(AR_HTC_M_STA);
 		if (sc->sc_nstavaps != 0) {	/* XXX only 1 for now */
 			device_printf(sc->sc_dev, "only 1 sta vap supported\n");
 			goto bad;
@@ -1567,6 +1649,7 @@ ath_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 		}
 		break;
 	case IEEE80211_M_IBSS:
+		hvif.opmode = htobe32(AR_HTC_M_IBSS);
 		if (sc->sc_nvaps != 0) {	/* XXX only 1 for now */
 			device_printf(sc->sc_dev,
 			    "only 1 ibss vap supported\n");
@@ -1575,6 +1658,7 @@ ath_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 		needbeacon = 1;
 		break;
 	case IEEE80211_M_AHDEMO:
+		hvif.opmode = htobe32(AR_HTC_M_AHDEMO);
 #ifdef IEEE80211_SUPPORT_TDMA
 		if (flags & IEEE80211_CLONE_TDMA) {
 			if (sc->sc_nvaps != 0) {
@@ -1588,6 +1672,7 @@ ath_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 		/* fall thru... */
 #endif
 	case IEEE80211_M_MONITOR:
+		hvif.opmode = htobe32(AR_HTC_M_MONITOR);
 		if (sc->sc_nvaps != 0 && ic->ic_opmode != opmode) {
 			/*
 			 * Adopt existing mode.  Adding a monitor or ahdemo
@@ -1600,6 +1685,7 @@ ath_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 		break;
 	case IEEE80211_M_HOSTAP:
 	case IEEE80211_M_MBSS:
+		hvif.opmode = htobe32(AR_HTC_M_HOSTAP);
 		needbeacon = 1;
 		break;
 	case IEEE80211_M_WDS:
@@ -1636,6 +1722,11 @@ ath_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 		assign_address(sc, mac, flags & IEEE80211_CLONE_BSSID);
 		ath_hal_setbssidmask(sc->sc_ah, sc->sc_hwbssidmask);
 	}
+// (_ah, _usc, _cmd_id, _ibuf, _ilen, _obuf) 
+
+
+	
+	ath_hal_usbWmiXcmd(sc->sc_ah, sc->usc, AR_WMI_CMD_VAP_CREATE, &hvif, sizeof(hvif), NULL);
 
 	vap = &avp->av_vap;
 	/* XXX can't hold mutex across if_alloc */
@@ -1777,11 +1868,14 @@ ath_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 	/* complete setup */
 	ieee80211_vap_attach(vap, ieee80211_media_change,
 	    ieee80211_media_status, mac);
+	device_printf(sc->sc_dev, "%s: vap '%s' attached\n", __func__, _name);
 	return vap;
 bad2:
+	device_printf(sc->sc_dev, "%s: vap '%s' bad2\n", __func__, _name);
 	reclaim_address(sc, mac);
 	ath_hal_setbssidmask(sc->sc_ah, sc->sc_hwbssidmask);
 bad:
+	device_printf(sc->sc_dev, "%s: vap '%s' bad\n", __func__, _name);
 	free(avp, M_80211_VAP);
 	ATH_UNLOCK(sc);
 	return NULL;
@@ -2745,7 +2839,7 @@ ath_init(struct ath_softc *sc)
 		__func__, sc->sc_imask);
 
 	sc->sc_running = 1;
-	callout_reset(&sc->sc_wd_ch, hz, ath_watchdog, sc);
+	// callout_reset(&sc->sc_wd_ch, hz, ath_watchdog, sc);
 	ath_hal_intrset(ah, sc->sc_imask);
 
 	ath_power_restore_power_state(sc);
@@ -3518,6 +3612,7 @@ nextfrag:
 	next = m->m_nextpkt;
 	if (ath_tx_start(sc, ni, bf, m)) {
 bad:
+		device_printf(sc->sc_dev, "%s: bad\n", __func__);
 		if_inc_counter(ni->ni_vap->iv_ifp, IFCOUNTER_OERRORS, 1);
 reclaim:
 		bf->bf_m = NULL;
@@ -5237,6 +5332,29 @@ ath_legacy_tx_drain(struct ath_softc *sc, ATH_RESET_TYPE reset_type)
 	sc->sc_wd_timer = 0;
 }
 
+static void
+ar9271_load_ani(struct ath_softc *sc)
+{
+	struct ath_hal *ah = sc->sc_ah; 
+	#define AR_PHY_DESIRED_SZ		0x09e0c
+	#define AR_PHY_AGC_CTL1			0x985c
+	#define AR_PHY_FIND_SIG			0x09e10
+	#define AR_PHY_SFCORR_LOW		0x09828
+	#define AR_PHY_SFCORR			0x09824
+	#define AR_PHY_CCK_DETECT		0x09fc0
+	#define AR_PHY_TIMING5			0x09810
+	#define AR_PHY_SFCORR_EXT		0x0982c
+	/* Write ANI registers. */
+	OS_REG_WRITE(ah, AR_PHY_DESIRED_SZ, 0x6d4000e2);
+	OS_REG_WRITE(ah, AR_PHY_AGC_CTL1,   0x3139605e);
+	OS_REG_WRITE(ah, AR_PHY_FIND_SIG,   0x7ec84d2e);
+	OS_REG_WRITE(ah, AR_PHY_SFCORR_LOW, 0x06903881);
+	OS_REG_WRITE(ah, AR_PHY_SFCORR,     0x5ac640d0);
+	OS_REG_WRITE(ah, AR_PHY_CCK_DETECT, 0x803e68c8);
+	OS_REG_WRITE(ah, AR_PHY_TIMING5,    0xd00a8007);
+	OS_REG_WRITE(ah, AR_PHY_SFCORR_EXT, 0x05eea6d4);
+}
+
 /*
  * Update internal state after a channel change.
  */
@@ -5253,6 +5371,9 @@ ath_chan_change(struct ath_softc *sc, struct ieee80211_channel *chan)
 	if (mode != sc->sc_curmode)
 		ath_setcurmode(sc, mode);
 	sc->sc_curchan = chan;
+
+	ar9271_load_ani(sc);
+	
 }
 
 /*
@@ -5274,6 +5395,8 @@ ath_chan_set(struct ath_softc *sc, struct ieee80211_channel *chan)
 
 	/* (Try to) stop TX/RX from occurring */
 	taskqueue_block(sc->sc_tq);
+
+	// ath_hal_usbWmiCmd(ah, sc->usc, AR_WMI_CMD_DISABLE_INTR);
 
 	ATH_PCU_LOCK(sc);
 
@@ -5403,7 +5526,15 @@ finish:
 	ath_hal_intrset(ah, sc->sc_imask);
 	ATH_PCU_UNLOCK(sc);
 
+	ath_hal_usbWmiCmd(ah, sc->usc, AR_WMI_CMD_START_RECV);
+
+//	uint16_t mode = 1;
+
+//	ath_hal_usbWmiXcmd(ah, sc->usc, AR_WMI_CMD_SET_MODE,  &mode, sizeof(mode), NULL);
+	ath_hal_usbWmiCmd(ah, sc->usc, AR_WMI_CMD_ENABLE_INTR);
+
 	ath_txrx_start(sc);
+
 	/* XXX ath_start? */
 
 	return ret;
@@ -5575,6 +5706,7 @@ ath_scan_start(struct ieee80211com *ic)
 	ath_hal_setrxfilter(ah, rfilt);
 	ath_hal_setassocid(ah, ieee80211broadcastaddr, 0);
 	ATH_PCU_UNLOCK(sc);
+	device_printf(sc->sc_dev, "%s: RX filter 0x%x bssid %s aid 0\n", __func__, rfilt, ether_sprintf(ieee80211broadcastaddr));
 
 	DPRINTF(sc, ATH_DEBUG_STATE, "%s: RX filter 0x%x bssid %s aid 0\n",
 		 __func__, rfilt, ether_sprintf(ieee80211broadcastaddr));
@@ -5598,6 +5730,9 @@ ath_scan_end(struct ieee80211com *ic)
 
 	ath_hal_process_noisefloor(ah);
 	ATH_PCU_UNLOCK(sc);
+
+	device_printf(sc->sc_dev, "%s: RX filter 0x%x bssid %s aid 0x%x\n", __func__, rfilt, ether_sprintf(sc->sc_curbssid),
+		 sc->sc_curaid);
 
 	DPRINTF(sc, ATH_DEBUG_STATE, "%s: RX filter 0x%x bssid %s aid 0x%x\n",
 		 __func__, rfilt, ether_sprintf(sc->sc_curbssid),
@@ -5842,6 +5977,11 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		ieee80211_state_name[ostate],
 		ieee80211_state_name[nstate]);
 
+
+	device_printf(sc->sc_dev, "%s: %s -> %s\n", __func__,
+		ieee80211_state_name[ostate],
+		ieee80211_state_name[nstate]);
+
 	/*
 	 * net80211 _should_ have the comlock asserted at this point.
 	 * There are some comments around the calls to vap->iv_newstate
@@ -5933,8 +6073,10 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	 * Invoke the parent method to do net80211 work.
 	 */
 	error = avp->av_newstate(vap, nstate, arg);
-	if (error != 0)
+	if (error != 0)	{
+		device_printf(sc->sc_dev, "%s: bad avp->av_newstate\n", __func__);
 		goto bad;
+	}
 
 	/*
 	 * See above: ensure av_newstate() doesn't drop the lock
@@ -6033,8 +6175,10 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 			ath_hal_stoptxdma(ah, sc->sc_bhalq);
 
 			error = ath_beacon_alloc(sc, ni);
-			if (error != 0)
+			if (error != 0){
+				device_printf(sc->sc_dev, "%s: bad of ath_beacon_alloc\n", __func__);
 				goto bad;
+			}
 			/*
 			 * If joining an adhoc network defer beacon timer
 			 * configuration to the next beacon frame so we
@@ -6246,6 +6390,7 @@ ath_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		ATH_UNLOCK(sc);
 	}
 bad:
+	device_printf(sc->sc_dev, "%s: bad\n", __func__);
 	ieee80211_free_node(ni);
 
 	/*
@@ -6557,7 +6702,7 @@ ath_watchdog(void *arg)
 	struct ieee80211com *ic = &sc->sc_ic;
 	int do_reset = 0;
 
-	ATH_LOCK_ASSERT(sc);
+// 	ATH_LOCK_ASSERT(sc);
 
 	if (sc->sc_wd_timer != 0 && --sc->sc_wd_timer == 0) {
 		uint32_t hangs;

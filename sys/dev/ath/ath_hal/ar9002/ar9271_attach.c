@@ -236,9 +236,7 @@ ar9271Attach(uint16_t devid, HAL_SOFTC sc,
 	/* setup common ini data; rf backends handle remainder */
 	HAL_INI_INIT(&ahp->ah_ini_modes, ar9271Modes, 6);
 	HAL_INI_INIT(&ahp->ah_ini_common, ar9271Common, 2);
-	HAL_INI_INIT(&AH5416(ah)->ah_ini_pcieserdes,
-		ar9271NonPciePhy_clkreq, 2);
-	ar5416AttachPCIE(ah);
+	// ar5416AttachPCIE(ah);
 
 	AH5416(ah)->ah_cal_initcal      = ar9271InitCalHardware;
 	AH5416(ah)->ah_cal_pacal       	= ar9271_hw_pa_cal;
@@ -458,7 +456,7 @@ ar9271FillCapabilityInfo(struct ath_hal *ah)
 	/* XXX bluetooth */
 	pCap->halBtCoexSupport = AH_FALSE;
 #endif
-	pCap->halAutoSleepSupport = AH_FALSE;	/* XXX? */
+	pCap->halAutoSleepSupport = AH_TRUE;	/* pCap->hw_caps |= ATH9K_HW_CAP_AUTOSLEEP; */
 	pCap->hal4kbSplitTransSupport = AH_FALSE;
 	/* Disable this so Block-ACK works correctly */
 	pCap->halHasRxSelfLinkedTail = AH_FALSE;
@@ -473,6 +471,7 @@ ar9271FillCapabilityInfo(struct ath_hal *ah)
 	/* Only RX STBC supported */
 	pCap->halRxStbcSupport = 1;
 	pCap->halTxStbcSupport = 0;
+	pCap->halHTSGI20Support = 1;  // pCap->hw_caps |= ATH9K_HW_CAP_SGI_20;
 
 	return AH_TRUE;
 }

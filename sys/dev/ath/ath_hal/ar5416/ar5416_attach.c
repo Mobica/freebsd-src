@@ -30,6 +30,9 @@
 
 #include "ar5416/ar5416.ini"
 
+int
+ath_usb_wmi_xcmd(void *usc, uint16_t cmd_id, void *ibuf, int ilen, void *obuf);
+
 static void ar5416ConfigPCIE(struct ath_hal *ah, HAL_BOOL restore,
 		HAL_BOOL power_off);
 static void ar5416DisablePCIE(struct ath_hal *ah);
@@ -200,7 +203,7 @@ ar5416InitState(struct ath_hal_5416 *ahp5416, uint16_t devid, HAL_SOFTC sc,
 	ah->ah_isInterruptPending	= ar5416IsInterruptPending;
 	ah->ah_getPendingInterrupts	= ar5416GetPendingInterrupts;
 	ah->ah_setInterrupts		= ar5416SetInterrupts;
-
+	ah->ah_usb_wmi_xcmd             = (void*)ath_usb_wmi_xcmd;
 	/* Bluetooth Coexistence functions */
 	ah->ah_btCoexSetInfo		= ar5416SetBTCoexInfo;
 	ah->ah_btCoexSetConfig		= ar5416BTCoexConfig;
@@ -625,6 +628,12 @@ ar5416WriteIni(struct ath_hal *ah, const struct ieee80211_channel *chan)
 	regWrites = ath_hal_ini_write(ah, &AH5212(ah)->ah_ini_common,
 	    1, regWrites);
 
+#define AR_PHY_TX_END_TO_ADC_ON         0xFF000000
+#define AR_PHY_TX_END_TO_ADC_ON_S       24
+
+	OS_REG_SET_BIT(ah, AR_PHY_SPECTRAL_SCAN, AR_PHY_SPECTRAL_SCAN_ENA);
+	OS_REG_RMW_FIELD(ah, AR_PHY_RF_CTL3, AR_PHY_TX_END_TO_ADC_ON, 0xa);
+	
 	/* XXX updated regWrites? */
 	AH5212(ah)->ah_rfHal->writeRegs(ah, modesIndex, freqIndex, regWrites);
 }

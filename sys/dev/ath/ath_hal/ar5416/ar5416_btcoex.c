@@ -305,6 +305,10 @@ ar5416BTCoexEnable(struct ath_hal *ah)
 		/* For 3-wire, configure the desired GPIO port for rx_clear */
 		ar5416GpioCfgOutput(ah, ahp->ah_wlanActiveGpioSelect,
 		    HAL_GPIO_OUTPUT_MUX_AS_WLAN_ACTIVE);
+
+		uint32_t val = OS_REG_READ(ah, 0x50040);
+		val &= 0xFFFFFEFF;
+		OS_REG_WRITE(ah, 0x50040, val);   
 	} else {
 		/*
 		 * For 2-wire, configure the desired GPIO port
