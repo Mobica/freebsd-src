@@ -33,7 +33,7 @@
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <sys/taskqueue.h>
-
+#include "ar5008reg.h"
 #define NBPFILTER 0
 
 #ifdef notyet
@@ -257,6 +257,10 @@ static const uint8_t athn_ac2qid[WME_NUM_AC] = {
 	ATHN_QID_AC_VO	/* WME_AC_VO */
 };
 
+static const uint8_t athn_2ghz_chans[] = {
+	1, 2, 3, 4, 5, 6 , 7, 8, 9, 10, 11, 12, 13, 14
+};
+
 static const uint8_t athn_5ghz_chans[] = {
 	/* UNII 1. */
 	36, 40, 44, 48,
@@ -455,6 +459,115 @@ struct athn_ops {
 	void	(*set_spur_immunity_level)(struct athn_softc *, int);
 };
 
+
+/*
+ * ROM layout used by AR9285 (single-stream, 2GHz only).
+ */
+#ifndef AR9285_EEP_START_LOC
+#define AR9285_EEP_START_LOC		64
+#define AR9285_NUM_2G_CAL_PIERS		3
+#define AR9285_NUM_2G_CCK_TARGET_POWERS	3
+#define AR9285_NUM_2G_20_TARGET_POWERS	3
+#define AR9285_NUM_2G_40_TARGET_POWERS	3
+#define AR9285_NUM_CTLS			12
+#define AR9285_NUM_BAND_EDGES		4
+#define AR9285_NUM_PD_GAINS		2
+#define AR9285_PD_GAINS_IN_MASK		4
+#define AR9285_PD_GAIN_ICEPTS		5
+#endif
+
+#ifndef AR_EEPROM_MODAL_SPURS
+	#define AR_EEPROM_MODAL_SPURS		5
+#endif
+
+struct ar9285_base_eep_header {
+	uint16_t	length;
+	uint16_t	checksum;
+	uint16_t	version;
+	uint8_t		opCapFlags;
+	uint8_t		eepMisc;
+	uint16_t	regDmn[2];
+	uint8_t		macAddr[6];
+	uint8_t		rxMask;
+	uint8_t		txMask;
+	uint16_t	rfSilent;
+	uint16_t	blueToothOptions;
+	uint16_t	deviceCap;
+	uint32_t	binBuildNumber;
+	uint8_t		deviceType;
+	/* End of common header. */
+	uint8_t		txGainType;
+} __packed;
+
+struct ar9285_modal_eep_header {
+	uint32_t	antCtrlChain;
+	uint32_t	antCtrlCommon;
+	uint8_t		antennaGain;
+	uint8_t		switchSettling;
+	uint8_t		txRxAtten;
+	uint8_t		rxTxMargin;
+	uint8_t		adcDesiredSize;
+	uint8_t		pgaDesiredSize;
+	uint8_t		xlnaGain;
+	uint8_t		txEndToXpaOff;
+	uint8_t		txEndToRxOn;
+	uint8_t		txFrameToXpaOn;
+	uint8_t		thresh62;
+	uint8_t		noiseFloorThresh;
+	uint8_t		xpdGain;
+	uint8_t		xpd;
+	uint8_t		iqCalI;
+	uint8_t		iqCalQ;
+	uint8_t		pdGainOverlap;
+	uint8_t		ob_01;
+	uint8_t		db1_01;
+	uint8_t		xpaBiasLvl;
+	uint8_t		txFrameToDataStart;
+	uint8_t		txFrameToPaOn;
+	uint8_t		ht40PowerIncForPdadc;
+	uint8_t		bswAtten;
+	uint8_t		bswMargin;
+	uint8_t		swSettleHt40;
+	uint8_t		xatten2Db;
+	uint8_t		xatten2Margin;
+	uint8_t		db2_01;
+	uint8_t		version;
+	uint16_t	ob_234;
+	uint16_t	db1_234;
+	uint16_t	db2_234;
+	uint8_t		futureModal[4];
+	struct		ar_spur_chan spurChans[AR_EEPROM_MODAL_SPURS];
+} __packed;
+
+struct ar9285_cal_data_per_freq {
+	uint8_t	pwrPdg[AR9285_NUM_PD_GAINS][AR9285_PD_GAIN_ICEPTS];
+	uint8_t	vpdPdg[AR9285_NUM_PD_GAINS][AR9285_PD_GAIN_ICEPTS];
+} __packed;
+
+struct ar9285_cal_ctl_data {
+	struct ar_cal_ctl_edges	ctlEdges[AR9285_NUM_BAND_EDGES];
+} __packed;
+
+struct ar9285_eeprom {
+	struct	ar9285_base_eep_header baseEepHeader;
+	uint8_t	custData[20];
+	struct	ar9285_modal_eep_header modalHeader;
+	uint8_t	calFreqPier2G[AR9285_NUM_2G_CAL_PIERS];
+	struct	ar9285_cal_data_per_freq
+	    calPierData2G[AR9285_NUM_2G_CAL_PIERS];
+	struct	ar_cal_target_power_leg
+	    calTargetPowerCck[AR9285_NUM_2G_CCK_TARGET_POWERS];
+	struct	ar_cal_target_power_leg
+	    calTargetPower2G[AR9285_NUM_2G_20_TARGET_POWERS];
+	struct	ar_cal_target_power_ht
+	    calTargetPower2GHT20[AR9285_NUM_2G_20_TARGET_POWERS];
+	struct	ar_cal_target_power_ht
+	    calTargetPower2GHT40[AR9285_NUM_2G_40_TARGET_POWERS];
+	uint8_t	ctlIndex[AR9285_NUM_CTLS];
+	struct	ar9285_cal_ctl_data ctlData[AR9285_NUM_CTLS];
+	uint8_t	padding;
+} __packed;
+
 struct athn_softc {
 	device_t	    sc_dev;
 	struct ieee80211com		sc_ic;
@@ -544,6 +657,8 @@ struct athn_softc {
 	uint32_t			rwbuf[64];
 
 	int				kc_entries;
+	struct ar9285_eeprom		eeprom;
+	// 	struct ar5416eeprom		eeprom;
 
 	void				*eep;
 	const void			*eep_def;
@@ -626,6 +741,7 @@ struct athn_softc {
 #define	ATHN_ASSERT_LOCKED(sc)	mtx_assert(&(sc)->sc_mtx, MA_OWNED)
 
 extern int	athn_attach(struct athn_softc *);
+extern int	athn_like_otus_attach(struct athn_softc *);
 extern void	athn_detach(struct athn_softc *);
 extern void	athn_suspend(struct athn_softc *);
 extern void	athn_wakeup(struct athn_softc *);

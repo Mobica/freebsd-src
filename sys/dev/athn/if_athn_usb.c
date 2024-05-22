@@ -611,8 +611,10 @@ athn_usb_attachhook(device_t self)
 	struct ar_wmi_fw_version img_ver;
 	struct athn_ops *ops = &sc->ops;
 	uint32_t val = 104;
-#ifdef notyet
+
 	struct ieee80211com *ic = &sc->sc_ic;
+#ifdef notyet
+	
 	struct ifnet *ifp = &ic->ic_if;
 #endif
 	int s, i, error;
@@ -623,6 +625,7 @@ athn_usb_attachhook(device_t self)
 		printf("Could not load firmware\n");
 		return;
 	}
+	printf("FW loaded\n");
 
 	// TODO MichalP: this can be used as a starting point for echo command or firmware command
 //	ATHN_LOCK(&usc->sc_sc);
@@ -636,10 +639,14 @@ athn_usb_attachhook(device_t self)
 //
 //	return;
 
+	device_printf(sc->sc_dev, "%s: before athn_usb_htc_setup\n",	__func__);
+
 	/* Setup the host transport communication interface. */
 	error = athn_usb_htc_setup(usc);
 	if (error != 0)
 		return;
+
+	device_printf(sc->sc_dev, "%s: after athn_usb_htc_setup\n",	__func__);
 
 // TODO: MikolajF:I couldn't read a FW version before the firmware upload because 
 // the module never responded to the WMI request, even if I moved the htc setup 
@@ -655,7 +662,9 @@ athn_usb_attachhook(device_t self)
 	/* We're now ready to attach the bus agnostic driver. */
 	// TODO: MichalP needs proper FreeBSD adaptation because this uses code that is
 	//  stubbed and/or commented
-	error = athn_attach(sc);
+	ic->ic_softc = sc;
+
+	error = athn_like_otus_attach(sc);
 	if (error != 0) {
 		return;
 	}
@@ -1097,17 +1106,17 @@ tr_setup:
 			device_printf(sc->sc_dev, "%s: empty pending queue cmd: %p\n", __func__, cmd);
 			return;
 		}
-		device_printf(sc->sc_dev, "%s: continue with USB_ST_SETUP cmd: %p\n", __func__, cmd);
+	//	device_printf(sc->sc_dev, "%s: continue with USB_ST_SETUP cmd: %p\n", __func__, cmd);
 		STAILQ_REMOVE_HEAD(&usc->sc_cmd_pending, next);
 		STAILQ_INSERT_TAIL(&usc->sc_cmd_active, cmd, next);
 		usbd_xfer_set_frame_data(xfer, 0, cmd->buf, cmd->buflen);
-		device_printf(sc->sc_dev, "%s: submitting transfer %p; buf=%p, buflen=%d\n",
-					  __func__, cmd, cmd->buf, cmd->buflen);
+	//	device_printf(sc->sc_dev, "%s: submitting transfer %p; buf=%p, buflen=%d\n",
+	//				  __func__, cmd, cmd->buf, cmd->buflen);
 		usbd_transfer_submit(xfer);
 		break;
 	default:
 		cmd = STAILQ_FIRST(&usc->sc_cmd_active);
-		device_printf(sc->sc_dev, "%s: continue with default %p\n", __func__, usc);
+	//	device_printf(sc->sc_dev, "%s: continue with default %p\n", __func__, usc);
 		if (cmd != NULL) {
 			device_printf(sc->sc_dev, "%s: cmd not NULL %p\n", __func__, usc);
 			STAILQ_REMOVE_HEAD(&usc->sc_cmd_active, next);
