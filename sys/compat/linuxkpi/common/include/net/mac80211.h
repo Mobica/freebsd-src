@@ -83,6 +83,7 @@ enum mcast_filter_flags {
 	FIF_OTHER_BSS			= BIT(4),
 	FIF_PSPOLL			= BIT(5),
 	FIF_CONTROL			= BIT(6),
+	FIF_MCAST_ACTION    = BIT(9),
 };
 
 enum ieee80211_bss_changed {
@@ -317,6 +318,9 @@ struct ieee80211_bss_conf {
 	int		assoc_capability, enable_beacon, hidden_ssid, ibss_joined, twt_protected;
 	int		twt_responder, unsol_bcast_probe_resp_interval;
 	int		color_change_active;
+	
+	uint16_t aid;
+	bool assoc;
 };
 
 struct ieee80211_channel_switch {
@@ -569,6 +573,7 @@ enum ieee80211_rx_status_flags {
 	RX_FLAG_SKIP_MONITOR		= BIT(26),
 	RX_FLAG_8023			= BIT(27),
 	RX_FLAG_RADIOTAP_TLV_AT_END	= BIT(28),
+	RX_FLAG_AMPDU_DELIM_CRC_ERROR = BIT(29),
 };
 
 enum mac80211_rx_encoding {
@@ -612,6 +617,7 @@ struct ieee80211_rx_status {
 	uint8_t				zero_length_psdu_type;
 	uint8_t				nss;
 	uint8_t				rate_idx;
+	uint8_t 			antenna;
 };
 
 struct ieee80211_tx_status {
@@ -691,6 +697,7 @@ struct ieee80211_sta {
 	/* TODO FIXME */
 	int		max_amsdu_subframes;
 	int		mfp, smps_mode, tdls, tdls_initiator;
+	struct ieee80211_sta_ht_cap     ht_cap;
 	struct ieee80211_txq			*txq[IEEE80211_NUM_TIDS + 1];	/* iwlwifi: 8 and adds +1 to tid_data, net80211::IEEE80211_TID_SIZE */
 	struct ieee80211_sta_rates		*rates;	/* some rcu thing? */
 	uint8_t					addr[ETH_ALEN];

@@ -46,6 +46,8 @@ struct ieee80211_mmie_16 {
 	uint8_t		mic[16];
 };
 
+#define IEEE80211_MIN_AMPDU_BUF		0x8
+
 #define	IEEE80211_CCMP_HDR_LEN			8	/* 802.11i .. net80211 comment */
 #define	IEEE80211_CCMP_PN_LEN			6
 #define	IEEE80211_CCMP_MIC_LEN			8	/* || 16 */
@@ -798,6 +800,28 @@ ieee80211_is_trigger(__le16 fc)
 	v = htole16(IEEE80211_FC0_SUBTYPE_TRIGGER | IEEE80211_FC0_TYPE_CTL);
 
 	return (fc == v);
+}
+
+#define IEEE80211_FCTL_MOREDATA		0x2000
+#define IEEE80211_STYPE_ACK		0x00D0
+
+/**
+ * ieee80211_has_moredata - check if IEEE80211_FCTL_MOREDATA is set
+ * @fc: frame control bytes in little-endian byteorder
+ */
+static inline bool ieee80211_has_moredata(__le16 fc)
+{
+	return (fc & cpu_to_le16(IEEE80211_FCTL_MOREDATA)) != 0;
+}
+
+/**
+ * ieee80211_is_ack - check if IEEE80211_FTYPE_CTL && IEEE80211_STYPE_ACK
+ * @fc: frame control bytes in little-endian byteorder
+ */
+static inline bool ieee80211_is_ack(__le16 fc)
+{
+	return (fc & cpu_to_le16(IEEE80211_FCTL_FTYPE | IEEE80211_FCTL_STYPE)) ==
+	       cpu_to_le16(IEEE80211_FTYPE_CTL | IEEE80211_STYPE_ACK);
 }
 
 #endif	/* _LINUXKPI_LINUX_IEEE80211_H */

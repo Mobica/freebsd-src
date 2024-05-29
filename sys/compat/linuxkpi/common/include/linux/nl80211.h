@@ -133,6 +133,9 @@ enum nl80211_band {
 enum nl80211_chan_flags {
 	/* XXX TODO */
 	NL80211_CHAN_NO_HT,
+	NL80211_CHAN_HT20,
+	NL80211_CHAN_HT40MINUS,
+	NL80211_CHAN_HT40PLUS
 };
 
 enum nl80211_chan_width {
