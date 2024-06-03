@@ -39,3 +39,4 @@ CFLAGS+=	${LINUXKPI_INCLUDES}
 
 
 .include <bsd.kmod.mk>
+CFLAGS+= -Wno-cast-qual

@@ -819,6 +819,7 @@ struct ieee80211_tx_info {
 	union {
 		struct {
 			struct ieee80211_tx_rate	rates[4];
+			s8 rts_cts_rate_idx;
 			bool				use_rts;
 			struct ieee80211_vif		*vif;
 			struct ieee80211_key_conf	*hw_key;
@@ -2413,6 +2414,19 @@ ieee80211_tx_status_ext(struct ieee80211_hw *hw,
 	linuxkpi_ieee80211_tx_status_ext(hw, txstat);
 }
 
+
+static __inline void ieee80211_tx_status_noskb(struct ieee80211_hw *hw,
+					     struct ieee80211_sta *sta,
+					     struct ieee80211_tx_info *info)
+{
+	struct ieee80211_tx_status status = {
+		.sta = sta,
+		.info = info,
+	};
+
+	ieee80211_tx_status_ext(hw, &status);
+}
+
 static __inline void
 ieee80211_tx_info_clear_status(struct ieee80211_tx_info *info)
 {
@@ -2721,5 +2735,14 @@ ieee80211_get_eht_iftype_cap_vif(const struct ieee80211_supported_band *band,
 
 #define	ieee80211_send_bar(_v, _r, _t, _s)				\
     linuxkpi_ieee80211_send_bar(_v, _r, _t, _s)
+
+static inline struct ieee80211_rate *
+ieee80211_get_rts_cts_rate(const struct ieee80211_hw *hw,
+			   const struct ieee80211_tx_info *c)
+{
+	if (c->control.rts_cts_rate_idx < 0)
+		return NULL;
+	return &hw->wiphy->bands[c->band]->bitrates[c->control.rts_cts_rate_idx];
+}
 
 #endif	/* _LINUXKPI_NET_MAC80211_H */

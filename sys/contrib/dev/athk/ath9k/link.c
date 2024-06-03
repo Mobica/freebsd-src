@@ -387,7 +387,7 @@ void ath_ani_calibrate(struct timer_list *t)
 	}
 
 	ath_dbg(common, ANI,
-		"Calibration @%lu finished: %s %s %s, caldone: %s\n",
+		"Calibration @%d finished: %s %s %s, caldone: %s\n",
 		jiffies,
 		longcal ? "long" : "", shortcal ? "short" : "",
 		aniflag ? "ani" : "", common->ani.caldone ? "true" : "false");

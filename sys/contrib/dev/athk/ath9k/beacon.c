@@ -163,8 +163,8 @@ static struct ath_buf *ath9k_beacon_generate(struct ieee80211_hw *hw,
 		ath_err(common, "dma_mapping_error on beaconing\n");
 		return NULL;
 	}
-
-	skb = ieee80211_get_buffered_bc(hw, vif);
+	//TODO
+	//skb = ieee80211_get_buffered_bc(hw, vif);
 
 	/*
 	 * if the CABQ traffic from previous DTIM is pending and the current

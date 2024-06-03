@@ -853,6 +853,28 @@ skb_queue_splice_init(struct sk_buff_head *from, struct sk_buff_head *to)
 	__skb_queue_head_init(from);
 }
 
+/**
+ *	skb_queue_splice_tail - join two skb lists, each list being a queue
+ *	@list: the new list to add
+ *	@head: the place to add it in the first list
+ */
+static inline void skb_queue_splice_tail(struct sk_buff_head *list,
+					 struct sk_buff_head *head)
+{
+	SKB_TRACE2(from, to);
+
+	if (!skb_queue_empty(list)) {
+		___skb_queue_splice(list, head->prev, (struct sk_buff *) head);
+		head->qlen += list->qlen;
+	}
+}
+
+static inline bool skb_queue_is_first(const struct sk_buff_head *list,
+				      const struct sk_buff *skb)
+{
+	return skb->prev == (const struct sk_buff *) list;
+}
+
 static inline void
 skb_queue_splice_tail_init(struct sk_buff_head *from, struct sk_buff_head *to)
 {

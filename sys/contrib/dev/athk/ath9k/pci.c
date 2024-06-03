@@ -19,9 +19,35 @@
 #include <linux/nl80211.h>
 #include <linux/pci.h>
 #include <linux/module.h>
+#include <linux/cache.h>
+#include <linux/pci.h>
 #include "ath9k.h"
 
 extern int ath9k_use_msi;
+
+#define PCI_CACHE_LINE_SIZE	0x0c
+#define PCI_LATENCY_TIMER	0x0d	/* 8 bits */
+
+#define PCI_DEVICE_SUB(vend, dev, subvend, subdev) \
+	.vendor = (vend), .device = (dev), \
+	.subvendor = (subvend), .subdevice = (subdev)
+
+#define	PCI_VENDOR_ID_ATHEROS		0x168c
+#define	PCI_VENDOR_ID_SAMSUNG		0x144d
+#define	PCI_VENDOR_ID_AZWAVE		0x1a3b
+#define	PCI_VENDOR_ID_FOXCONN		0x105b
+#define	PCI_VENDOR_ID_ATTANSIC		0x1969
+#define	PCI_VENDOR_ID_ASUSTEK		0x1043
+#define	PCI_VENDOR_ID_DELL		0x1028
+#define	PCI_VENDOR_ID_QMI		0x1a32
+#define	PCI_VENDOR_ID_LENOVO		0x17aa
+#define	PCI_VENDOR_ID_HP		0x103c
+
+#define	BS_BAR	0x10
+#define	PCIR_RETRY_TIMEOUT	0x41
+#define	PCIR_CFG_PMCSR		0x48
+
+#define	DEFAULT_CACHESIZE	32
 
 static const struct pci_device_id ath_pci_id_table[] = {
 	{ PCI_VDEVICE(ATHEROS, 0x0023) }, /* PCI   */

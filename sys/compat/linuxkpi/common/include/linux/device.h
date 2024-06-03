@@ -111,6 +111,7 @@ struct device {
 	bool		bsddev_attached_here;
 	struct device_driver *driver;
 	struct device_type *type;
+	void		*platform_data;
 	dev_t		devt;
 	struct class	*class;
 	void		(*release)(struct device *dev);

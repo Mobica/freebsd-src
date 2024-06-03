@@ -1134,13 +1134,13 @@ void ath9k_rfkill_poll_state(struct ieee80211_hw *hw);
 void ath9k_ps_wakeup(struct ath_softc *sc);
 void ath9k_ps_restore(struct ath_softc *sc);
 
-#ifdef CONFIG_ATH9K_PCI
+// #ifdef CONFIG_ATH9K_PCI
 int ath_pci_init(void);
 void ath_pci_exit(void);
-#else
-static inline int ath_pci_init(void) { return 0; };
-static inline void ath_pci_exit(void) {};
-#endif
+// #else
+// static inline int ath_pci_init(void) { return 0; };
+// static inline void ath_pci_exit(void) {};
+// #endif
 
 #ifdef CONFIG_ATH9K_AHB
 int ath_ahb_init(void);
