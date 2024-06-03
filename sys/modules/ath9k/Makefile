@@ -15,6 +15,7 @@ SRCS+=	ar9002_phy.c ar9003_phy.c ar5008_phy.c
 SRCS+=  ar9002_calib.c ar9003_calib.c calib.c
 SRCS+=  eeprom.c eeprom_def.c eeprom_4k.c eeprom_9287.c
 SRCS+=  ani.c mac.c ar9002_mac.c ar9003_mac.c ar9003_eeprom.c ar9003_paprd.c
+SRCS+=  common.c common-init.c common-beacon.c
 
 SRCS+=	pci.c
 
@@ -36,7 +37,6 @@ CFLAGS+=	${LINUXKPI_INCLUDES}
 #CFLAGS+=	-ferror-limit=0
 
 # CFLAGS+=	-DCONFIG_ATH9K_DEBUG
-
 
 .include <bsd.kmod.mk>
 CFLAGS+= -Wno-cast-qual

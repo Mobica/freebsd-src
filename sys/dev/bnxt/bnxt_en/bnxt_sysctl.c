@@ -29,11 +29,17 @@
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #include <sys/ctype.h>
+#include <linux/delay.h>
 
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
 #include "bnxt_sysctl.h"
 
+DEFINE_MUTEX(tmp_mutex); /* mutex lock for driver */
+extern void bnxt_fw_reset(struct bnxt_softc *bp);
+extern void bnxt_queue_sp_work(struct bnxt_softc *bp);
+extern void
+process_nq(struct bnxt_softc *softc, uint16_t nqid);
 /*
  * We want to create:
  * dev.bnxt.0.hwstats.txq0
@@ -599,6 +605,55 @@ bnxt_create_port_stats_sysctls(struct bnxt_softc *softc)
 		    &softc->tx_port_stats_ext->tx_packets_cos7, "Transmitted packets count cos7");
 
 		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_bytes_pri0", CTLFLAG_RD,
+		    &softc->tx_bytes_pri[0], "Transmitted bytes count pri0");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_packets_pri0", CTLFLAG_RD,
+		    &softc->tx_packets_pri[0], "Transmitted packets count pri0");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_bytes_pri1", CTLFLAG_RD,
+		    &softc->tx_bytes_pri[1], "Transmitted bytes count pri1");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_packets_pri1", CTLFLAG_RD,
+		    &softc->tx_packets_pri[1], "Transmitted packets count pri1");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_bytes_pri2", CTLFLAG_RD,
+		    &softc->tx_bytes_pri[2], "Transmitted bytes count pri2");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_packets_pri2", CTLFLAG_RD,
+		    &softc->tx_packets_pri[2], "Transmitted packets count pri2");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_bytes_pri3", CTLFLAG_RD,
+		    &softc->tx_bytes_pri[3], "Transmitted bytes count pri3");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_packets_pri3", CTLFLAG_RD,
+		    &softc->tx_packets_pri[3], "Transmitted packets count pri3");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_bytes_pri4", CTLFLAG_RD,
+		    &softc->tx_bytes_pri[4], "Transmitted bytes count pri4");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_packets_pri4", CTLFLAG_RD,
+		    &softc->tx_packets_pri[4], "Transmitted packets count pri4");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_bytes_pri5", CTLFLAG_RD,
+		    &softc->tx_bytes_pri[5], "Transmitted bytes count pri5");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_packets_pri5", CTLFLAG_RD,
+		    &softc->tx_packets_pri[5], "Transmitted packets count pri5");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_bytes_pri6", CTLFLAG_RD,
+		    &softc->tx_bytes_pri[6], "Transmitted bytes count pri6");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_packets_pri6", CTLFLAG_RD,
+		    &softc->tx_packets_pri[6], "Transmitted packets count pri6");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_bytes_pri7", CTLFLAG_RD,
+		    &softc->tx_bytes_pri[7], "Transmitted bytes count pri7");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "tx_packets_pri7", CTLFLAG_RD,
+		    &softc->tx_packets_pri[7], "Transmitted packets count pri7");
+
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
 		    "pfc_pri0_tx_duration_us", CTLFLAG_RD,
 		    &softc->tx_port_stats_ext->pfc_pri0_tx_duration_us, "Time duration between"
 		    "XON to XOFF and XOFF to XON for pri0");
@@ -730,6 +785,55 @@ bnxt_create_port_stats_sysctls(struct bnxt_softc *softc)
 		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
 		    "rx_packets_cos7", CTLFLAG_RD,
 		    &softc->rx_port_stats_ext->rx_packets_cos7, "Received packets count cos7");
+
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_bytes_pri0", CTLFLAG_RD,
+		    &softc->rx_bytes_pri[0], "Received bytes count pri0");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_packets_pri0", CTLFLAG_RD,
+		    &softc->rx_packets_pri[0], "Received packets count pri0");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_bytes_pri1", CTLFLAG_RD,
+		    &softc->rx_bytes_pri[1], "Received bytes count pri1");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_packets_pri1", CTLFLAG_RD,
+		    &softc->rx_packets_pri[1], "Received packets count pri1");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_bytes_pri2", CTLFLAG_RD,
+		    &softc->rx_bytes_pri[2], "Received bytes count pri2");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_packets_pri2", CTLFLAG_RD,
+		    &softc->rx_packets_pri[2], "Received packets count pri2");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_bytes_pri3", CTLFLAG_RD,
+		    &softc->rx_bytes_pri[3], "Received bytes count pri3");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_packets_pri3", CTLFLAG_RD,
+		    &softc->rx_packets_pri[3], "Received packets count pri3");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_bytes_pri4", CTLFLAG_RD,
+		    &softc->rx_bytes_pri[4], "Received bytes count pri4");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_packets_pri4", CTLFLAG_RD,
+		    &softc->rx_packets_pri[4], "Received packets count pri4");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_bytes_pri5", CTLFLAG_RD,
+		    &softc->rx_bytes_pri[5], "Received bytes count pri5");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_packets_pri5", CTLFLAG_RD,
+		    &softc->rx_packets_pri[5], "Received packets count pri5");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_bytes_pri6", CTLFLAG_RD,
+		    &softc->rx_bytes_pri[6], "Received bytes count pri6");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_packets_pri6", CTLFLAG_RD,
+		    &softc->rx_packets_pri[6], "Received packets count pri6");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_bytes_pri7", CTLFLAG_RD,
+		    &softc->rx_bytes_pri[7], "Received bytes count pri7");
+		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
+		    "rx_packets_pri7", CTLFLAG_RD,
+		    &softc->rx_packets_pri[7], "Received packets count pri7");
 
 		SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
 		    "pfc_pri0_rx_duration_us", CTLFLAG_RD,
@@ -1068,9 +1172,6 @@ bnxt_create_ver_sysctls(struct bnxt_softc *softc)
 	    "HWRM interface version");
 	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
 	    "driver_hwrm_if", CTLFLAG_RD, vi->driver_hwrm_if_ver, 0,
-	    "HWRM firmware version");
-	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
-	    "hwrm_fw", CTLFLAG_RD, vi->hwrm_fw_ver, 0,
 	    "HWRM firmware version");
 	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
 	    "mgmt_fw", CTLFLAG_RD, vi->mgmt_fw_ver, 0,
@@ -1454,6 +1555,46 @@ bnxt_set_coal_tx_frames_irq(SYSCTL_HANDLER_ARGS) {
 	return rc;
 }
 
+static
+void simulate_reset(struct bnxt_softc *bp, char *fwcli_string)
+{
+	struct hwrm_dbg_fw_cli_input req = {0};
+	int rc = 0;
+
+	bnxt_hwrm_cmd_hdr_init(bp, &req, HWRM_DBG_FW_CLI);
+	req.cmpl_ring = -1;
+	req.target_id = -1;
+	req.cli_cmd_len = strlen(fwcli_string);
+	req.host_buf_len = 64 * 1024;
+	strcpy((char *)req.cli_cmd, fwcli_string);
+
+	BNXT_HWRM_LOCK(bp);
+	rc = _hwrm_send_message(bp, &req, sizeof(req));
+	if (rc) {
+		device_printf(bp->dev, " Manual FW fault failed, rc:%x\n", rc);
+	}
+	BNXT_HWRM_UNLOCK(bp);
+}
+
+static int
+bnxt_reset_ctrl(SYSCTL_HANDLER_ARGS) {
+	struct bnxt_softc *softc = arg1;
+	int rc = 0;
+	char buf[50] = {0};
+
+	if (softc == NULL)
+		return EBUSY;
+
+	rc = sysctl_handle_string(oidp, buf, sizeof(buf), req);
+	if (rc || req->newptr == NULL)
+		return rc;
+
+	if (BNXT_CHIP_P5(softc))
+		simulate_reset(softc, buf);
+
+	return rc;
+}
+
 int
 bnxt_create_config_sysctls_pre(struct bnxt_softc *softc)
 {
@@ -1511,6 +1652,10 @@ bnxt_create_config_sysctls_pre(struct bnxt_softc *softc)
 	SYSCTL_ADD_U64(ctx, children, OID_AUTO, "fw_cap", CTLFLAG_RD,
 		&softc->fw_cap, 0, "FW caps");
 
+	SYSCTL_ADD_PROC(ctx, children, OID_AUTO,
+	    "reset_ctrl", CTLTYPE_STRING | CTLFLAG_RWTUN, softc,
+	    0, bnxt_reset_ctrl, "A",
+	    "Issue controller reset: 0 / 1");
 	return 0;
 }
 
