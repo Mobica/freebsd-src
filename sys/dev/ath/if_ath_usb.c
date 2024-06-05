@@ -1620,36 +1620,20 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		return -1;
 	}
 	STAILQ_REMOVE_HEAD(&usc->sc_cmd_inactive, next);
-	if (ath_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_LOCK_OWNED: %d\n",
-					  __func__,ath_mtx_owned);
+
+	if (ath_mtx_owned)
 		ATH_UNLOCK(sc);
-	}
-	if (ath_tx_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_TX_LOCK_OWNED: %d\n",
-					  __func__,ath_tx_mtx_owned);
+	if (ath_tx_mtx_owned)
 		ATH_TX_UNLOCK(sc);
-	}
-	if (ath_rx_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_RX_LOCK_OWNED: %d\n",
-					  __func__,ath_rx_mtx_owned);
+	if (ath_rx_mtx_owned)
 		ATH_RX_UNLOCK(sc);
-	}
-	if (ath_pcu_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_PCU_LOCK_OWNED: %d\n",
-					  __func__,ath_pcu_mtx_owned);
+	if (ath_pcu_mtx_owned)
 		ATH_PCU_UNLOCK(sc);
-	}
-	if (ath_txbuf_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_TXBUF_LOCK_OWNED: %d\n",
-					  __func__,ath_txbuf_mtx_owned);
+	if (ath_txbuf_mtx_owned)
 		ATH_TXBUF_UNLOCK(sc);
-	}
-	if (ath_txstatus_mtx_owned) {
-		device_printf(sc->sc_dev, "%s: *********** ATH_TXSTATUS_LOCK_OWNED: %d\n",
-					  __func__,ath_txstatus_mtx_owned);
+	if (ath_txstatus_mtx_owned)
 		ATH_TXSTATUS_UNLOCK(sc);
-	}
+
 	ATH_USB_LOCK(sc);
 	while (usc->wait_cmd_id) {
 		/*
@@ -1714,7 +1698,7 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		ATH_TXBUF_LOCK(sc);
 	if (ath_txstatus_mtx_owned)
 		ATH_TXSTATUS_UNLOCK(sc);
-	
+
 	return (error);
 }
 
