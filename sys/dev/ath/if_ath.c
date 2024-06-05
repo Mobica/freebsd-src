@@ -1386,9 +1386,9 @@ ath_attach(u_int16_t venid, u_int16_t devid, struct ath_softc *sc)
 	//TODO: ATH_LOCK disabled only for development purpose, need to investigate below issue:
 	// Sleeping on "athwmi" with the following non-sleepable locks held:
 	// exclusive sleep mutex if_ath_usb0 (if_ath_usb0) r = 0 (0xfffffe0062f011a0) locked @ /usr/src/sys/dev/ath/if_ath.c:1386
-	//ATH_LOCK(sc);
+	ATH_LOCK(sc);
 	ath_power_setpower(sc, HAL_PM_FULL_SLEEP, 1);
-	//ATH_UNLOCK(sc);
+	ATH_UNLOCK(sc);
 
 	return 0;
 bad2:
@@ -2745,15 +2745,7 @@ ath_init(struct ath_softc *sc)
 		__func__, sc->sc_imask);
 
 	sc->sc_running = 1;
-
-	// TODO Commented out due to RNDBOLT02-40 issue.
-	// It's a problem related to adding USB access to ath driver needed for AR9271.
-	// The watchdog calls ath_hal_gethangstate() -> ... -> ar5416GetDiagState() -> ath_usb_read() -> ath_usb_wmi_xcmd().
-	// It causes sleeping in a function used in a callout which is forbidden in FreeBSD.
-	// We decided to disable watchdog temporarly.
-	//
-	//callout_reset(&sc->sc_wd_ch, hz, ath_watchdog, sc);
-
+	callout_reset(&sc->sc_wd_ch, hz, ath_watchdog, sc);
 	ath_hal_intrset(ah, sc->sc_imask);
 
 	ath_power_restore_power_state(sc);

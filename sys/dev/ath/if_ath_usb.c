@@ -1604,6 +1604,13 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct ar_wmi_cmd_hdr *wmi;
 	int xferlen, error;
 
+	int ath_mtx_owned = ATH_LOCK_OWNED(sc);
+	int ath_tx_mtx_owned = ATH_TX_LOCK_OWNED(sc);
+	int ath_rx_mtx_owned = ATH_RX_LOCK_OWNED(sc);
+	int ath_pcu_mtx_owned = ATH_PCU_LOCK_OWNED(sc);
+	int ath_txbuf_mtx_owned = ATH_TXBUF_LOCK_OWNED(sc);
+	int ath_txstatus_mtx_owned = ATH_TXSTATUS_LOCK_OWNED(sc);
+
 	//ATH_USB_LOCK_ASSERT(sc);
 
 	data = STAILQ_FIRST(&usc->sc_cmd_inactive);
@@ -1613,6 +1620,20 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		return -1;
 	}
 	STAILQ_REMOVE_HEAD(&usc->sc_cmd_inactive, next);
+
+	if (ath_mtx_owned)
+		ATH_UNLOCK(sc);
+	if (ath_tx_mtx_owned)
+		ATH_TX_UNLOCK(sc);
+	if (ath_rx_mtx_owned)
+		ATH_RX_UNLOCK(sc);
+	if (ath_pcu_mtx_owned)
+		ATH_PCU_UNLOCK(sc);
+	if (ath_txbuf_mtx_owned)
+		ATH_TXBUF_UNLOCK(sc);
+	if (ath_txstatus_mtx_owned)
+		ATH_TXSTATUS_UNLOCK(sc);
+
 	ATH_USB_LOCK(sc);
 	while (usc->wait_cmd_id) {
 		/*
@@ -1665,6 +1686,19 @@ ath_usb_wmi_xcmd(struct ath_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	usc->wait_cmd_id = 0;
 	wakeup(&usc->wait_cmd_id);
 	ATH_USB_UNLOCK(sc);
+	if (ath_mtx_owned)
+		ATH_LOCK(sc);
+	if (ath_tx_mtx_owned)
+		ATH_TX_LOCK(sc);
+	if (ath_rx_mtx_owned)
+		ATH_RX_LOCK(sc);
+	if (ath_pcu_mtx_owned)
+		ATH_PCU_LOCK(sc);
+	if (ath_txbuf_mtx_owned)
+		ATH_TXBUF_LOCK(sc);
+	if (ath_txstatus_mtx_owned)
+		ATH_TXSTATUS_UNLOCK(sc);
+
 	return (error);
 }
 
