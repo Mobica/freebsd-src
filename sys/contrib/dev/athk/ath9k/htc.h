@@ -18,14 +18,15 @@
 #define HTC_H
 
 #include <linux/module.h>
-#include <linux/usb.h>
 #include <linux/firmware.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/leds.h>
 #include <linux/slab.h>
+#include <linux/interrupt.h>
 #include <net/mac80211.h>
+#include <linux/usb.h>
 
 #include "common.h"
 #include "htc_hst.h"

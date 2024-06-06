@@ -27,12 +27,7 @@
 
 struct sk_buff;
 
-struct sk_buff *
-ieee80211_get_buffered_bc(struct ieee80211_hw *hw,
-			  struct ieee80211_vif *vif);
-
-
-struct sk_buff *
+static inline struct sk_buff *
 ieee80211_get_buffered_bc(struct ieee80211_hw *hw,
 			  struct ieee80211_vif *vif)
 {

@@ -110,7 +110,7 @@ static void htc_process_conn_rsp(struct htc_target *target,
 	enum htc_endpoint_id epid, tepid;
 
 	svc_rspmsg = (struct htc_conn_svc_rspmsg *)
-		((void *) htc_hdr + sizeof(struct htc_frame_hdr));
+		((char *) htc_hdr + sizeof(struct htc_frame_hdr));
 
 	if (svc_rspmsg->status == HTC_SERVICE_SUCCESS) {
 		epid = svc_rspmsg->endpoint_id;
@@ -438,7 +438,7 @@ void ath9k_htc_rx_msg(struct htc_target *htc_handle,
 		}
 
 		/* Get the message ID */
-		msg_id = (__be16 *) ((void *) htc_hdr +
+		msg_id = (__be16 *) ((char *) htc_hdr +
 				     sizeof(struct htc_frame_hdr));
 
 		/* Now process HTC messages */

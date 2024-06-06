@@ -265,10 +265,12 @@ static void ath9k_htc_tx_data(struct ath9k_htc_priv *priv,
 {
 	struct ieee80211_tx_info *tx_info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_hdr *hdr;
+	(void) hdr;
 	struct ath9k_htc_tx_ctl *tx_ctl;
 	struct tx_frame_hdr tx_hdr;
 	u32 flags = 0;
-	u8 *qc, *tx_fhdr;
+	// u8 *qc;
+	u8 *tx_fhdr;
 	u16 qnum;
 
 	tx_ctl = HTC_SKB_CB(skb);
@@ -301,11 +303,11 @@ static void ath9k_htc_tx_data(struct ath9k_htc_priv *priv,
 	 * to each other using the same priority. For other QoS data
 	 * frames extract the priority from the header.
 	 */
-	if (!(tx_info->control.flags & IEEE80211_TX_CTRL_DONT_REORDER) &&
-	    ieee80211_is_data_qos(hdr->frame_control)) {
-		qc = ieee80211_get_qos_ctl(hdr);
-		tx_hdr.tidno = qc[0] & IEEE80211_QOS_CTL_TID_MASK;
-	}
+	// if (!(tx_info->control.flags & IEEE80211_TX_CTRL_DONT_REORDER) &&
+	//     ieee80211_is_data_qos(hdr->frame_control)) {
+	// 	qc = ieee80211_get_qos_ctl(hdr);
+	// 	tx_hdr.tidno = qc[0] & IEEE80211_QOS_CTL_TID_MASK;
+	// }
 
 	/* Check for RTS protection */
 	if (priv->hw->wiphy->rts_threshold != (u32) -1)
@@ -1144,8 +1146,8 @@ void ath9k_htc_rxep(void *drv_priv, struct sk_buff *skb,
 	unsigned long flags;
 
 	/* Check if ath9k_rx_init() completed. */
-	if (!data_race(priv->rx.initialized))
-		goto err;
+	// if (!data_race(priv->rx.initialized))
+	// 	goto err;
 
 	spin_lock_irqsave(&priv->rx.rxbuflock, flags);
 	list_for_each_entry(tmp_buf, &priv->rx.rxbuf, list) {

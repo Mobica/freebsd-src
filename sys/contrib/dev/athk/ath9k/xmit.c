@@ -2809,20 +2809,38 @@ void ath_tx_node_init(struct ath_softc *sc, struct ath_node *an)
 {
 	struct ath_atx_tid *tid;
 	int tidno, acno;
+	int number = 0;
 
 	for (tidno = 0; tidno < IEEE80211_NUM_TIDS; tidno++) {
+
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		tid = ath_node_to_tid(an, tidno);
+
+		uprintf("tid address %p,  an adress %p.  tid->an address %p", tid, an, tid->an);
+
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		tid->an        = an;
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		tid->tidno     = tidno;
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		tid->seq_start = tid->seq_next = 0;
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		tid->baw_size  = WME_MAX_BA;
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		tid->baw_head  = tid->baw_tail = 0;
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		tid->active	   = false;
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		tid->clear_ps_filter = true;
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		__skb_queue_head_init(&tid->retry_q);
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		INIT_LIST_HEAD(&tid->list);
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		acno = TID_TO_WME_AC(tidno);
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 		tid->txq = sc->tx.txq_map[acno];
+		uprintf("\n ath_tx_node_init loop %d\n", number++);
 
 		if (!an->sta)
 			break; /* just one multicast ath_atx_tid */

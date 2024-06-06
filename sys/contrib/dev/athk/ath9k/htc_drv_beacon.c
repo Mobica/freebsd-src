@@ -15,6 +15,7 @@
  */
 
 #include "htc.h"
+#include "ath9k_stubs.h"
 
 #define FUDGE 2
 
@@ -215,7 +216,7 @@ static void ath9k_htc_send_beacon(struct ath9k_htc_priv *priv,
 	}
 
 	/* Get a new beacon */
-	beacon = ieee80211_beacon_get(priv->hw, vif);
+	beacon = ieee80211_beacon_get(priv->hw, vif, 0);
 	if (!beacon) {
 		spin_unlock_bh(&priv->beacon_lock);
 		return;
@@ -278,7 +279,7 @@ static int ath9k_htc_choose_bslot(struct ath9k_htc_priv *priv,
 	slot = ATH9K_HTC_MAX_BCN_VIF - slot - 1;
 
 	ath_dbg(common, BEACON,
-		"Choose slot: %d, tsf: %llu, tsftu: %u, intval: %u\n",
+		"Choose slot: %d, tsf: %lu, tsftu: %u, intval: %u\n",
 		slot, tsf, tsftu, intval);
 
 	return slot;

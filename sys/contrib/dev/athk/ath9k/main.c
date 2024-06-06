@@ -2817,3 +2817,10 @@ struct ieee80211_ops ath9k_ops = {
 	.get_txpower        = ath9k_get_txpower,
 	.wake_tx_queue      = ath9k_wake_tx_queue,
 };
+
+#if defined(__FreeBSD__)
+MODULE_VERSION(if_ath9k, 1);
+MODULE_DEPEND(if_ath9k, linuxkpi, 1, 1, 1);
+MODULE_DEPEND(if_ath9k, linuxkpi_wlan, 1, 1, 1);
+MODULE_DEPEND(if_ath9k, athk_common, 1, 1, 1);
+#endif

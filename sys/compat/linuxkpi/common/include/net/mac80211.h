@@ -695,6 +695,7 @@ struct ieee80211_link_sta {
 
 struct ieee80211_sta {
 	/* TODO FIXME */
+	u32 supp_rates[NUM_NL80211_BANDS];
 	int		max_amsdu_subframes;
 	int		mfp, smps_mode, tdls, tdls_initiator;
 	struct ieee80211_sta_ht_cap     ht_cap;
@@ -2743,6 +2744,26 @@ ieee80211_get_rts_cts_rate(const struct ieee80211_hw *hw,
 	if (c->control.rts_cts_rate_idx < 0)
 		return NULL;
 	return &hw->wiphy->bands[c->band]->bitrates[c->control.rts_cts_rate_idx];
+}
+
+static inline bool
+conf_is_ht(struct ieee80211_conf *conf)
+{
+	return (conf->chandef.width != NL80211_CHAN_WIDTH_5) &&
+		(conf->chandef.width != NL80211_CHAN_WIDTH_10) &&
+		(conf->chandef.width != NL80211_CHAN_WIDTH_20_NOHT);
+}
+
+static inline bool
+conf_is_ht40(struct ieee80211_conf *conf)
+{
+	return conf->chandef.width == NL80211_CHAN_WIDTH_40;
+}
+
+static inline bool
+conf_is_ht20(struct ieee80211_conf *conf)
+{
+	return conf->chandef.width == NL80211_CHAN_WIDTH_20;
 }
 
 #endif	/* _LINUXKPI_NET_MAC80211_H */

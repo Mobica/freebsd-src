@@ -77,6 +77,8 @@ struct usb_driver {
 	const struct usb_device_id *id_table;
 
 	void (*shutdown)(struct usb_interface *intf);
+	unsigned int disable_hub_initiated_lpm:1;
+	unsigned int soft_unbind:1;
 
 	LIST_ENTRY(usb_driver) linux_driver_list;
 };
@@ -181,14 +183,14 @@ struct usb_driver {
 #define	PIPE_CONTROL			0x00	/* UE_CONTROL */
 #define	PIPE_BULK			0x02	/* UE_BULK */
 
-/* Whenever Linux references an USB endpoint:
- * a) to initialize "urb->endpoint"
- * b) second argument passed to "usb_control_msg()"
- *
- * Then it uses one of the following macros. The "endpoint" argument
- * is the physical endpoint value masked by 0xF. The "dev" argument
- * is a pointer to "struct usb_device".
- */
+// /* Whenever Linux references an USB endpoint:
+//  * a) to initialize "urb->endpoint"
+//  * b) second argument passed to "usb_control_msg()"
+//  *
+//  * Then it uses one of the following macros. The "endpoint" argument
+//  * is the physical endpoint value masked by 0xF. The "dev" argument
+//  * is a pointer to "struct usb_device".
+//  */
 #define	usb_sndctrlpipe(dev,endpoint) \
   usb_find_host_endpoint(dev, PIPE_CONTROL, (endpoint) | USB_DIR_OUT)
 
@@ -213,6 +215,7 @@ struct usb_driver {
 #define	usb_rcvintpipe(dev,endpoint) \
   usb_find_host_endpoint(dev, PIPE_INTERRUPT, (endpoint) | USB_DIR_IN)
 
+
 /*
  * The following structure is used to extend "struct urb" when we are
  * dealing with an isochronous endpoint. It contains information about
@@ -226,6 +229,14 @@ struct usb_iso_packet_descriptor {
 	uint16_t length;		/* expected length */
 	uint16_t actual_length;
 	 int16_t status;		/* transfer status */
+};
+
+struct usb_anchor {
+	struct list_head urb_list;
+	wait_queue_head_t wait;
+	spinlock_t lock;
+	atomic_t suspend_wakeups;
+	unsigned int poisoned:1;
 };
 
 /*
@@ -252,6 +263,7 @@ struct urb {
 	usb_timeout_t timeout;		/* FreeBSD specific */
 
 	uint16_t transfer_flags;	/* (in) */
+	unsigned int pipe;		/* (in) pipe information */
 #define	URB_SHORT_NOT_OK	0x0001	/* report short transfers like errors */
 #define	URB_ISO_ASAP		0x0002	/* ignore "start_frame" field */
 #define	URB_ZERO_PACKET		0x0004	/* the USB transfer ends with a short
@@ -274,6 +286,14 @@ struct urb {
 
 	struct usb_iso_packet_descriptor iso_frame_desc[];	/* (in) ISO ONLY */
 };
+
+static inline void init_usb_anchor(struct usb_anchor *anchor)
+{
+	memset(anchor, 0, sizeof(*anchor));
+	INIT_LIST_HEAD(&anchor->urb_list);
+	init_waitqueue_head(&anchor->wait);
+	spin_lock_init(&anchor->lock);
+}
 
 /* various prototypes */
 
@@ -311,6 +331,13 @@ void	usb_fill_bulk_urb(struct urb *, struct usb_device *,
 	    struct usb_host_endpoint *, void *, int, usb_complete_t, void *);
 int	usb_bulk_msg(struct usb_device *, struct usb_host_endpoint *,
 	    void *, int, uint16_t *, usb_timeout_t);
+
+void usb_anchor_urb(struct urb *urb, struct usb_anchor *anchor);
+void usb_unanchor_urb(struct urb *urb);
+struct urb *usb_get_urb(struct urb *urb);
+void usb_kill_anchored_urbs(struct usb_anchor *anchor);
+// inline void init_usb_anchor(struct usb_anchor *anchor);
+
 
 #define	interface_to_usbdev(intf) (intf)->linux_udev
 #define	interface_to_bsddev(intf) (intf)->linux_udev

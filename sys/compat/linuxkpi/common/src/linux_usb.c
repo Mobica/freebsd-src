@@ -54,6 +54,7 @@
 
 #include <dev/usb/usb_core.h>
 #include <linux/usb.h>
+#include <linux/kref.h>
 #include <dev/usb/usb_process.h>
 #include <dev/usb/usb_device.h>
 #include <dev/usb/usb_util.h>
@@ -1709,6 +1710,136 @@ usb_bulk_msg(struct usb_device *udev, struct usb_host_endpoint *uhe,
 	return (err);
 }
 MODULE_DEPEND(linuxkpi, usb, 1, 1, 1);
+
+
+#define usb_put_urb usb_free_urb
+
+static int usb_anchor_check_wakeup(struct usb_anchor *anchor)
+{
+	return atomic_read(&anchor->suspend_wakeups) == 0 &&
+		list_empty(&anchor->urb_list);
+}
+
+void usb_free_urb(struct urb *urb)
+{
+	if (urb)
+		kref_put(&urb->kref, urb_destroy);
+}
+
+/**
+ * usb_get_urb - increments the reference count of the urb
+ * @urb: pointer to the urb to modify, may be NULL
+ *
+ * This must be  called whenever a urb is transferred from a device driver to a
+ * host controller driver.  This allows proper reference counting to happen
+ * for urbs.
+ *
+ * Return: A pointer to the urb with the incremented reference counter.
+ */
+struct urb *usb_get_urb(struct urb *urb)
+{
+	if (urb)
+		kref_get(&urb->kref);
+	return urb;
+}
+
+/* Callers must hold anchor->lock */
+static void __usb_unanchor_urb(struct urb *urb, struct usb_anchor *anchor)
+{
+	urb->anchor = NULL;
+	list_del(&urb->anchor_list);
+	usb_put_urb(urb);
+	if (usb_anchor_check_wakeup(anchor))
+		wake_up(&anchor->wait);
+}
+
+/**
+ * usb_unanchor_urb - unanchors an URB
+ * @urb: pointer to the urb to anchor
+ *
+ * Call this to stop the system keeping track of this URB
+ */
+void usb_unanchor_urb(struct urb *urb)
+{
+	unsigned long flags;
+	struct usb_anchor *anchor;
+
+	if (!urb)
+		return;
+
+	anchor = urb->anchor;
+	if (!anchor)
+		return;
+
+	spin_lock_irqsave(&anchor->lock, flags);
+	/*
+	 * At this point, we could be competing with another thread which
+	 * has the same intention. To protect the urb from being unanchored
+	 * twice, only the winner of the race gets the job.
+	 */
+	if (likely(anchor == urb->anchor))
+		__usb_unanchor_urb(urb, anchor);
+	spin_unlock_irqrestore(&anchor->lock, flags);
+}
+
+/**
+ * usb_anchor_urb - anchors an URB while it is processed
+ * @urb: pointer to the urb to anchor
+ * @anchor: pointer to the anchor
+ *
+ * This can be called to have access to URBs which are to be executed
+ * without bothering to track them
+ */
+void usb_anchor_urb(struct urb *urb, struct usb_anchor *anchor)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&anchor->lock, flags);
+	usb_get_urb(urb);
+	list_add_tail(&urb->anchor_list, &anchor->urb_list);
+	urb->anchor = anchor;
+
+	if (unlikely(anchor->poisoned))
+		atomic_inc(&urb->reject);
+
+	spin_unlock_irqrestore(&anchor->lock, flags);
+}
+
+/**
+ * usb_kill_anchored_urbs - kill all URBs associated with an anchor
+ * @anchor: anchor the requests are bound to
+ *
+ * This kills all outstanding URBs starting from the back of the queue,
+ * with guarantee that no completer callbacks will take place from the
+ * anchor after this function returns.
+ *
+ * This routine should not be called by a driver after its disconnect
+ * method has returned.
+ */
+void usb_kill_anchored_urbs(struct usb_anchor *anchor)
+{
+	struct urb *victim;
+	int surely_empty;
+
+	do {
+		spin_lock_irq(&anchor->lock);
+		while (!list_empty(&anchor->urb_list)) {
+			victim = list_entry(anchor->urb_list.prev,
+					    struct urb, anchor_list);
+			/* make sure the URB isn't freed before we kill it */
+			usb_get_urb(victim);
+			spin_unlock_irq(&anchor->lock);
+			/* this will unanchor the URB */
+			usb_kill_urb(victim);
+			usb_put_urb(victim);
+			spin_lock_irq(&anchor->lock);
+		}
+		surely_empty = usb_anchor_check_wakeup(anchor);
+
+		spin_unlock_irq(&anchor->lock);
+		cpu_relax();
+	} while (!surely_empty);
+}
 
 static void
 usb_linux_init(void *arg)

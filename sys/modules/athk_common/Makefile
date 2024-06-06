@@ -30,6 +30,7 @@ CFLAGS+=	-DKBUILD_MODNAME='"athk_common"'
 
 CFLAGS+=	-I${DEVDIR}
 CFLAGS+=	${LINUXKPI_INCLUDES}
+CFLAGS+=    -O0 -g
 # Helpful after fresh imports.
 #CFLAGS+=	-ferror-limit=0
 

@@ -17,6 +17,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include "htc.h"
+#include <linux/nl80211.h>
 
 MODULE_AUTHOR("Atheros Communications");
 MODULE_LICENSE("Dual BSD/GPL");
@@ -108,7 +109,7 @@ static void ath9k_deinit_device(struct ath9k_htc_priv *priv)
 {
 	struct ieee80211_hw *hw = priv->hw;
 
-	wiphy_rfkill_stop_polling(hw->wiphy);
+	// wiphy_rfkill_stop_polling(hw->wiphy);
 	ath9k_deinit_leds(priv);
 	ath9k_htc_deinit_debug(priv);
 	ieee80211_unregister_hw(hw);
@@ -511,6 +512,8 @@ static u32 ath9k_reg_rmw(void *hw_priv, u32 reg_offset, u32 set, u32 clr)
 	return 0;
 }
 
+#define L1_CACHE_BYTES 16
+
 static void ath_usb_read_cachesize(struct ath_common *common, int *csz)
 {
 	*csz = L1_CACHE_BYTES >> 2;
@@ -716,16 +719,16 @@ static void ath9k_set_hw_capab(struct ath9k_htc_priv *priv,
 	struct ath_common *common = ath9k_hw_common(priv->ah);
 	struct base_eep_header *pBase;
 
-	ieee80211_hw_set(hw, HOST_BROADCAST_PS_BUFFERING);
+	// ieee80211_hw_set(hw, HOST_BROADCAST_PS_BUFFERING);
 	ieee80211_hw_set(hw, MFP_CAPABLE);
 	ieee80211_hw_set(hw, REPORTS_TX_ACK_STATUS);
-	ieee80211_hw_set(hw, PS_NULLFUNC_STACK);
+	// ieee80211_hw_set(hw, PS_NULLFUNC_STACK);
 	ieee80211_hw_set(hw, RX_INCLUDES_FCS);
 	ieee80211_hw_set(hw, HAS_RATE_CONTROL);
 	ieee80211_hw_set(hw, SPECTRUM_MGMT);
 	ieee80211_hw_set(hw, SIGNAL_DBM);
 	ieee80211_hw_set(hw, AMPDU_AGGREGATION);
-	ieee80211_hw_set(hw, DOESNT_SUPPORT_QOS_NDP);
+	// ieee80211_hw_set(hw, DOESNT_SUPPORT_QOS_NDP);
 
 	if (ath9k_ps_enable)
 		ieee80211_hw_set(hw, SUPPORTS_PS);
@@ -778,8 +781,8 @@ static void ath9k_set_hw_capab(struct ath9k_htc_priv *priv,
 	SET_IEEE80211_PERM_ADDR(hw, common->macaddr);
 
 	wiphy_ext_feature_set(hw->wiphy, NL80211_EXT_FEATURE_CQM_RSSI_LIST);
-	wiphy_ext_feature_set(hw->wiphy,
-			      NL80211_EXT_FEATURE_MULTICAST_REGISTRATIONS);
+	// wiphy_ext_feature_set(hw->wiphy,
+	// 		      NL80211_EXT_FEATURE_MULTICAST_REGISTRATIONS);
 }
 
 static int ath9k_init_firmware_version(struct ath9k_htc_priv *priv)
@@ -1016,7 +1019,7 @@ int ath9k_htc_resume(struct htc_target *htc_handle)
 }
 #endif
 
-static int __init ath9k_htc_init(void)
+static int ath9k_htc_init(void)
 {
 	if (ath9k_hif_usb_init() < 0) {
 		pr_err("No USB devices found, driver not installed\n");

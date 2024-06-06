@@ -170,8 +170,8 @@ void ath9k_wmi_event_tasklet(struct tasklet_struct *t)
 			break;
 		case WMI_TXSTATUS_EVENTID:
 			/* Check if ath9k_tx_init() completed. */
-			if (!data_race(priv->tx.initialized))
-				break;
+			// if (!data_race(priv->tx.initialized))
+			// 	break;
 
 			spin_lock_bh(&priv->tx.tx_lock);
 			if (priv->tx.flags & ATH9K_HTC_OP_TX_DRAIN) {

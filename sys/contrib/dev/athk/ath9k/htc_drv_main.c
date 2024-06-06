@@ -596,6 +596,7 @@ static void ath9k_htc_setup_rate(struct ath9k_htc_priv *priv,
 {
 	struct ath9k_htc_sta *ista = (struct ath9k_htc_sta *) sta->drv_priv;
 	struct ieee80211_supported_band *sband;
+	(void) sband;
 	u32 caps = 0;
 	int i, j;
 
@@ -787,7 +788,7 @@ void ath9k_htc_ani_work(struct work_struct *work)
 	/* Long calibration runs independently of short calibration. */
 	if ((timestamp - common->ani.longcal_timer) >= ATH_LONG_CALINTERVAL) {
 		longcal = true;
-		ath_dbg(common, ANI, "longcal @%lu\n", jiffies);
+		ath_dbg(common, ANI, "longcal @%d\n", jiffies);
 		common->ani.longcal_timer = timestamp;
 	}
 
@@ -799,7 +800,7 @@ void ath9k_htc_ani_work(struct work_struct *work)
 		if ((timestamp - common->ani.shortcal_timer) >=
 		    short_cal_interval) {
 			shortcal = true;
-			ath_dbg(common, ANI, "shortcal @%lu\n", jiffies);
+			ath_dbg(common, ANI, "shortcal @%d\n", jiffies);
 			common->ani.shortcal_timer = timestamp;
 			common->ani.resetcal_timer = timestamp;
 		}
@@ -1369,7 +1370,7 @@ static void ath9k_htc_sta_rc_update(struct ieee80211_hw *hw,
 }
 
 static int ath9k_htc_conf_tx(struct ieee80211_hw *hw,
-			     struct ieee80211_vif *vif, u16 queue,
+			     struct ieee80211_vif *vif, u32 stub, u16 queue,
 			     const struct ieee80211_tx_queue_params *params)
 {
 	struct ath9k_htc_priv *priv = hw->priv;
@@ -1509,7 +1510,7 @@ static void ath9k_htc_choose_set_bssid(struct ath9k_htc_priv *priv)
 static void ath9k_htc_bss_info_changed(struct ieee80211_hw *hw,
 				       struct ieee80211_vif *vif,
 				       struct ieee80211_bss_conf *bss_conf,
-				       u32 changed)
+				       u64 changed)
 {
 	struct ath9k_htc_priv *priv = hw->priv;
 	struct ath_hw *ah = priv->ah;
@@ -1883,12 +1884,12 @@ struct ieee80211_ops ath9k_htc_ops = {
 	.set_key            = ath9k_htc_set_key,
 	.get_tsf            = ath9k_htc_get_tsf,
 	.set_tsf            = ath9k_htc_set_tsf,
-	.reset_tsf          = ath9k_htc_reset_tsf,
+	// .reset_tsf          = ath9k_htc_reset_tsf,
 	.ampdu_action       = ath9k_htc_ampdu_action,
 	.sw_scan_start      = ath9k_htc_sw_scan_start,
 	.sw_scan_complete   = ath9k_htc_sw_scan_complete,
 	.set_rts_threshold  = ath9k_htc_set_rts_threshold,
-	.rfkill_poll        = ath9k_htc_rfkill_poll_state,
+	// .rfkill_poll        = ath9k_htc_rfkill_poll_state,
 	.set_coverage_class = ath9k_htc_set_coverage_class,
 	.set_bitrate_mask   = ath9k_htc_set_bitrate_mask,
 	.get_stats	    = ath9k_htc_get_stats,
