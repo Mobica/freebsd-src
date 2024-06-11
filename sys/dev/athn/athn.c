@@ -43,6 +43,7 @@
 
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
+#include <net80211/ieee80211_regdomain.h>
 #include <net80211/ieee80211_radiotap.h>
 
 #include "athnreg.h"
@@ -191,8 +192,8 @@ athn_config_ht(struct athn_softc *sc)
 		return;
 
 	/* Set HT capabilities. */
-	ic->ic_htcaps = (IEEE80211_HTCAP_SMPS_DIS <<
-	    IEEE80211_HTCAP_SMPS_SHIFT);
+	// ic->ic_htcaps = (IEEE80211_HTCAP_SMPS_DIS <<
+	//     IEEE80211_HTCAP_SMPS_SHIFT);
 #ifdef notyet
 	ic->ic_htcaps |= IEEE80211_HTCAP_CBW20_40 |
 	    IEEE80211_HTCAP_SGI40 |
@@ -243,21 +244,26 @@ athn_getradiocaps(struct ieee80211com *ic,
 {
 	struct athn_softc *sc = ic->ic_softc;
 	uint8_t bands[IEEE80211_MODE_BYTES];
+	int cbw_flags;
+
 	memset(bands, 0, sizeof(bands));
+
+
+	cbw_flags = (ic->ic_htcaps & IEEE80211_HTCAP_CHWIDTH40) ?
+	    NET80211_CBW_FLAG_HT40 : 0;
 	/* Set supported rates. */
-	if (sc->eeprom.baseEepHeader.opCapFlags & AR5416_OPFLAGS_11G) {
-		printf("ATHN_FLAG_11G");
+
+		// printf("ATHN_FLAG_11G");
 		setbit(bands, IEEE80211_MODE_11B);
 		setbit(bands, IEEE80211_MODE_11G);
 		setbit(bands, IEEE80211_MODE_11NG);
-		ieee80211_add_channel_list_2ghz(ic->ic_channels, IEEE80211_CHAN_MAX, &ic->ic_nchans,
-			athn_2ghz_chans, 14, bands, 0);
-	}
+		ieee80211_add_channels_default_2ghz(chans, maxchans, nchans,
+	    bands, cbw_flags);
 	if (sc->eeprom.baseEepHeader.opCapFlags & AR5416_OPFLAGS_11A) {
 		printf("ATHN_FLAG_11A");
 		setbit(bands, IEEE80211_MODE_11A);
 		setbit(bands, IEEE80211_MODE_11NA);
-		ieee80211_add_channel_list_5ghz(ic->ic_channels, IEEE80211_CHAN_MAX, &ic->ic_nchans,
+		ieee80211_add_channel_list_5ghz(ic->ic_channels, IEEE80211_CHAN_MAX, nchans,
 			athn_5ghz_chans, nitems(athn_5ghz_chans), bands, 0);
 	}
 }
@@ -458,11 +464,72 @@ athn_attach(struct athn_softc *sc)
 #else
 extern int		athn_usb_read_rom(struct athn_softc *);
 
+static void
+athn_scan_start(struct ieee80211com *ic)
+{
+
+//	printf("%s: TODO\n", __func__);
+}
+
+static void
+athn_scan_end(struct ieee80211com *ic)
+{
+
+//	printf("%s: TODO\n", __func__);
+}
+
+static int
+athn_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
+    const struct ieee80211_bpf_params *params)
+{
+// 	struct ieee80211com *ic= ni->ni_ic;
+// 	struct athn_softc *sc = ic->ic_softc;
+// 	struct otus_data *bf = NULL;
+// 	int error = 0;
+
+// 	/* Don't transmit if we're not running */
+// 	// OTUS_LOCK(sc);
+// 	// if (! sc->sc_running) {
+// 	// 	error = ENETDOWN;
+// 	// 	goto error;
+// 	// }
+
+// 	bf = otus_getbuf(sc);
+// 	if (bf == NULL) {
+// 		error = ENOBUFS;
+// 		goto error;
+// 	}
+
+// 	if (otus_tx(sc, ni, m, bf, params) != 0) {
+// 		error = EIO;
+// 		goto error;
+// 	}
+
+// 	OTUS_UNLOCK(sc);
+// 	return (0);
+// error:
+// 	if (bf)
+// 		otus_freebuf(sc, bf);
+// 	OTUS_UNLOCK(sc);
+// 	m_freem(m);
+// 	return (error);
+	return 0;
+}
+
+static void
+athn_parent(struct ieee80211com *ic)
+{
+	struct otus_softc *sc = ic->ic_softc;
+	// int startall = 0;
+	ieee80211_start_all(ic);
+}
+
 int
 athn_like_otus_attach(struct athn_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	uint32_t in, out;
+	uint8_t bands[IEEE80211_MODE_BYTES];
 	int error;
 
 	ATHN_LOCK(sc);
@@ -485,6 +552,10 @@ athn_like_otus_attach(struct athn_softc *sc)
 	uint8_t txmask = sc->eeprom.baseEepHeader.txMask;
 	uint8_t rxmask = sc->eeprom.baseEepHeader.rxMask;
 	uint8_t capflags = sc->eeprom.baseEepHeader.opCapFlags;
+
+	device_printf(sc->sc_dev,
+		    "%s ic_macaddr = %s",
+		    __func__, ether_sprintf(ic->ic_macaddr));
 
 	IEEE80211_ADDR_COPY(ic->ic_macaddr, sc->eeprom.baseEepHeader.macAddr);
 
@@ -545,7 +616,17 @@ athn_like_otus_attach(struct athn_softc *sc)
 	athn_getradiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans,
 	    ic->ic_channels);
 
+	memset(bands, 0, sizeof(bands));
+	setbit(bands, IEEE80211_MODE_11B);
+	setbit(bands, IEEE80211_MODE_11G);
+
+	ieee80211_init_channels(ic, NULL, bands);
+
 	ieee80211_ifattach(ic);
+	ic->ic_raw_xmit = athn_raw_xmit;
+	ic->ic_scan_start = athn_scan_start;
+	ic->ic_scan_end = athn_scan_end;
+	ic->ic_parent = athn_parent;
 #if 0
 	ic->ic_raw_xmit = otus_raw_xmit;
 	ic->ic_scan_start = otus_scan_start;
@@ -672,7 +753,7 @@ athn_rx_start(struct athn_softc *sc)
 	uint32_t rfilt;
 
 	/* Setup Rx DMA descriptors. */
-	sc->ops.rx_enable(sc);
+	// sc->ops.rx_enable(sc);
 
 	/* Set Rx filter. */
 	rfilt = AR_RX_FILTER_UCAST | AR_RX_FILTER_BCAST | AR_RX_FILTER_MCAST;
@@ -1110,16 +1191,16 @@ athn_set_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 	sc->curchanext = extc;
 
 	/* Set transmit power values for new channel. */
-	ops->set_txpower(sc, c, extc);
+	// ops->set_txpower(sc, c, extc);
 
 	/* Release the RF Bus grant. */
-	ops->rf_bus_release(sc);
+	// ops->rf_bus_release(sc);
 
 	/* Write delta slope coeffs for modes where OFDM may be used. */
-	if (sc->sc_ic.ic_curmode != IEEE80211_MODE_11B)
-		ops->set_delta_slope(sc, c, extc);
+	// if (sc->sc_ic.ic_curmode != IEEE80211_MODE_11B)
+	// 	ops->set_delta_slope(sc, c, extc);
 
-	ops->spur_mitigate(sc, c, extc);
+	// ops->spur_mitigate(sc, c, extc);
 
 	return (0);
 }
@@ -1352,8 +1433,8 @@ athn_set_led(struct athn_softc *sc, int on)
 {
 	struct athn_ops *ops = &sc->ops;
 
-	sc->led_state = on;
-	ops->gpio_write(sc, sc->led_pin, !sc->led_state);
+	// sc->led_state = on;
+	// ops->gpio_write(sc, sc->led_pin, !sc->led_state);
 }
 
 #ifdef ATHN_BT_COEXISTENCE

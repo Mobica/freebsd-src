@@ -524,7 +524,7 @@ athn_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 	vap = &uvp->vap;
 
 	if (ieee80211_vap_setup(ic, vap, name, unit, opmode,
-	    flags, bssid) != 0) {
+	    flags | IEEE80211_CLONE_NOBEACONS, bssid) != 0) {
 		/* out of memory */
 		free(uvp, M_80211_VAP);
 		return (NULL);
@@ -603,6 +603,16 @@ athn_usb_verify_fw_ver(struct athn_softc *sc, struct ar_wmi_fw_version *img_ver)
 	return error;
 }
 
+static void
+athn_set_channel(struct ieee80211com *ic)
+{
+	struct athn_softc *sc = ic->ic_softc;
+
+	ATHN_LOCK(sc);
+	(void) athn_usb_switch_chan(sc, ic->ic_curchan, NULL);
+	ATHN_UNLOCK(sc);
+}
+
 void
 athn_usb_attachhook(device_t self)
 {
@@ -668,6 +678,17 @@ athn_usb_attachhook(device_t self)
 	if (error != 0) {
 		return;
 	}
+
+	// ic->ic_vap_create = athn_vap_create;
+	// ic->ic_vap_delete = athn_vap_delete;
+	// ic->ic_newstate = athn_usb_newstate;
+	ic->ic_vap_create = athn_vap_create;
+	ic->ic_vap_delete = athn_vap_delete;
+	ic->ic_set_channel = athn_set_channel;
+
+
+	//  ifp->if_ioctl = athn_usb_ioctl;
+	// ifp->if_start = athn_usb_start;
 
 	usc->sc_athn_attached = 1;
 #if OpenBSD_IEEE80211_API
@@ -1098,6 +1119,8 @@ athn_if_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 			wakeup(&usc->wait_msg_id);
 			STAILQ_INSERT_TAIL(&usc->sc_cmd_inactive, cmd, next);
 		}
+		if (usc->wait_msg_id == AR_WMI_CMD_MSG)
+			STAILQ_INSERT_TAIL(&usc->sc_cmd_inactive, cmd, next);
 		/* FALLTHROUGH */
 	case USB_ST_SETUP:
 tr_setup:
@@ -1519,7 +1542,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct ar_wmi_cmd_hdr *wmi;
 	int xferlen, error;
 
-	device_printf(sc->sc_dev, "%s: called \n", __func__);
+	// device_printf(sc->sc_dev, "%s: called \n", __func__);
 
 	ATHN_ASSERT_LOCKED(sc);
 
@@ -1597,12 +1620,17 @@ athn_usb_read_rom(struct athn_softc *sc)
 	eep = sc->eep;
 	addr = AR_EEPROM_OFFSET(sc->eep_base);
 	for (i = 0; i < sc->eep_size / 16; i++) {
+		DELAY(3000);
 		for (j = 0; j < 8; j++, addr += 4)
 			addrs[j] = htobe32(addr);
 		error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_READ,
 		    addrs, sizeof(addrs), vals);
+		DELAY(3000);
 		if (error != 0)
+		{
+			printf("error in reading rom\n");
 			break;
+		}
 		for (j = 0; j < 8; j++)
 			*eep++ = betoh32(vals[j]);
 	}
@@ -1739,15 +1767,15 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 		break;
 	case IEEE80211_S_SCAN:
 		/* Make the LED blink while scanning. */
-		athn_set_led(sc, !sc->led_state);
-		error = athn_usb_switch_chan(sc, ni->ni_chan, NULL);
-		if (error)
-			printf("%s: could not switch to channel %d\n",
-			    device_get_name(usc->usb_dev), 0);
-			    ieee80211_chan2ieee(ic, ni->ni_chan);
-		// uncomment after investigation if it is needed to be async
-		// if (!usbd_is_dying(usc->sc_udev))
-		// 	timeout_add_msec(&sc->scan_to, 200);
+		// athn_set_led(sc, !sc->led_state);
+		// error = athn_usb_switch_chan(sc, ni->ni_chan, NULL);
+		// if (error)
+		// 	printf("%s: could not switch to channel %d\n",
+		// 	    device_get_name(usc->usb_dev), 0);
+		// 	    ieee80211_chan2ieee(ic, ni->ni_chan);
+		// // uncomment after investigation if it is needed to be async
+		// // if (!usbd_is_dying(usc->sc_udev))
+		// // 	timeout_add_msec(&sc->scan_to, 200);
 		break;
 	case IEEE80211_S_AUTH:
 		athn_set_led(sc, 0);
@@ -2253,11 +2281,11 @@ athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 		goto reset;
 
 	/* If band or bandwidth changes, we need to do a full reset. */
-	if (c->ic_flags != sc->curchan->ic_flags ||
-	    ((extc != NULL) ^ (sc->curchanext != NULL))) {
-		DPRINTFN(2, ("channel band switch\n"));
-		goto reset;
-	}
+	// if (c->ic_flags != sc->curchan->ic_flags ||
+	//     ((extc != NULL) ^ (sc->curchanext != NULL))) {
+	// 	DPRINTFN(2, ("channel band switch\n"));
+	// 	goto reset;
+	// }
 
 	error = athn_set_chan(sc, c, extc);
 	if (AR_SREV_9271(sc) && error == 0)
@@ -2265,18 +2293,18 @@ athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 	if (error != 0) {
  reset:		/* Error found, try a full reset. */
 		DPRINTFN(3, ("needs a full reset\n"));
-		error = athn_hw_reset(sc, c, extc, 0);
-		if (error != 0)	/* Hopeless case. */
-			return (error);
+		// // error = athn_hw_reset(sc, c, extc, 0);
+		// if (error != 0)	/* Hopeless case. */
+		// 	return (error);
 
-		error = athn_set_chan(sc, c, extc);
-		if (AR_SREV_9271(sc) && error == 0)
-			ar9271_load_ani(sc);
-		if (error != 0)
-			return (error);
+		// error = athn_set_chan(sc, c, extc);
+		// if (AR_SREV_9271(sc) && error == 0)
+		// 	ar9271_load_ani(sc);
+		// if (error != 0)
+		// 	return (error);
 	}
 
-	sc->ops.set_txpower(sc, c, extc);
+	// sc->ops.set_txpower(sc, c, extc);
 
 	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_START_RECV);
 	if (error != 0)
