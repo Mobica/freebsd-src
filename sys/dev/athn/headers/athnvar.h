@@ -569,6 +569,7 @@ struct ar9285_eeprom {
 } __packed;
 
 struct athn_softc {
+	struct athn_usb_softc *sc_usc;
 	device_t	    sc_dev;
 	struct ieee80211com		sc_ic;
 	struct mbufq		sc_snd;

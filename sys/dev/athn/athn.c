@@ -478,43 +478,43 @@ athn_scan_end(struct ieee80211com *ic)
 //	printf("%s: TODO\n", __func__);
 }
 
-static int
-athn_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
-    const struct ieee80211_bpf_params *params)
-{
-// 	struct ieee80211com *ic= ni->ni_ic;
-// 	struct athn_softc *sc = ic->ic_softc;
-// 	struct otus_data *bf = NULL;
-// 	int error = 0;
+// static int
+// athn_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
+//     const struct ieee80211_bpf_params *params)
+// {
+// // 	struct ieee80211com *ic= ni->ni_ic;
+// // 	struct athn_softc *sc = ic->ic_softc;
+// // 	struct otus_data *bf = NULL;
+// // 	int error = 0;
 
-// 	/* Don't transmit if we're not running */
-// 	// OTUS_LOCK(sc);
-// 	// if (! sc->sc_running) {
-// 	// 	error = ENETDOWN;
-// 	// 	goto error;
-// 	// }
+// // 	/* Don't transmit if we're not running */
+// // 	// OTUS_LOCK(sc);
+// // 	// if (! sc->sc_running) {
+// // 	// 	error = ENETDOWN;
+// // 	// 	goto error;
+// // 	// }
 
-// 	bf = otus_getbuf(sc);
-// 	if (bf == NULL) {
-// 		error = ENOBUFS;
-// 		goto error;
-// 	}
+// // 	bf = otus_getbuf(sc);
+// // 	if (bf == NULL) {
+// // 		error = ENOBUFS;
+// // 		goto error;
+// // 	}
 
-// 	if (otus_tx(sc, ni, m, bf, params) != 0) {
-// 		error = EIO;
-// 		goto error;
-// 	}
+// // 	if (otus_tx(sc, ni, m, bf, params) != 0) {
+// // 		error = EIO;
+// // 		goto error;
+// // 	}
 
-// 	OTUS_UNLOCK(sc);
-// 	return (0);
-// error:
-// 	if (bf)
-// 		otus_freebuf(sc, bf);
-// 	OTUS_UNLOCK(sc);
-// 	m_freem(m);
-// 	return (error);
-	return 0;
-}
+// // 	OTUS_UNLOCK(sc);
+// // 	return (0);
+// // error:
+// // 	if (bf)
+// // 		otus_freebuf(sc, bf);
+// // 	OTUS_UNLOCK(sc);
+// // 	m_freem(m);
+// // 	return (error);
+// 	return 0;
+// }
 
 static void
 athn_parent(struct ieee80211com *ic)
@@ -623,7 +623,7 @@ athn_like_otus_attach(struct athn_softc *sc)
 	ieee80211_init_channels(ic, NULL, bands);
 
 	ieee80211_ifattach(ic);
-	ic->ic_raw_xmit = athn_raw_xmit;
+	// ic->ic_raw_xmit = athn_raw_xmit;
 	ic->ic_scan_start = athn_scan_start;
 	ic->ic_scan_end = athn_scan_end;
 	ic->ic_parent = athn_parent;

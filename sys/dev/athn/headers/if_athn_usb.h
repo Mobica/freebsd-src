@@ -428,6 +428,8 @@ struct athn_usb_data {
 	struct usb_xfer		*xfer;
 	char *buf;
 	usb_frlength_t buflen;
+	struct mbuf *m;
+	struct ieee80211_node	*ni;
 	STAILQ_ENTRY(athn_usb_data) next;
 };
 
