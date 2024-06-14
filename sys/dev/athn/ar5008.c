@@ -150,6 +150,37 @@ extern void	ar5416_reset_bb_gain(struct athn_softc *, struct ieee80211_channel *
 extern void	ar9280_reset_rx_gain(struct athn_softc *, struct ieee80211_channel *);
 extern void	ar9280_reset_tx_gain(struct athn_softc *, struct ieee80211_channel *);
 
+uint8_t
+ar5416_reverse_bits(uint8_t v, int nbits)
+{
+	KASSERT(nbits <= 8, "ar5416_reverse_bits");
+	v = ((v >> 1) & 0x55) | ((v & 0x55) << 1);
+	v = ((v >> 2) & 0x33) | ((v & 0x33) << 2);
+	v = ((v >> 4) & 0x0f) | ((v & 0x0f) << 4);
+	return (v >> (8 - nbits));
+}
+
+uint8_t
+ar5416_get_rf_rev(struct athn_softc *sc)
+{
+	uint8_t rev, reg;
+	int i;
+
+	/* Allow access to analog chips. */
+	AR_WRITE(sc, AR_PHY(0), 0x00000007);
+
+	AR_WRITE(sc, AR_PHY(0x36), 0x00007058);
+	for (i = 0; i < 8; i++)
+		AR_WRITE(sc, AR_PHY(0x20), 0x00010000);
+	reg = (AR_READ(sc, AR_PHY(256)) >> 24) & 0xff;
+	reg = (reg & 0xf0) >> 4 | (reg & 0x0f) << 4;
+
+	rev = ar5416_reverse_bits(reg, 8);
+	if ((rev & AR_RADIO_SREV_MAJOR) == 0)
+		rev = AR_RAD5133_SREV_MAJOR;
+	return (rev);
+}
+
 
 int
 ar5008_attach(struct athn_softc *sc)
@@ -167,6 +198,7 @@ ar5008_attach(struct athn_softc *sc)
 	ops->gpio_config_output = ar5008_gpio_config_output;
 	ops->rfsilent_init = ar5008_rfsilent_init;
 
+	// Not needed
 	// ops->dma_alloc = ar5008_dma_alloc;
 	// ops->dma_free = ar5008_dma_free;
 	// ops->rx_enable = ar5008_rx_enable;
@@ -188,7 +220,7 @@ ar5008_attach(struct athn_softc *sc)
 	ops->apply_noisefloor = ar5008_apply_noisefloor;
 	ops->do_calib = ar5008_do_calib;
 	ops->next_calib = ar5008_next_calib;
-	// ops->hw_init = ar5008_hw_init;
+	// ops->hw_init = ar5008_hw_init; // Not needed
 
 	ops->set_noise_immunity_level = ar5008_set_noise_immunity_level;
 	ops->enable_ofdm_weak_signal = ar5008_enable_ofdm_weak_signal;
@@ -211,7 +243,7 @@ ar5008_attach(struct athn_softc *sc)
 	}
 
 	/* Get RF revision. */
-	// sc->rf_rev = ar5416_get_rf_rev(sc);
+	sc->rf_rev = ar5416_get_rf_rev(sc);
 
 	base = sc->eep;
 	eep_ver = (base->version >> 12) & 0xf;
@@ -471,7 +503,7 @@ ar5008_rfsilent_init(struct athn_softc *sc)
 	}
 	AR_WRITE_BARRIER(sc);
 }
-
+// Not needed
 // int
 // ar5008_dma_alloc(struct athn_softc *sc)
 // {
@@ -2511,6 +2543,7 @@ ar5008_set_viterbi_mask(struct athn_softc *sc, int bin)
 	AR_WRITE_BARRIER(sc);
 }
 
+// Not needed
 // void
 // ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
 //     struct ieee80211_channel *extc)

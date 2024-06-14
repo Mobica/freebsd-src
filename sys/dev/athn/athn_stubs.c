@@ -21,7 +21,7 @@
 #include "athnreg.h"
 #include "athnvar.h"
 
-
+// Not needed anymore after adding ar9285reg.h
 // int		ar9285_attach(struct athn_softc *sc)
 // {
 // 	printf("%s is stub", __FUNCTION__);

@@ -268,6 +268,7 @@ athn_getradiocaps(struct ieee80211com *ic,
 	}
 }
 
+// TODO: check if we can go back to athn_attach
 #if 0
 int
 athn_attach(struct athn_softc *sc)
@@ -478,6 +479,7 @@ athn_scan_end(struct ieee80211com *ic)
 //	printf("%s: TODO\n", __func__);
 }
 
+// Implemented in athn_usb
 // static int
 // athn_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
 //     const struct ieee80211_bpf_params *params)
@@ -638,6 +640,7 @@ athn_like_otus_attach(struct athn_softc *sc)
 	ic->ic_scan_start = athn_scan_start;
 	ic->ic_scan_end = athn_scan_end;
 	ic->ic_parent = athn_parent;
+// TODO: add missing functions to ic
 #if 0
 	ic->ic_raw_xmit = otus_raw_xmit;
 	ic->ic_scan_start = otus_scan_start;
@@ -1214,16 +1217,16 @@ athn_set_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 	sc->curchanext = extc;
 
 	/* Set transmit power values for new channel. */
-	// ops->set_txpower(sc, c, extc);
+	ops->set_txpower(sc, c, extc);
 
 	/* Release the RF Bus grant. */
-	// ops->rf_bus_release(sc);
+	ops->rf_bus_release(sc);
 
 	/* Write delta slope coeffs for modes where OFDM may be used. */
-	// if (sc->sc_ic.ic_curmode != IEEE80211_MODE_11B)
-	// 	ops->set_delta_slope(sc, c, extc);
+	if (sc->sc_ic.ic_curmode != IEEE80211_MODE_11B)
+		ops->set_delta_slope(sc, c, extc);
 
-	// ops->spur_mitigate(sc, c, extc);
+	ops->spur_mitigate(sc, c, extc);
 
 	return (0);
 }
@@ -1334,6 +1337,7 @@ athn_reset_key(struct athn_softc *sc, int entry)
 	AR_WRITE_BARRIER(sc);
 }
 
+// TODO?
 int
 athn_set_key(struct ieee80211com *ic, struct ieee80211_node *ni,
     struct ieee80211_key *k)
@@ -1446,8 +1450,10 @@ athn_led_init(struct athn_softc *sc)
 {
 	struct athn_ops *ops = &sc->ops;
 
+	ATHN_LOCK(sc);
 	ops->gpio_config_output(sc, sc->led_pin, AR_GPIO_OUTPUT_MUX_AS_OUTPUT);
 	/* LED off, active low. */
+	ATHN_UNLOCK(sc);
 	athn_set_led(sc, 0);
 }
 
@@ -1456,8 +1462,10 @@ athn_set_led(struct athn_softc *sc, int on)
 {
 	struct athn_ops *ops = &sc->ops;
 
-	// sc->led_state = on;
-	// ops->gpio_write(sc, sc->led_pin, !sc->led_state);
+	ATHN_LOCK(sc);
+	sc->led_state = on;
+	ops->gpio_write(sc, sc->led_pin, !sc->led_state);
+	ATHN_UNLOCK(sc);
 }
 
 #ifdef ATHN_BT_COEXISTENCE
@@ -1567,6 +1575,7 @@ athn_btcoex_disable(struct athn_softc *sc)
 }
 #endif
 
+// TODO: not sure if needed
 void
 athn_iter_calib(void *arg, struct ieee80211_node *ni)
 {
@@ -1578,6 +1587,7 @@ athn_iter_calib(void *arg, struct ieee80211_node *ni)
 	// 	ieee80211_amrr_choose(&sc->amrr, ni, &an->amn);
 }
 
+// TODO: not sure if needed
 int
 athn_cap_noisefloor(struct athn_softc *sc, int nf)
 {
@@ -2926,6 +2936,7 @@ athn_next_scan(void *arg)
 	splx(s);
 }
 
+// Not needed
 int
 athn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 {

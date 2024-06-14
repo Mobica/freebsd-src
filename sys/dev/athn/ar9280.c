@@ -88,6 +88,7 @@ void	ar5008_set_viterbi_mask(struct athn_softc *, int);
 // 	ar5416_get_spur_chans(struct athn_softc *, int);
 
 
+// Not needed
 int
 ar9280_attach(struct athn_softc *sc)
 {
@@ -236,6 +237,7 @@ ar9280_set_synth(struct athn_softc *sc, struct ieee80211_channel *c,
 	return (0);
 }
 
+// Not needed
 // void
 // ar9280_init_from_rom(struct athn_softc *sc, struct ieee80211_channel *c,
 //     struct ieee80211_channel *extc)
@@ -568,6 +570,7 @@ ar9280_reset_tx_gain(struct athn_softc *sc, struct ieee80211_channel *c)
 		AR_WRITE(sc, prog->regs[i], pvals[i]);
 }
 
+// Not needed
 // void
 // ar9280_olpc_init(struct athn_softc *sc)
 // {
