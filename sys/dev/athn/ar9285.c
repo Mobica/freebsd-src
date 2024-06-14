@@ -22,7 +22,7 @@
  * Routines for AR9285 and AR9271 chipsets.
  */
 
-//#include "athn_usb.h"
+// #include "athn_usb.h"
 //#include "bpfilter.h"
 
 #include <sys/param.h>

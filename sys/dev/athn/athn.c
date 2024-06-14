@@ -51,7 +51,7 @@
 #include "openbsd_adapt.h"
 
 // TODO missing macro def
-#define NATHN_USB 0
+#define NATHN_USB 1
 
 #ifdef ATHN_DEBUG
 int athn_debug = 0;
@@ -532,10 +532,21 @@ athn_like_otus_attach(struct athn_softc *sc)
 	uint8_t bands[IEEE80211_MODE_BYTES];
 	int error;
 
+	/* Read hardware revision. */
+	athn_get_chipid(sc);
+
 	ATHN_LOCK(sc);
+
+	error = ar9285_attach(sc);
+
 
 	sc->eep_base = AR9285_EEP_START_LOC;
 	sc->eep_size = sizeof(struct ar9285_eeprom);
+
+	if (error != 0) {
+		device_printf(sc->sc_dev, "%s: could not attach chip\n", __func__);
+		return (error);
+	}
 
 	sc->eep = &sc->eeprom;
 	/* Read entire EEPROM. */
@@ -658,6 +669,18 @@ athn_like_otus_attach(struct athn_softc *sc)
 	    &sc->sc_rxtap.wr_ihdr, sizeof(sc->sc_rxtap),
 	    OTUS_RX_RADIOTAP_PRESENT);
 #endif
+	sc->ntxchains =
+	    ((sc->txchainmask >> 2) & 1) +
+	    ((sc->txchainmask >> 1) & 1) +
+	    ((sc->txchainmask >> 0) & 1);
+	sc->nrxchains =
+	    ((sc->rxchainmask >> 2) & 1) +
+	    ((sc->rxchainmask >> 1) & 1) +
+	    ((sc->rxchainmask >> 0) & 1);
+
+	sc->amrr.amrr_min_success_threshold =  1;
+	sc->amrr.amrr_max_success_threshold = 15;
+
 	device_printf(sc->sc_dev,"%s: Planned end\n", __func__);
 
 	return (0);
@@ -753,7 +776,7 @@ athn_rx_start(struct athn_softc *sc)
 	uint32_t rfilt;
 
 	/* Setup Rx DMA descriptors. */
-	// sc->ops.rx_enable(sc);
+	sc->ops.rx_enable(sc);
 
 	/* Set Rx filter. */
 	rfilt = AR_RX_FILTER_UCAST | AR_RX_FILTER_BCAST | AR_RX_FILTER_MCAST;
@@ -1097,11 +1120,11 @@ athn_write_serdes(struct athn_softc *sc, const struct athn_serdes *serdes)
 	int i;
 
 	/* Write sequence to Serializer/Deserializer. */
-	ATHN_LOCK(sc);
+	// ATHN_LOCK(sc);
 	for (i = 0; i < serdes->nvals; i++)
 		AR_WRITE(sc, serdes->regs[i], serdes->vals[i]);
 	AR_WRITE_BARRIER(sc);
-	ATHN_UNLOCK(sc);
+	// ATHN_UNLOCK(sc);
 }
 
 void
@@ -3366,10 +3389,9 @@ athn_init(struct ifnet *ifp)
 			goto fail;
 		}
 	}
-	if (!(sc->flags & ATHN_FLAG_PCIE))
-		athn_config_nonpcie(sc);
-	else
-		athn_config_pcie(sc);
+	
+	athn_config_nonpcie(sc);
+
 
 	ops->enable_antenna_diversity(sc);
 
