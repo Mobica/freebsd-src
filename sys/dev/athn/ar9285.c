@@ -27,7 +27,7 @@
 
 #include <sys/param.h>
 #include <sys/sockio.h>
-#include <openbsd/openbsd_mbuf.h>
+// #include <openbsd/openbsd_mbuf.h>
 #include <sys/kernel.h>
 #include <sys/socket.h>
 #include <sys/systm.h>
@@ -52,11 +52,13 @@
 
 #include <netinet/in.h>
 //#include <netinet/if_ether.h>
+#include <net/ethernet.h>
 
-#include <openbsd/net80211/ieee80211_var.h>
-#include <openbsd/net80211/ieee80211_amrr.h>
-#include <openbsd/net80211/ieee80211_ra.h>
-#include <openbsd/net80211/ieee80211_radiotap.h>
+
+#include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_amrr.h>
+#include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_ratectl.h>
 
 #include "athnreg.h"
 #include "athnvar.h"

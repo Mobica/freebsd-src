@@ -211,8 +211,7 @@ void		athn_usb_rx_frame(struct athn_usb_softc *, struct mbuf */*,
 		    struct mbuf_list **/); //MichalP: Uses mbuf_list which doesn't exist in FreeBSD
 void		athn_usb_rxeof(struct usb_xfer *, struct athn_usb_data*);
 void		athn_usb_txeof(struct usb_xfer *, struct athn_usb_data *);
-int		athn_usb_tx(struct athn_softc *, struct mbuf *,
-		    struct ieee80211_node *);
+int		athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni, struct athn_usb_data *data, const struct ieee80211_bpf_params *params);
 void		athn_usb_start(struct ifnet *);
 void		athn_usb_watchdog(struct ifnet *);
 int		athn_usb_ioctl(struct ifnet *, u_long, caddr_t);
@@ -524,7 +523,7 @@ athn_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 	vap = &uvp->vap;
 
 	if (ieee80211_vap_setup(ic, vap, name, unit, opmode,
-	    flags, bssid) != 0) {
+	    flags | IEEE80211_CLONE_NOBEACONS, bssid) != 0) {
 		/* out of memory */
 		free(uvp, M_80211_VAP);
 		return (NULL);
@@ -603,16 +602,102 @@ athn_usb_verify_fw_ver(struct athn_softc *sc, struct ar_wmi_fw_version *img_ver)
 	return error;
 }
 
+static void
+athn_set_channel(struct ieee80211com *ic)
+{
+	struct athn_softc *sc = ic->ic_softc;
+
+	ATHN_LOCK(sc);
+	(void) athn_usb_switch_chan(sc, ic->ic_curchan, NULL);
+	ATHN_UNLOCK(sc);
+}
+
+static struct athn_usb_data *
+_athn_getbuf(struct athn_softc *sc)
+{
+	struct athn_usb_data *bf;
+	struct athn_usb_softc *usc = sc->sc_usc;
+
+	bf = STAILQ_FIRST(&usc->sc_tx_inactive);
+	if (bf != NULL)
+		STAILQ_REMOVE_HEAD(&usc->sc_tx_inactive, next);
+	else
+		bf = NULL;
+	/* XXX bzero? */
+	return (bf);
+}
+
+static struct athn_usb_data *
+athn_getbuf(struct athn_softc *sc)
+{
+	struct athn_usb_data *bf;
+
+	ATHN_ASSERT_LOCKED(sc);
+
+	bf = _athn_getbuf(sc);
+	return (bf);
+}
+
+static void
+athn_freebuf(struct athn_softc *sc, struct athn_usb_data *bf)
+{
+	struct athn_usb_softc *usc = sc->sc_usc;
+
+	ATHN_ASSERT_LOCKED(usc);
+	STAILQ_INSERT_TAIL(&usc->sc_tx_inactive, bf, next);
+}
+
+static int
+athn_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
+    const struct ieee80211_bpf_params *params)
+{
+	struct ieee80211com *ic= ni->ni_ic;
+	struct athn_softc *sc = ic->ic_softc;
+	struct athn_usb_softc *usc = sc->sc_usc;
+	struct athn_usb_data *bf = NULL;
+	int error = 0;
+
+	/* Don't transmit if we're not running */
+	ATHN_LOCK(sc);
+	// if (!sc->sc_running) {
+	// 	error = ENETDOWN;
+	// 	goto error;
+	// }
+
+	bf = athn_getbuf(sc);
+	if (bf == NULL) {
+		error = ENOBUFS;
+		goto error;
+	}
+
+	if (athn_usb_tx(sc, m, ni, bf, params) != 0) {
+		error = EIO;
+		goto error;
+	}
+
+	ATHN_UNLOCK(sc);
+	return (0);
+error:
+	if (bf)
+		athn_freebuf(sc, bf);
+	ATHN_UNLOCK(sc);
+	m_freem(m);
+	return (error);
+}
+
 void
 athn_usb_attachhook(device_t self)
 {
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
+	sc->sc_usc = usc;
 	struct ar_wmi_fw_version img_ver;
 	struct athn_ops *ops = &sc->ops;
 	uint32_t val = 104;
-#ifdef notyet
+
 	struct ieee80211com *ic = &sc->sc_ic;
+#ifdef notyet
+	
 	struct ifnet *ifp = &ic->ic_if;
 #endif
 	int s, i, error;
@@ -623,6 +708,7 @@ athn_usb_attachhook(device_t self)
 		printf("Could not load firmware\n");
 		return;
 	}
+	printf("FW loaded\n");
 
 	// TODO MichalP: this can be used as a starting point for echo command or firmware command
 //	ATHN_LOCK(&usc->sc_sc);
@@ -636,10 +722,14 @@ athn_usb_attachhook(device_t self)
 //
 //	return;
 
+	device_printf(sc->sc_dev, "%s: before athn_usb_htc_setup\n",	__func__);
+
 	/* Setup the host transport communication interface. */
 	error = athn_usb_htc_setup(usc);
 	if (error != 0)
 		return;
+
+	device_printf(sc->sc_dev, "%s: after athn_usb_htc_setup\n",	__func__);
 
 // TODO: MikolajF:I couldn't read a FW version before the firmware upload because 
 // the module never responded to the WMI request, even if I moved the htc setup 
@@ -655,10 +745,24 @@ athn_usb_attachhook(device_t self)
 	/* We're now ready to attach the bus agnostic driver. */
 	// TODO: MichalP needs proper FreeBSD adaptation because this uses code that is
 	//  stubbed and/or commented
-	error = athn_attach(sc);
+	ic->ic_softc = sc;
+
+	error = athn_like_otus_attach(sc);
 	if (error != 0) {
 		return;
 	}
+
+	// ic->ic_vap_create = athn_vap_create;
+	// ic->ic_vap_delete = athn_vap_delete;
+	// ic->ic_newstate = athn_usb_newstate;
+	ic->ic_vap_create = athn_vap_create;
+	ic->ic_vap_delete = athn_vap_delete;
+	ic->ic_set_channel = athn_set_channel;
+	ic->ic_raw_xmit = athn_raw_xmit;
+
+
+	//  ifp->if_ioctl = athn_usb_ioctl;
+	// ifp->if_start = athn_usb_start;
 
 	usc->sc_athn_attached = 1;
 #if OpenBSD_IEEE80211_API
@@ -1089,6 +1193,8 @@ athn_if_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 			wakeup(&usc->wait_msg_id);
 			STAILQ_INSERT_TAIL(&usc->sc_cmd_inactive, cmd, next);
 		}
+		if (usc->wait_msg_id == AR_WMI_CMD_MSG)
+			STAILQ_INSERT_TAIL(&usc->sc_cmd_inactive, cmd, next);
 		/* FALLTHROUGH */
 	case USB_ST_SETUP:
 tr_setup:
@@ -1097,17 +1203,17 @@ tr_setup:
 			device_printf(sc->sc_dev, "%s: empty pending queue cmd: %p\n", __func__, cmd);
 			return;
 		}
-		device_printf(sc->sc_dev, "%s: continue with USB_ST_SETUP cmd: %p\n", __func__, cmd);
+	//	device_printf(sc->sc_dev, "%s: continue with USB_ST_SETUP cmd: %p\n", __func__, cmd);
 		STAILQ_REMOVE_HEAD(&usc->sc_cmd_pending, next);
 		STAILQ_INSERT_TAIL(&usc->sc_cmd_active, cmd, next);
 		usbd_xfer_set_frame_data(xfer, 0, cmd->buf, cmd->buflen);
-		device_printf(sc->sc_dev, "%s: submitting transfer %p; buf=%p, buflen=%d\n",
-					  __func__, cmd, cmd->buf, cmd->buflen);
+	//	device_printf(sc->sc_dev, "%s: submitting transfer %p; buf=%p, buflen=%d\n",
+	//				  __func__, cmd, cmd->buf, cmd->buflen);
 		usbd_transfer_submit(xfer);
 		break;
 	default:
 		cmd = STAILQ_FIRST(&usc->sc_cmd_active);
-		device_printf(sc->sc_dev, "%s: continue with default %p\n", __func__, usc);
+	//	device_printf(sc->sc_dev, "%s: continue with default %p\n", __func__, usc);
 		if (cmd != NULL) {
 			device_printf(sc->sc_dev, "%s: cmd not NULL %p\n", __func__, usc);
 			STAILQ_REMOVE_HEAD(&usc->sc_cmd_active, next);
@@ -1207,17 +1313,18 @@ athn_if_bulk_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
-	printf("TTTT: BULK TX Xfer callback: error = %s, state = %s, actlen = %d, endpoint = 0x%lx\n",
-		   usbd_errstr(error), state_str, actlen, (long)xfer->endpoint);
+	// printf("TTTT: BULK TX Xfer callback: error = %s, state = %s, actlen = %d, endpoint = 0x%lx\n",
+	// 	   usbd_errstr(error), state_str, actlen, (long)xfer->endpoint);
 
 	switch(state) {
 	case USB_ST_TRANSFERRED:
 		data = STAILQ_FIRST(&usc->sc_tx_active[which]);
 		if (data == NULL)
 			goto tr_setup;
-		device_printf(sc->sc_dev, "%s: transfer done %p\n", __func__, data);
+		// device_printf(sc->sc_dev, "%s: transfer done %p\n", __func__, data);
 		STAILQ_REMOVE_HEAD(&usc->sc_tx_active[which], next);
 		athn_usb_txeof(xfer, data);
+		athn_freebuf(sc, data);
 		STAILQ_INSERT_TAIL(&usc->sc_tx_inactive, data, next);
 	case USB_ST_SETUP:
 	tr_setup:
@@ -1226,10 +1333,10 @@ athn_if_bulk_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 			device_printf(sc->sc_dev, "%s: empty pending queue sc %p\n", __func__, sc);
 			usc->sc_tx_n_active = 0;
 		}
-		STAILQ_REMOVE_HEAD(&usc->sc_tx_pending[which], next);
+		// STAILQ_REMOVE_HEAD(&usc->sc_tx_pending[which], next);
 		STAILQ_INSERT_TAIL(&usc->sc_tx_active[which], data, next);
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->buflen);
-		device_printf(sc->sc_dev, "%s: submitting transfer %p\n", __func__, data);
+		// device_printf(sc->sc_dev, "%s: submitting transfer %p\n", __func__, data);
 		usbd_transfer_submit(xfer);
 		usc->sc_tx_n_active++;
 		break;
@@ -1510,7 +1617,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct ar_wmi_cmd_hdr *wmi;
 	int xferlen, error;
 
-	device_printf(sc->sc_dev, "%s: called \n", __func__);
+	// device_printf(sc->sc_dev, "%s: called \n", __func__);
 
 	ATHN_ASSERT_LOCKED(sc);
 
@@ -1588,12 +1695,17 @@ athn_usb_read_rom(struct athn_softc *sc)
 	eep = sc->eep;
 	addr = AR_EEPROM_OFFSET(sc->eep_base);
 	for (i = 0; i < sc->eep_size / 16; i++) {
+		DELAY(3000);
 		for (j = 0; j < 8; j++, addr += 4)
 			addrs[j] = htobe32(addr);
 		error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_READ,
 		    addrs, sizeof(addrs), vals);
+		DELAY(3000);
 		if (error != 0)
+		{
+			printf("error in reading rom\n");
 			break;
+		}
 		for (j = 0; j < 8; j++)
 			*eep++ = betoh32(vals[j]);
 	}
@@ -1730,15 +1842,15 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 		break;
 	case IEEE80211_S_SCAN:
 		/* Make the LED blink while scanning. */
-		athn_set_led(sc, !sc->led_state);
-		error = athn_usb_switch_chan(sc, ni->ni_chan, NULL);
-		if (error)
-			printf("%s: could not switch to channel %d\n",
-			    device_get_name(usc->usb_dev), 0);
-			    ieee80211_chan2ieee(ic, ni->ni_chan);
-		// uncomment after investigation if it is needed to be async
-		// if (!usbd_is_dying(usc->sc_udev))
-		// 	timeout_add_msec(&sc->scan_to, 200);
+		// athn_set_led(sc, !sc->led_state);
+		// error = athn_usb_switch_chan(sc, ni->ni_chan, NULL);
+		// if (error)
+		// 	printf("%s: could not switch to channel %d\n",
+		// 	    device_get_name(usc->usb_dev), 0);
+		// 	    ieee80211_chan2ieee(ic, ni->ni_chan);
+		// // uncomment after investigation if it is needed to be async
+		// // if (!usbd_is_dying(usc->sc_udev))
+		// // 	timeout_add_msec(&sc->scan_to, 200);
 		break;
 	case IEEE80211_S_AUTH:
 		athn_set_led(sc, 0);
@@ -2244,11 +2356,11 @@ athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 		goto reset;
 
 	/* If band or bandwidth changes, we need to do a full reset. */
-	if (c->ic_flags != sc->curchan->ic_flags ||
-	    ((extc != NULL) ^ (sc->curchanext != NULL))) {
-		DPRINTFN(2, ("channel band switch\n"));
-		goto reset;
-	}
+	// if (c->ic_flags != sc->curchan->ic_flags ||
+	//     ((extc != NULL) ^ (sc->curchanext != NULL))) {
+	// 	DPRINTFN(2, ("channel band switch\n"));
+	// 	goto reset;
+	// }
 
 	error = athn_set_chan(sc, c, extc);
 	if (AR_SREV_9271(sc) && error == 0)
@@ -2256,18 +2368,18 @@ athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 	if (error != 0) {
  reset:		/* Error found, try a full reset. */
 		DPRINTFN(3, ("needs a full reset\n"));
-		error = athn_hw_reset(sc, c, extc, 0);
-		if (error != 0)	/* Hopeless case. */
-			return (error);
+		// // error = athn_hw_reset(sc, c, extc, 0);
+		// if (error != 0)	/* Hopeless case. */
+		// 	return (error);
 
-		error = athn_set_chan(sc, c, extc);
-		if (AR_SREV_9271(sc) && error == 0)
-			ar9271_load_ani(sc);
-		if (error != 0)
-			return (error);
+		// error = athn_set_chan(sc, c, extc);
+		// if (AR_SREV_9271(sc) && error == 0)
+		// 	ar9271_load_ani(sc);
+		// if (error != 0)
+		// 	return (error);
 	}
 
-	sc->ops.set_txpower(sc, c, extc);
+	// sc->ops.set_txpower(sc, c, extc);
 
 	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_START_RECV);
 	if (error != 0)
@@ -2881,7 +2993,7 @@ athn_usb_txeof(struct usb_xfer *xfer, struct athn_usb_data* data)
 	struct ifnet *ifp = &sc->sc_ic.ic_if;
 #endif
 
-	device_printf(sc->sc_dev, "%s: called; data=%p\n", __func__, data);
+	// device_printf(sc->sc_dev, "%s: called; data=%p\n", __func__, data);
 
 	ATHN_ASSERT_LOCKED(sc);
 
@@ -2893,24 +3005,24 @@ athn_usb_txeof(struct usb_xfer *xfer, struct athn_usb_data* data)
 		usc->sc_tx_n_active--;
 	}
 
-//	if (data->m) {
-		/* XXX status? */
-		/* XXX we get TX status via the RX path.. */
-//		ieee80211_tx_complete(data->ni, data->m, 0);
-//		data->m = NULL;
-//		data->ni = NULL;
-//	}
+	// if (data->m) {
+	// 	/* XXX status? */
+	// 	/* XXX we get TX status via the RX path.. */
+	// 	ieee80211_tx_complete(data->ni, data->m, 0);
+	// 	data->m = NULL;
+	// 	data->ni = NULL;
+	// }
 }
 
 int
-athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
+athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni, struct athn_usb_data *data, const struct ieee80211_bpf_params *params)
 {
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	struct athn_node *an = (struct athn_node *)ni;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_frame *wh;
 	struct ieee80211_key *k = NULL;
-	struct athn_usb_data *data;
+	
 	struct ar_stream_hdr *hdr;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_tx_frame *txf;
@@ -3031,6 +3143,8 @@ athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	xferlen = frm - data->buf;
 
 	data->buflen = xferlen;
+	data->m = m;
+	data->ni = ni;
 
 	STAILQ_INSERT_TAIL(&usc->sc_tx_pending[ATHN_BULK_TX], data, next);
 	usbd_transfer_start(usc->sc_xfer[ATHN_BULK_TX]);
@@ -3088,12 +3202,12 @@ athn_usb_start(struct ifnet *ifp)
 		if (ic->ic_rawbpf != NULL)
 			bpf_mtap(ic->ic_rawbpf, m, BPF_DIRECTION_OUT);
 #endif
-		if (athn_usb_tx(sc, m, ni) != 0) {
-#if OpenBSD_IEEE80211_API
-			ieee80211_release_node(ic, ni);
-#endif
-			continue;
-		}
+// 		if (athn_usb_tx(sc, m, ni) != 0) {
+// #if OpenBSD_IEEE80211_API
+// 			ieee80211_release_node(ic, ni);
+// #endif
+// 			continue;
+// 		}
 
 		sc->sc_tx_timer = 5;
 	}
