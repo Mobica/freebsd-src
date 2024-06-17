@@ -116,7 +116,7 @@ static device_detach_t	athn_usb_detach;
 static void
 ar9271_load_ani(struct athn_softc *sc)
 {
-#if NATHN_USB > 0
+// #if NATHN_USB > 0
 	/* Write ANI registers. */
 	AR_WRITE(sc, AR_PHY_DESIRED_SZ, 0x6d4000e2);
 	AR_WRITE(sc, AR_PHY_AGC_CTL1,   0x3139605e);
@@ -127,7 +127,7 @@ ar9271_load_ani(struct athn_softc *sc)
 	AR_WRITE(sc, AR_PHY_TIMING5,    0xd00a8007);
 	AR_WRITE(sc, AR_PHY_SFCORR_EXT, 0x05eea6d4);
 	AR_WRITE_BARRIER(sc);
-#endif	/* NATHN_USB */
+// #endif	/* NATHN_USB */
 }
 
 void		athn_usb_attachhook(device_t self);
@@ -699,6 +699,40 @@ error:
 	return (error);
 }
 
+static void
+athn_tx_start(struct athn_softc *sc)
+{
+
+	taskqueue_enqueue(taskqueue_thread, &sc->sc_task);
+}
+
+static int
+athn_transmit(struct ieee80211com *ic, struct mbuf *m)
+{
+	struct athn_softc *sc = ic->ic_softc;
+	int error;
+
+	ATHN_LOCK(sc);
+	// if (! sc->sc_running) {
+	// 	OTUS_UNLOCK(sc);
+	// 	return (ENXIO);
+	// }
+
+	/* XXX TODO: handle fragments */
+	error = mbufq_enqueue(&sc->sc_snd, m);
+	if (error) {
+		device_printf(sc->sc_dev, "%s: mbufq_enqueue failed: %d\n", __func__, error);
+		ATHN_UNLOCK(sc);
+		return (error);
+	}
+	ATHN_UNLOCK(sc);
+
+	/* Kick TX */
+	athn_tx_start(sc);
+
+	return (0);
+}
+
 void
 athn_usb_attachhook(device_t self)
 {
@@ -823,7 +857,9 @@ athn_usb_attachhook(device_t self)
 #endif
 	/* Configure LED. */
 // #if OpenBSD_ONLY
+	ATHN_LOCK(sc);
 	athn_led_init(sc);
+	ATHN_UNLOCK(sc);
 // #endif
 }
 
@@ -2389,7 +2425,8 @@ athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 	if (error != 0)
 		goto reset;
 
-	/* If band or bandwidth changes, we need to do a full reset. */
+	// TODO
+	// /* If band or bandwidth changes, we need to do a full reset. */
 	// if (c->ic_flags != sc->curchan->ic_flags ||
 	//     ((extc != NULL) ^ (sc->curchanext != NULL))) {
 	// 	DPRINTFN(2, ("channel band switch\n"));
@@ -2402,15 +2439,15 @@ athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 	if (error != 0) {
  reset:		/* Error found, try a full reset. */
 		DPRINTFN(3, ("needs a full reset\n"));
-		// // error = athn_hw_reset(sc, c, extc, 0);
-		// if (error != 0)	/* Hopeless case. */
-		// 	return (error);
+		error = athn_hw_reset(sc, c, extc, 0);
+		if (error != 0)	/* Hopeless case. */
+			return (error);
 
-		// error = athn_set_chan(sc, c, extc);
-		// if (AR_SREV_9271(sc) && error == 0)
-		// 	ar9271_load_ani(sc);
-		// if (error != 0)
-		// 	return (error);
+		error = athn_set_chan(sc, c, extc);
+		if (AR_SREV_9271(sc) && error == 0)
+			ar9271_load_ani(sc);
+		if (error != 0)
+			return (error);
 	}
 
 	sc->ops.set_txpower(sc, c, extc);
@@ -3406,7 +3443,9 @@ athn_usb_init(struct ifnet *ifp)
 	/* In case a new MAC address has been configured. */
 	IEEE80211_ADDR_COPY(ic->ic_myaddr, IF_LLADDR(ifp));
 #endif
+	ATHN_LOCK(sc);
 	error = athn_set_power_awake(sc);
+	ATHN_UNLOCK(sc);
 	if (error != 0)
 		goto fail;
 
@@ -3589,12 +3628,16 @@ athn_usb_stop(struct ifnet *ifp)
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DRAIN_TXQ_ALL);
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_STOP_RECV);
 
+	ATHN_LOCK(sc);
 	athn_reset(sc, 0);
 	athn_init_pll(sc, NULL);
 	athn_set_power_awake(sc);
 	athn_reset(sc, 1);
 	athn_init_pll(sc, NULL);
+	ATHN_UNLOCK(sc);
+
 	athn_set_power_sleep(sc);
+	
 
 #if OpenBSD_ONLY
 	/* Abort Tx/Rx. */

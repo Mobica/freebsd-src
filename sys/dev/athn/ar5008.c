@@ -61,6 +61,7 @@
 #include "athnvar.h"
 
 #include "ar5008reg.h"
+#include "ar5416reg.h"
 
 int	ar5008_attach(struct athn_softc *);
 int	ar5008_read_eep_word(struct athn_softc *, uint32_t, uint16_t *);
@@ -116,8 +117,8 @@ void	ar5008_calib_adc_gain(struct athn_softc *);
 void	ar5008_calib_adc_dc_off(struct athn_softc *);
 void	ar5008_write_txpower(struct athn_softc *, int16_t *);
 void	ar5008_set_viterbi_mask(struct athn_softc *, int);
-// void	ar5008_hw_init(struct athn_softc *, struct ieee80211_channel *,
-// 	    struct ieee80211_channel *);
+void	ar5008_hw_init(struct athn_softc *, struct ieee80211_channel *,
+	    struct ieee80211_channel *);
 uint8_t	ar5008_get_vpd(uint8_t, const uint8_t *, const uint8_t *, int);
 void	ar5008_get_pdadcs(struct athn_softc *, uint8_t, struct athn_pier *,
 	    struct athn_pier *, int, int, uint8_t, uint8_t *, uint8_t *);
@@ -144,9 +145,9 @@ extern void	athn_config_pcie(struct athn_softc *);
 extern void	athn_config_nonpcie(struct athn_softc *);
 extern uint8_t	athn_chan2fbin(struct ieee80211_channel *);
 // extern uint8_t	ar5416_get_rf_rev(struct athn_softc *);
-extern void	ar5416_reset_addac(struct athn_softc *, struct ieee80211_channel *);
-extern void	ar5416_rf_reset(struct athn_softc *, struct ieee80211_channel *);
-extern void	ar5416_reset_bb_gain(struct athn_softc *, struct ieee80211_channel *);
+void	ar5416_reset_addac(struct athn_softc *, struct ieee80211_channel *);
+void	ar5416_rf_reset(struct athn_softc *, struct ieee80211_channel *);
+void	ar5416_reset_bb_gain(struct athn_softc *, struct ieee80211_channel *);
 extern void	ar9280_reset_rx_gain(struct athn_softc *, struct ieee80211_channel *);
 extern void	ar9280_reset_tx_gain(struct athn_softc *, struct ieee80211_channel *);
 
@@ -220,7 +221,7 @@ ar5008_attach(struct athn_softc *sc)
 	ops->apply_noisefloor = ar5008_apply_noisefloor;
 	ops->do_calib = ar5008_do_calib;
 	ops->next_calib = ar5008_next_calib;
-	// ops->hw_init = ar5008_hw_init; // Not needed
+	ops->hw_init = ar5008_hw_init;
 
 	ops->set_noise_immunity_level = ar5008_set_noise_immunity_level;
 	ops->enable_ofdm_weak_signal = ar5008_enable_ofdm_weak_signal;
@@ -2543,142 +2544,266 @@ ar5008_set_viterbi_mask(struct athn_softc *sc, int bin)
 	AR_WRITE_BARRIER(sc);
 }
 
-// Not needed
-// void
-// ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
-//     struct ieee80211_channel *extc)
-// {
-// 	struct athn_ops *ops = &sc->ops;
-// 	const struct athn_ini *ini = sc->ini;
-// 	const uint32_t *pvals;
-// 	uint32_t reg;
-// 	int i;
+void
+ar5416_rw_rfbits(uint32_t *buf, int col, int off, uint32_t val, int nbits)
+{
+	int idx, bit;
 
-// 	AR_WRITE(sc, AR_PHY(0), 0x00000007);
-// 	AR_WRITE(sc, AR_PHY_ADC_SERIAL_CTL, AR_PHY_SEL_EXTERNAL_RADIO);
+	KASSERT(off >= 1 && col < 4 && nbits <= 32, "ar5416_rw_rfbits");
 
-// 	if (!AR_SINGLE_CHIP(sc))
-// 		ar5416_reset_addac(sc, c);
+	off--;	/* Starts at 1. */
+	while (nbits-- > 0) {
+		idx = off / 8;
+		bit = off % 8;
+		buf[idx] &= ~(1 << (bit + col * 8));
+		buf[idx] |= ((val >> nbits) & 1) << (bit + col * 8);
+		off++;
+	}
+}
 
-// 	AR_WRITE(sc, AR_PHY_ADC_SERIAL_CTL, AR_PHY_SEL_INTERNAL_ADDAC);
+void
+ar5416_rw_bank6tpc(struct athn_softc *sc, struct ieee80211_channel *c,
+    uint32_t *rwbank6tpc)
+{
+	const struct ar5416_eeprom *eep = sc->eep;
+	const struct ar5416_modal_eep_header *modal;
 
-// 	/* First initialization step (depends on channel band/bandwidth). */
-// 	if (extc != NULL) {
-// 		if (IEEE80211_IS_CHAN_2GHZ(c))
-// 			pvals = ini->vals_2g40;
-// 		else
-// 			pvals = ini->vals_5g40;
-// 	} else {
-// 		if (IEEE80211_IS_CHAN_2GHZ(c))
-// 			pvals = ini->vals_2g20;
-// 		else
-// 			pvals = ini->vals_5g20;
-// 	}
-// 	DPRINTFN(4, ("writing modal init vals\n"));
-// 	for (i = 0; i < ini->nregs; i++) {
-// 		uint32_t val = pvals[i];
+	if (IEEE80211_IS_CHAN_5GHZ(c)) {
+		modal = &eep->modalHeader[0];
+		/* 5GHz db in column 0, bits [200-202]. */
+		ar5416_rw_rfbits(rwbank6tpc, 0, 200, modal->db, 3);
+		/* 5GHz ob in column 0, bits [203-205]. */
+		ar5416_rw_rfbits(rwbank6tpc, 0, 203, modal->ob, 3);
+	} else {
+		modal = &eep->modalHeader[1];
+		/* 2GHz db in column 0, bits [194-196]. */
+		ar5416_rw_rfbits(rwbank6tpc, 0, 194, modal->db, 3);
+		/* 2GHz ob in column 0, bits [197-199]. */
+		ar5416_rw_rfbits(rwbank6tpc, 0, 197, modal->ob, 3);
+	}
+}
 
-// 		/* Fix AR_AN_TOP2 initialization value if required. */
-// 		if (ini->regs[i] == AR_AN_TOP2 &&
-// 		    (sc->flags & ATHN_FLAG_AN_TOP2_FIXUP))
-// 			val &= ~AR_AN_TOP2_PWDCLKIND;
-// 		AR_WRITE(sc, ini->regs[i], val);
-// 		if (AR_IS_ANALOG_REG(ini->regs[i])) {
-// 			AR_WRITE_BARRIER(sc);
-// 			DELAY(100);
-// 		}
-// 		if ((i & 0x1f) == 0)
-// 			DELAY(1);
-// 	}
-// 	AR_WRITE_BARRIER(sc);
+void
+ar5416_reset_bb_gain(struct athn_softc *sc, struct ieee80211_channel *c)
+{
+	const uint32_t *pvals;
+	int i;
 
-// 	if (sc->rx_gain != NULL)
-// 		ar9280_reset_rx_gain(sc, c);
-// 	if (sc->tx_gain != NULL)
-// 		ar9280_reset_tx_gain(sc, c);
+	if (IEEE80211_IS_CHAN_2GHZ(c))
+		pvals = ar5416_bb_rfgain_vals_2g;
+	else
+		pvals = ar5416_bb_rfgain_vals_5g;
+	for (i = 0; i < 64; i++)
+		AR_WRITE(sc, AR_PHY_BB_RFGAIN(i), pvals[i]);
+}
 
-// 	if (AR_SREV_9271_10(sc)) {
-// 		AR_WRITE(sc, AR_PHY(68), 0x30002311);
-// 		AR_WRITE(sc, AR_PHY_RF_CTL3, 0x0a020001);
-// 	}
-// 	AR_WRITE_BARRIER(sc);
+void
+ar5416_rf_reset(struct athn_softc *sc, struct ieee80211_channel *c)
+{
+	const uint32_t *bank6tpc;
+	int i;
 
-// 	/* Second initialization step (common to all channels). */
-// 	DPRINTFN(4, ("writing common init vals\n"));
-// 	for (i = 0; i < ini->ncmregs; i++) {
-// 		AR_WRITE(sc, ini->cmregs[i], ini->cmvals[i]);
-// 		if (AR_IS_ANALOG_REG(ini->cmregs[i])) {
-// 			AR_WRITE_BARRIER(sc);
-// 			DELAY(100);
-// 		}
-// 		if ((i & 0x1f) == 0)
-// 			DELAY(1);
-// 	}
-// 	AR_WRITE_BARRIER(sc);
+	/* Bank 0. */
+	AR_WRITE(sc, 0x98b0, 0x1e5795e5);
+	AR_WRITE(sc, 0x98e0, 0x02008020);
 
-// 	if (!AR_SINGLE_CHIP(sc))
-// 		ar5416_reset_bb_gain(sc, c);
+	/* Bank 1. */
+	AR_WRITE(sc, 0x98b0, 0x02108421);
+	AR_WRITE(sc, 0x98ec, 0x00000008);
 
-// 	if (IEEE80211_IS_CHAN_5GHZ(c) &&
-// 	    (sc->flags & ATHN_FLAG_FAST_PLL_CLOCK)) {
-// 		/* Update modal values for fast PLL clock. */
-// 		if (extc != NULL)
-// 			pvals = ini->fastvals_5g40;
-// 		else
-// 			pvals = ini->fastvals_5g20;
-// 		DPRINTFN(4, ("writing fast pll clock init vals\n"));
-// 		for (i = 0; i < ini->nfastregs; i++) {
-// 			AR_WRITE(sc, ini->fastregs[i], pvals[i]);
-// 			if (AR_IS_ANALOG_REG(ini->fastregs[i])) {
-// 				AR_WRITE_BARRIER(sc);
-// 				DELAY(100);
-// 			}
-// 			if ((i & 0x1f) == 0)
-// 				DELAY(1);
-// 		}
-// 	}
+	/* Bank 2. */
+	AR_WRITE(sc, 0x98b0, 0x0e73ff17);
+	AR_WRITE(sc, 0x98e0, 0x00000420);
 
-// 	/*
-// 	 * Set the RX_ABORT and RX_DIS bits to prevent frames with corrupted
-// 	 * descriptor status.
-// 	 */
-// 	AR_SETBITS(sc, AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);
+	/* Bank 3. */
+	if (IEEE80211_IS_CHAN_5GHZ(c))
+		AR_WRITE(sc, 0x98f0, 0x01400018);
+	else
+		AR_WRITE(sc, 0x98f0, 0x01c00018);
 
-// 	/* Hardware workarounds for occasional Rx data corruption. */
-// 	if (AR_SREV_9280_10_OR_LATER(sc)) {
-// 		reg = AR_READ(sc, AR_PCU_MISC_MODE2);
-// 		if (!AR_SREV_9271(sc))
-// 			reg &= ~AR_PCU_MISC_MODE2_HWWAR1;
-// 		if (AR_SREV_9287_10_OR_LATER(sc))
-// 			reg &= ~AR_PCU_MISC_MODE2_HWWAR2;
-// 		AR_WRITE(sc, AR_PCU_MISC_MODE2, reg);
+	/* Select the Bank 6 TPC values to use. */
+	if (AR_SREV_9160_10_OR_LATER(sc))
+		bank6tpc = ar9160_bank6tpc_vals;
+	else
+		bank6tpc = ar5416_bank6tpc_vals;
+	if (sc->eep_rev >= AR_EEP_MINOR_VER_2) {
+		uint32_t *rwbank6tpc = sc->rwbuf;
 
-// 	} else if (AR_SREV_5416_20_OR_LATER(sc)) {
-// 		/* Disable baseband clock gating. */
-// 		AR_WRITE(sc, AR_PHY(651), 0x11);
+		/* Copy values from .rodata to writable buffer. */
+		memcpy(rwbank6tpc, bank6tpc, 32 * sizeof(uint32_t));
+		ar5416_rw_bank6tpc(sc, c, rwbank6tpc);
+		bank6tpc = rwbank6tpc;
+	}
+	/* Bank 6 TPC. */
+	for (i = 0; i < 32; i++)
+		AR_WRITE(sc, 0x989c, bank6tpc[i]);
+	if (IEEE80211_IS_CHAN_5GHZ(c))
+		AR_WRITE(sc, 0x98d0, 0x0000000f);
+	else
+		AR_WRITE(sc, 0x98d0, 0x0010000f);
 
-// 		if (AR_SREV_9160(sc)) {
-// 			/* Disable RIFS search to fix baseband hang. */
-// 			AR_CLRBITS(sc, AR_PHY_HEAVY_CLIP_FACTOR_RIFS,
-// 			    AR_PHY_RIFS_INIT_DELAY_M);
-// 		}
-// 	}
-// 	AR_WRITE_BARRIER(sc);
+	/* Bank 7. */
+	AR_WRITE(sc, 0x989c, 0x00000500);
+	AR_WRITE(sc, 0x989c, 0x00000800);
+	AR_WRITE(sc, 0x98cc, 0x0000000e);
+}
 
-// 	ar5008_set_phy(sc, c, extc);
-// 	ar5008_init_chains(sc);
+void
+ar5416_reset_addac(struct athn_softc *sc, struct ieee80211_channel *c)
+{
+	const struct athn_addac *addac = sc->addac;
+	const uint32_t *pvals;
+	int i;
 
-// 	if (sc->flags & ATHN_FLAG_OLPC) {
-// 		extern int ticks;
-// 		sc->olpc_ticks = ticks;
-// 		ops->olpc_init(sc);
-// 	}
+	// if (AR_SREV_9160(sc) && sc->eep_rev >= AR_EEP_MINOR_VER_7) {
+	// 	uint32_t *rwaddac = sc->rwbuf;
 
-// 	ops->set_txpower(sc, c, extc);
+	// 	/* Copy values from .rodata to writable buffer. */
+	// 	memcpy(rwaddac, addac->vals, addac->nvals * sizeof(uint32_t));
+	// 	ar9160_rw_addac(sc, c, rwaddac);
+	// 	pvals = rwaddac;
+	// } else
+		pvals = addac->vals;
+	for (i = 0; i < addac->nvals; i++)
+		AR_WRITE(sc, 0x989c, pvals[i]);
+	AR_WRITE(sc, 0x98cc, 0);	/* Finalize. */
+}
 
-// 	if (!AR_SINGLE_CHIP(sc))
-// 		ar5416_rf_reset(sc, c);
-// }
+void
+ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
+    struct ieee80211_channel *extc)
+{
+	struct athn_ops *ops = &sc->ops;
+	const struct athn_ini *ini = sc->ini;
+	const uint32_t *pvals;
+	uint32_t reg;
+	int i;
+
+	AR_WRITE(sc, AR_PHY(0), 0x00000007);
+	AR_WRITE(sc, AR_PHY_ADC_SERIAL_CTL, AR_PHY_SEL_EXTERNAL_RADIO);
+
+	if (!AR_SINGLE_CHIP(sc))
+		ar5416_reset_addac(sc, c);
+
+	AR_WRITE(sc, AR_PHY_ADC_SERIAL_CTL, AR_PHY_SEL_INTERNAL_ADDAC);
+
+	/* First initialization step (depends on channel band/bandwidth). */
+	if (extc != NULL) {
+		if (IEEE80211_IS_CHAN_2GHZ(c))
+			pvals = ini->vals_2g40;
+		else
+			pvals = ini->vals_5g40;
+	} else {
+		if (IEEE80211_IS_CHAN_2GHZ(c))
+			pvals = ini->vals_2g20;
+		else
+			pvals = ini->vals_5g20;
+	}
+	DPRINTFN(4, ("writing modal init vals\n"));
+	for (i = 0; i < ini->nregs; i++) {
+		uint32_t val = pvals[i];
+
+		/* Fix AR_AN_TOP2 initialization value if required. */
+		if (ini->regs[i] == AR_AN_TOP2 &&
+		    (sc->flags & ATHN_FLAG_AN_TOP2_FIXUP))
+			val &= ~AR_AN_TOP2_PWDCLKIND;
+		AR_WRITE(sc, ini->regs[i], val);
+		if (AR_IS_ANALOG_REG(ini->regs[i])) {
+			AR_WRITE_BARRIER(sc);
+			DELAY(100);
+		}
+		if ((i & 0x1f) == 0)
+			DELAY(1);
+	}
+	AR_WRITE_BARRIER(sc);
+
+	if (sc->rx_gain != NULL)
+		ar9280_reset_rx_gain(sc, c);
+	if (sc->tx_gain != NULL)
+		ar9280_reset_tx_gain(sc, c);
+
+	if (AR_SREV_9271_10(sc)) {
+		AR_WRITE(sc, AR_PHY(68), 0x30002311);
+		AR_WRITE(sc, AR_PHY_RF_CTL3, 0x0a020001);
+	}
+	AR_WRITE_BARRIER(sc);
+
+	/* Second initialization step (common to all channels). */
+	DPRINTFN(4, ("writing common init vals\n"));
+	for (i = 0; i < ini->ncmregs; i++) {
+		AR_WRITE(sc, ini->cmregs[i], ini->cmvals[i]);
+		if (AR_IS_ANALOG_REG(ini->cmregs[i])) {
+			AR_WRITE_BARRIER(sc);
+			DELAY(100);
+		}
+		if ((i & 0x1f) == 0)
+			DELAY(1);
+	}
+	AR_WRITE_BARRIER(sc);
+
+	if (!AR_SINGLE_CHIP(sc))
+		ar5416_reset_bb_gain(sc, c);
+
+	if (IEEE80211_IS_CHAN_5GHZ(c) &&
+	    (sc->flags & ATHN_FLAG_FAST_PLL_CLOCK)) {
+		/* Update modal values for fast PLL clock. */
+		if (extc != NULL)
+			pvals = ini->fastvals_5g40;
+		else
+			pvals = ini->fastvals_5g20;
+		DPRINTFN(4, ("writing fast pll clock init vals\n"));
+		for (i = 0; i < ini->nfastregs; i++) {
+			AR_WRITE(sc, ini->fastregs[i], pvals[i]);
+			if (AR_IS_ANALOG_REG(ini->fastregs[i])) {
+				AR_WRITE_BARRIER(sc);
+				DELAY(100);
+			}
+			if ((i & 0x1f) == 0)
+				DELAY(1);
+		}
+	}
+
+	/*
+	 * Set the RX_ABORT and RX_DIS bits to prevent frames with corrupted
+	 * descriptor status.
+	 */
+	AR_SETBITS(sc, AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);
+
+	/* Hardware workarounds for occasional Rx data corruption. */
+	if (AR_SREV_9280_10_OR_LATER(sc)) {
+		reg = AR_READ(sc, AR_PCU_MISC_MODE2);
+		if (!AR_SREV_9271(sc))
+			reg &= ~AR_PCU_MISC_MODE2_HWWAR1;
+		if (AR_SREV_9287_10_OR_LATER(sc))
+			reg &= ~AR_PCU_MISC_MODE2_HWWAR2;
+		AR_WRITE(sc, AR_PCU_MISC_MODE2, reg);
+
+	} else if (AR_SREV_5416_20_OR_LATER(sc)) {
+		/* Disable baseband clock gating. */
+		AR_WRITE(sc, AR_PHY(651), 0x11);
+
+		if (AR_SREV_9160(sc)) {
+			/* Disable RIFS search to fix baseband hang. */
+			AR_CLRBITS(sc, AR_PHY_HEAVY_CLIP_FACTOR_RIFS,
+			    AR_PHY_RIFS_INIT_DELAY_M);
+		}
+	}
+	AR_WRITE_BARRIER(sc);
+
+	ar5008_set_phy(sc, c, extc);
+	ar5008_init_chains(sc);
+
+	if (sc->flags & ATHN_FLAG_OLPC) {
+		// extern int ticks;
+		sc->olpc_ticks = ticks;
+		ops->olpc_init(sc);
+	}
+
+	ops->set_txpower(sc, c, extc);
+
+	if (!AR_SINGLE_CHIP(sc))
+		ar5416_rf_reset(sc, c);
+}
 
 uint8_t
 ar5008_get_vpd(uint8_t pwr, const uint8_t *pwrPdg, const uint8_t *vpdPdg,
