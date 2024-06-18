@@ -50,11 +50,6 @@
 #include "athnvar.h"
 #include "openbsd_adapt.h"
 
-#include	<sys/cpuset.h>
-
-int	kern_cpuset_setaffinity(struct thread *td, cpulevel_t level,
-	    cpuwhich_t which, id_t id, cpuset_t *maskp);
-
 // TODO missing macro def
 #define NATHN_USB 1
 
@@ -2585,16 +2580,6 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 	struct athn_ops *ops = &sc->ops;
 	uint32_t reg, def_ant, sta_id1, cfg_led, tsflo, tsfhi;
 	int i, error;
-
-	{
-		struct thread *td = curthread;
-		cpuset_t cpuset;
-		int cpu = 1;
-		CPU_ZERO(&cpuset);
-  		CPU_SET(cpu, &cpuset);
-		kern_cpuset_setaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, &cpuset);
-	}
-
 
 	/* XXX not if already awake */
 	if ((error = athn_set_power_awake(sc)) != 0) {

@@ -670,7 +670,6 @@ struct athn_softc {
 	struct athn_txq			txq[31];
 
 	struct mtx		sc_mtx;
-	struct sx 		sc_sx;
 
 	void				*descs;
 	bus_dmamap_t			map;

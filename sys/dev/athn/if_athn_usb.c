@@ -76,10 +76,6 @@ __FBSDID("$FreeBSD$");
 #include "openbsd_adapt.h"
 #include "if_athn_usb.h"
 #include "if_athn_usb_fw.h"
-#include	<sys/cpuset.h>
-
-int	kern_cpuset_setaffinity(struct thread *td, cpulevel_t level,
-	    cpuwhich_t which, id_t id, cpuset_t *maskp);
 
 unsigned int ifq_oactive = 0;
 
@@ -427,15 +423,6 @@ athn_usb_attach(device_t self)
 	usb_error_t error;
 	struct usb_endpoint *ep, *ep_end;
 
-	{
-		struct thread *td = curthread;
-		cpuset_t cpuset;
-		int cpu = 1;
-		CPU_ZERO(&cpuset);
-  		CPU_SET(cpu, &cpuset);
-		kern_cpuset_setaffinity(td, CPU_LEVEL_WHICH, CPU_WHICH_TID, -1, &cpuset);
-	}
-
 	device_set_usb_desc(self);
 	usc->sc_udev = uaa->device;
 	sc->sc_dev = self;
@@ -453,7 +440,7 @@ athn_usb_attach(device_t self)
 	sc->ops.write = athn_usb_write;
 	sc->ops.write_barrier = athn_usb_write_barrier;
 
-	mtx_init(&sc->sc_mtx, device_get_nameunit(self), MTX_NETWORK_LOCK, MTX_DEF | MTX_RECURSE);
+	mtx_init(&sc->sc_mtx, device_get_nameunit(self), MTX_NETWORK_LOCK, MTX_DEF);
 
 	// MichalP calib_to timeout missing don't know how to put it all together
 	TIMEOUT_TASK_INIT(taskqueue_thread, &sc->scan_to, 0, athn_usb_next_scan, sc);
@@ -656,7 +643,7 @@ athn_freebuf(struct athn_softc *sc, struct athn_usb_data *bf)
 {
 	struct athn_usb_softc *usc = sc->sc_usc;
 
-	ATHN_ASSERT_LOCKED(usc);
+	ATHN_ASSERT_LOCKED(sc);
 	STAILQ_INSERT_TAIL(&usc->sc_tx_inactive, bf, next);
 }
 
