@@ -1351,7 +1351,7 @@ athn_if_bulk_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 	int actlen;
 	int state = USB_GET_STATE(xfer);
-	char *state_str = state2Str(state);
+	// char *state_str = state2Str(state);
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
@@ -1374,8 +1374,9 @@ athn_if_bulk_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 		if (data == NULL) {
 			device_printf(sc->sc_dev, "%s: empty pending queue sc %p\n", __func__, sc);
 			usc->sc_tx_n_active = 0;
+			goto finish;
 		}
-		// STAILQ_REMOVE_HEAD(&usc->sc_tx_pending[which], next);
+		STAILQ_REMOVE_HEAD(&usc->sc_tx_pending[which], next);
 		STAILQ_INSERT_TAIL(&usc->sc_tx_active[which], data, next);
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->buflen);
 		// device_printf(sc->sc_dev, "%s: submitting transfer %p\n", __func__, data);
@@ -1397,7 +1398,7 @@ athn_if_bulk_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 		}
 		break;
 	}
-
+finish:
 	taskqueue_enqueue(taskqueue_thread, &sc->sc_task);
 }
 
