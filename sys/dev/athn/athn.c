@@ -2583,8 +2583,7 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 
 	/* XXX not if already awake */
 	if ((error = athn_set_power_awake(sc)) != 0) {
-		device_printf(sc->sc_dev, "%s: ould not wakeup chip\n", __func__);
-		return (error);
+		device_printf(sc->sc_dev, "%s: could not wakeup chip\n", __func__);
 		return (error);
 	}
 
