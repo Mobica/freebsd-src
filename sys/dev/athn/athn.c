@@ -51,7 +51,7 @@
 #include "openbsd_adapt.h"
 
 // TODO missing macro def
-#define NATHN_USB 0
+#define NATHN_USB 1
 
 #ifdef ATHN_DEBUG
 int athn_debug = 0;
@@ -268,6 +268,7 @@ athn_getradiocaps(struct ieee80211com *ic,
 	}
 }
 
+// TODO: check if we can go back to athn_attach
 #if 0
 int
 athn_attach(struct athn_softc *sc)
@@ -478,6 +479,7 @@ athn_scan_end(struct ieee80211com *ic)
 //	printf("%s: TODO\n", __func__);
 }
 
+// Implemented in athn_usb
 // static int
 // athn_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
 //     const struct ieee80211_bpf_params *params)
@@ -532,10 +534,23 @@ athn_like_otus_attach(struct athn_softc *sc)
 	uint8_t bands[IEEE80211_MODE_BYTES];
 	int error;
 
+	/* Read hardware revision. */
+	athn_get_chipid(sc);
+
 	ATHN_LOCK(sc);
+
+	error = ar9285_attach(sc);
+
 
 	sc->eep_base = AR9285_EEP_START_LOC;
 	sc->eep_size = sizeof(struct ar9285_eeprom);
+
+	if (error != 0) {
+		device_printf(sc->sc_dev, "%s: could not attach chip\n", __func__);
+		return (error);
+	}
+
+	// TASK_INIT(&sc->tx_task, 0, otus_tx_task, sc);
 
 	sc->eep = &sc->eeprom;
 	/* Read entire EEPROM. */
@@ -608,7 +623,7 @@ athn_like_otus_attach(struct athn_softc *sc)
 	    IEEE80211_HTCAP_MAXAMSDU_3839 |
 	    IEEE80211_HTCAP_SMPS_OFF;
 
-	// athn_get_chanlist(sc);
+	athn_get_chanlist(sc);
 
 	sc->flags |= ATHN_FLAG_11G;
 
@@ -627,6 +642,7 @@ athn_like_otus_attach(struct athn_softc *sc)
 	ic->ic_scan_start = athn_scan_start;
 	ic->ic_scan_end = athn_scan_end;
 	ic->ic_parent = athn_parent;
+// TODO: add missing functions to ic
 #if 0
 	ic->ic_raw_xmit = otus_raw_xmit;
 	ic->ic_scan_start = otus_scan_start;
@@ -658,6 +674,18 @@ athn_like_otus_attach(struct athn_softc *sc)
 	    &sc->sc_rxtap.wr_ihdr, sizeof(sc->sc_rxtap),
 	    OTUS_RX_RADIOTAP_PRESENT);
 #endif
+	sc->ntxchains =
+	    ((sc->txchainmask >> 2) & 1) +
+	    ((sc->txchainmask >> 1) & 1) +
+	    ((sc->txchainmask >> 0) & 1);
+	sc->nrxchains =
+	    ((sc->rxchainmask >> 2) & 1) +
+	    ((sc->rxchainmask >> 1) & 1) +
+	    ((sc->rxchainmask >> 0) & 1);
+
+	sc->amrr.amrr_min_success_threshold =  1;
+	sc->amrr.amrr_max_success_threshold = 15;
+
 	device_printf(sc->sc_dev,"%s: Planned end\n", __func__);
 
 	return (0);
@@ -717,7 +745,7 @@ athn_radiotap_attach(struct athn_softc *sc)
 void
 athn_get_chanlist(struct athn_softc *sc)
 {
-	__attribute__((unused)) struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = &sc->sc_ic;
 	uint8_t chan;
 	int i;
 	if (sc->flags & ATHN_FLAG_11G) {
@@ -753,7 +781,7 @@ athn_rx_start(struct athn_softc *sc)
 	uint32_t rfilt;
 
 	/* Setup Rx DMA descriptors. */
-	// sc->ops.rx_enable(sc);
+	sc->ops.rx_enable(sc);
 
 	/* Set Rx filter. */
 	rfilt = AR_RX_FILTER_UCAST | AR_RX_FILTER_BCAST | AR_RX_FILTER_MCAST;
@@ -910,7 +938,7 @@ athn_reset_power_on(struct athn_softc *sc)
 {
 	int ntries;
 
-	ATHN_LOCK(sc);
+	// ATHN_LOCK(sc);
 	/* Set force wake. */
 	AR_WRITE(sc, AR_RTC_FORCE_WAKE,
 	    AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
@@ -934,7 +962,7 @@ athn_reset_power_on(struct athn_softc *sc)
 			break;
 		DELAY(10);
 	}
-	ATHN_UNLOCK(sc);
+	// ATHN_UNLOCK(sc);
 	if (ntries == 1000) {
 		DPRINTF(("RTC not waking up\n"));
 		return (ETIMEDOUT);
@@ -947,7 +975,7 @@ athn_reset(struct athn_softc *sc, int cold)
 {
 	int ntries;
 
-	ATHN_LOCK(sc);
+	// ATHN_LOCK(sc);
 	/* Set force wake. */
 	AR_WRITE(sc, AR_RTC_FORCE_WAKE,
 	    AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
@@ -978,7 +1006,7 @@ athn_reset(struct athn_softc *sc, int cold)
 	}
 	AR_WRITE(sc, AR_RC, 0);
 	AR_WRITE_BARRIER(sc);
-	ATHN_UNLOCK(sc);
+	// ATHN_UNLOCK(sc);
 	return (0);
 }
 
@@ -987,7 +1015,7 @@ athn_set_power_awake(struct athn_softc *sc)
 {
 	int ntries, error;
 
-	ATHN_LOCK(sc);
+	// ATHN_LOCK(sc);
 	/* Do a Power-On-Reset if shutdown. */
 	if ((AR_READ(sc, AR_RTC_STATUS) & AR_RTC_STATUS_M) ==
 	    AR_RTC_STATUS_SHUTDOWN) {
@@ -1018,14 +1046,14 @@ athn_set_power_awake(struct athn_softc *sc)
 
 	AR_CLRBITS(sc, AR_STA_ID1, AR_STA_ID1_PWR_SAV);
 	AR_WRITE_BARRIER(sc);
-	ATHN_UNLOCK(sc);
+	// ATHN_UNLOCK(sc);
 	return (0);
 }
 
 void
 athn_set_power_sleep(struct athn_softc *sc)
 {
-	ATHN_LOCK(sc);
+	// ATHN_LOCK(sc);
 	AR_SETBITS(sc, AR_STA_ID1, AR_STA_ID1_PWR_SAV);
 	/* Allow the MAC to go to sleep. */
 	AR_CLRBITS(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN);
@@ -1038,7 +1066,7 @@ athn_set_power_sleep(struct athn_softc *sc)
 	if (!AR_SREV_5416(sc) && !AR_SREV_9271(sc))
 		AR_CLRBITS(sc, AR_RTC_RESET, AR_RTC_RESET_EN);
 	AR_WRITE_BARRIER(sc);
-	ATHN_UNLOCK(sc);
+	// ATHN_UNLOCK(sc);
 }
 
 void
@@ -1046,7 +1074,7 @@ athn_init_pll(struct athn_softc *sc, const struct ieee80211_channel *c)
 {
 	uint32_t pll;
 
-	ATHN_LOCK(sc);
+	// ATHN_LOCK(sc);
 	if (AR_SREV_9380_10_OR_LATER(sc)) {
 		if (AR_SREV_9485(sc))
 			AR_WRITE(sc, AR_RTC_PLL_CONTROL2, 0x886666);
@@ -1088,7 +1116,7 @@ athn_init_pll(struct athn_softc *sc, const struct ieee80211_channel *c)
 	DELAY(100);
 	AR_WRITE(sc, AR_RTC_SLEEP_CLK, AR_RTC_FORCE_DERIVED_CLK);
 	AR_WRITE_BARRIER(sc);
-	ATHN_UNLOCK(sc);
+	// ATHN_UNLOCK(sc);
 }
 
 void
@@ -1097,11 +1125,11 @@ athn_write_serdes(struct athn_softc *sc, const struct athn_serdes *serdes)
 	int i;
 
 	/* Write sequence to Serializer/Deserializer. */
-	ATHN_LOCK(sc);
+	// ATHN_LOCK(sc);
 	for (i = 0; i < serdes->nvals; i++)
 		AR_WRITE(sc, serdes->regs[i], serdes->vals[i]);
 	AR_WRITE_BARRIER(sc);
-	ATHN_UNLOCK(sc);
+	// ATHN_UNLOCK(sc);
 }
 
 void
@@ -1191,16 +1219,16 @@ athn_set_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 	sc->curchanext = extc;
 
 	/* Set transmit power values for new channel. */
-	// ops->set_txpower(sc, c, extc);
+	ops->set_txpower(sc, c, extc);
 
 	/* Release the RF Bus grant. */
-	// ops->rf_bus_release(sc);
+	ops->rf_bus_release(sc);
 
 	/* Write delta slope coeffs for modes where OFDM may be used. */
-	// if (sc->sc_ic.ic_curmode != IEEE80211_MODE_11B)
-	// 	ops->set_delta_slope(sc, c, extc);
+	if (sc->sc_ic.ic_curmode != IEEE80211_MODE_11B)
+		ops->set_delta_slope(sc, c, extc);
 
-	// ops->spur_mitigate(sc, c, extc);
+	ops->spur_mitigate(sc, c, extc);
 
 	return (0);
 }
@@ -1311,6 +1339,7 @@ athn_reset_key(struct athn_softc *sc, int entry)
 	AR_WRITE_BARRIER(sc);
 }
 
+// TODO?
 int
 athn_set_key(struct ieee80211com *ic, struct ieee80211_node *ni,
     struct ieee80211_key *k)
@@ -1423,8 +1452,10 @@ athn_led_init(struct athn_softc *sc)
 {
 	struct athn_ops *ops = &sc->ops;
 
+	// ATHN_LOCK(sc);
 	ops->gpio_config_output(sc, sc->led_pin, AR_GPIO_OUTPUT_MUX_AS_OUTPUT);
 	/* LED off, active low. */
+	// ATHN_UNLOCK(sc);
 	athn_set_led(sc, 0);
 }
 
@@ -1433,8 +1464,10 @@ athn_set_led(struct athn_softc *sc, int on)
 {
 	struct athn_ops *ops = &sc->ops;
 
-	// sc->led_state = on;
-	// ops->gpio_write(sc, sc->led_pin, !sc->led_state);
+	// ATHN_LOCK(sc);
+	sc->led_state = on;
+	ops->gpio_write(sc, sc->led_pin, !sc->led_state);
+	// ATHN_UNLOCK(sc);
 }
 
 #ifdef ATHN_BT_COEXISTENCE
@@ -1544,6 +1577,7 @@ athn_btcoex_disable(struct athn_softc *sc)
 }
 #endif
 
+// TODO: not sure if needed
 void
 athn_iter_calib(void *arg, struct ieee80211_node *ni)
 {
@@ -1555,6 +1589,7 @@ athn_iter_calib(void *arg, struct ieee80211_node *ni)
 	// 	ieee80211_amrr_choose(&sc->amrr, ni, &an->amn);
 }
 
+// TODO: not sure if needed
 int
 athn_cap_noisefloor(struct athn_softc *sc, int nf)
 {
@@ -2541,15 +2576,14 @@ int
 athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc, int init)
 {
-	__attribute__((unused)) struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = &sc->sc_ic;
 	struct athn_ops *ops = &sc->ops;
 	uint32_t reg, def_ant, sta_id1, cfg_led, tsflo, tsfhi;
 	int i, error;
 
 	/* XXX not if already awake */
 	if ((error = athn_set_power_awake(sc)) != 0) {
-		// TOTO missing field 'dv_xname' in 'struct device'
-		// printf("%s: could not wakeup chip\n", sc->sc_dev.dv_xname);
+		device_printf(sc->sc_dev, "%s: could not wakeup chip\n", __func__);
 		return (error);
 	}
 
@@ -2580,16 +2614,13 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 	} else
 		error = athn_reset(sc, 0);
 	if (error != 0) {
-		// TOTO missing field 'dv_xname' in 'struct device'
-		// printf("%s: could not reset chip (error=%d)\n",
-		//     sc->sc_dev.dv_xname, error);
+		device_printf(sc->sc_dev, "%s: could not reset chip (error=%d)\n", __func__, error);
 		return (error);
 	}
 
 	/* XXX not if already awake */
 	if ((error = athn_set_power_awake(sc)) != 0) {
-		// TOTO missing field 'dv_xname' in 'struct device'
-		// printf("%s: could not wakeup chip\n", sc->sc_dev.dv_xname);
+		device_printf(sc->sc_dev, "%s: could not wakeup chip", __func__);
 		return (error);
 	}
 
@@ -2602,9 +2633,7 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 		if (sc->flags & ATHN_FLAG_RFSILENT_REVERSED)
 			reg = !reg;
 		if (!reg) {
-			// TOTO missing field 'dv_xname' in 'struct device'
-			// printf("%s: radio is disabled by hardware switch\n",
-			//     sc->sc_dev.dv_xname);
+			device_printf(sc->sc_dev, "%s: radio is disabled by hardware switch\n", __func__);
 			return (EPERM);
 		}
 	}
@@ -2652,10 +2681,9 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 	ops->init_from_rom(sc, c, extc);
 
 	/* XXX */
-	// TODO no member named 'ic_myaddr' in 'struct ieee80211com'
-	// AR_WRITE(sc, AR_STA_ID0, LE_READ_4(&ic->ic_myaddr[0]));
-	// AR_WRITE(sc, AR_STA_ID1, LE_READ_2(&ic->ic_myaddr[4]) |
-	//     sta_id1 | AR_STA_ID1_RTS_USE_DEF | AR_STA_ID1_CRPT_MIC_ENABLE);
+	AR_WRITE(sc, AR_STA_ID0, LE_READ_4(&ic->ic_macaddr[0]));
+	AR_WRITE(sc, AR_STA_ID1, LE_READ_2(&ic->ic_macaddr[4]) |
+	    sta_id1 | AR_STA_ID1_RTS_USE_DEF | AR_STA_ID1_CRPT_MIC_ENABLE);
 
 	athn_set_opmode(sc);
 
@@ -2675,6 +2703,7 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 	if ((error = ops->set_synth(sc, c, extc)) != 0) {
 		// TOTO missing field 'dv_xname' in 'struct device'
 		// printf("%s: could not set channel\n", sc->sc_dev.dv_xname);
+		device_printf(sc->sc_dev, "%s: ould not set channel\n", __func__);
 		return (error);
 	}
 	sc->curchan = c;
@@ -2740,9 +2769,7 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 	ops->init_baseband(sc);
 
 	if ((error = athn_init_calib(sc, c, extc)) != 0) {
-		// TOTO missing field 'dv_xname' in 'struct device'
-		// printf("%s: could not initialize calibration\n",
-		//     sc->sc_dev.dv_xname);
+		device_printf(sc->sc_dev, "%s: could not initialize calibration\n", __func__);
 		return (error);
 	}
 
@@ -2903,6 +2930,7 @@ athn_next_scan(void *arg)
 	splx(s);
 }
 
+// Not needed
 int
 athn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 {
@@ -3359,17 +3387,19 @@ athn_init(struct ifnet *ifp)
 			//     sc->sc_dev.dv_xname);
 			goto fail;
 		}
+		ATHN_LOCK(sc);
 		if ((error = athn_reset_power_on(sc)) != 0) {
 			// TOTO missing field 'dv_xname' in 'struct device'
 			// printf("%s: could not power on device\n",
 			//     sc->sc_dev.dv_xname);
+			ATHN_UNLOCK(sc);
 			goto fail;
 		}
+		ATHN_UNLOCK(sc);
 	}
-	if (!(sc->flags & ATHN_FLAG_PCIE))
-		athn_config_nonpcie(sc);
-	else
-		athn_config_pcie(sc);
+	
+	athn_config_nonpcie(sc);
+
 
 	ops->enable_antenna_diversity(sc);
 
@@ -3380,7 +3410,9 @@ athn_init(struct ifnet *ifp)
 #endif
 
 	/* Configure LED. */
+	ATHN_LOCK(sc);
 	athn_led_init(sc);
+	ATHN_UNLOCK(sc);
 
 	/* Configure hardware radio switch. */
 	if (sc->flags & ATHN_FLAG_RFSILENT)
@@ -3479,11 +3511,13 @@ athn_stop(struct ifnet *ifp, int disable)
 	for (i = 0; i < sc->kc_entries; i++)
 		athn_reset_key(sc, i);
 
+	ATHN_LOCK(sc);
 	athn_reset(sc, 0);
 	athn_init_pll(sc, NULL);
 	athn_set_power_awake(sc);
 	athn_reset(sc, 1);
 	athn_init_pll(sc, NULL);
+	ATHN_UNLOCK(sc);
 
 	athn_set_power_sleep(sc);
 

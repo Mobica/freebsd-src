@@ -12,6 +12,7 @@ EXPORT_SYMS=    YES
 
 #SRCS=   if_athn_usb.c ar9285.c athn.c
 SRCS=   if_athn_usb_fw.c if_athn_usb.c athn_stubs.c athn.c
+SRCS+=   ar9285.c ar9280.c ar5008.c
 SRCS+=	bus_if.h device_if.h
 SRCS+=  opt_inet.h opt_inet6.h opt_route.h opt_netlink.h
 

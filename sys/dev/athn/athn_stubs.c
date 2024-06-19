@@ -21,21 +21,21 @@
 #include "athnreg.h"
 #include "athnvar.h"
 
+// Not needed anymore after adding ar9285reg.h
+// int		ar9285_attach(struct athn_softc *sc)
+// {
+// 	printf("%s is stub", __FUNCTION__);
+// 	return 0;
+// }
 
-int		ar9285_attach(struct athn_softc *sc)
-{
-	printf("%s is stub", __FUNCTION__);
-	return 0;
-}
+// int		ar9285_init_calib(struct athn_softc *sc,
+// struct ieee80211_channel *c, struct ieee80211_channel *extc)
+// {
+// 	printf("%s is stub", __FUNCTION__);
+// 	return 0;
+// }
 
-int		ar9285_init_calib(struct athn_softc *sc,
-struct ieee80211_channel *c, struct ieee80211_channel *extc)
-{
-	printf("%s is stub", __FUNCTION__);
-	return 0;
-}
-
-void		ar9271_pa_calib(struct athn_softc *sc)
-{
-	printf("%s is stub", __FUNCTION__);
-}
+// void		ar9271_pa_calib(struct athn_softc *sc)
+// {
+// 	printf("%s is stub", __FUNCTION__);
+// }

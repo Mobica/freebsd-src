@@ -61,6 +61,7 @@
 #include "athnvar.h"
 
 #include "ar5008reg.h"
+#include "ar5416reg.h"
 
 int	ar5008_attach(struct athn_softc *);
 int	ar5008_read_eep_word(struct athn_softc *, uint32_t, uint16_t *);
@@ -88,8 +89,8 @@ void	ar5008_tx_intr(struct athn_softc *);
 int	ar5008_swba_intr(struct athn_softc *);
 int	ar5008_intr(struct athn_softc *);
 int	ar5008_ccmp_encap(struct mbuf *, u_int, struct ieee80211_key *);
-int	ar5008_tx(struct athn_softc *, struct mbuf *, struct ieee80211_node *,
-	    int);
+// int	ar5008_tx(struct athn_softc *, struct mbuf *, struct ieee80211_node *,
+// 	    int);
 void	ar5008_set_rf_mode(struct athn_softc *, struct ieee80211_channel *);
 int	ar5008_rf_bus_request(struct athn_softc *);
 void	ar5008_rf_bus_release(struct athn_softc *);
@@ -133,22 +134,53 @@ void	ar5008_set_firstep_level(struct athn_softc *, int);
 void	ar5008_set_spur_immunity_level(struct athn_softc *, int);
 
 /* Extern functions. */
-void	athn_stop(struct ifnet *, int);
-int	athn_interpolate(int, int, int, int, int);
-int	athn_txtime(struct athn_softc *, int, int, u_int);
-void	athn_inc_tx_trigger_level(struct athn_softc *);
-int	athn_tx_pending(struct athn_softc *, int);
-void	athn_stop_tx_dma(struct athn_softc *, int);
-void	athn_get_delta_slope(uint32_t, uint32_t *, uint32_t *);
-void	athn_config_pcie(struct athn_softc *);
-void	athn_config_nonpcie(struct athn_softc *);
-uint8_t	athn_chan2fbin(struct ieee80211_channel *);
-uint8_t	ar5416_get_rf_rev(struct athn_softc *);
+extern void	athn_stop(struct ifnet *, int);
+extern int	athn_interpolate(int, int, int, int, int);
+extern int	athn_txtime(struct athn_softc *, int, int, u_int);
+extern void	athn_inc_tx_trigger_level(struct athn_softc *);
+extern int	athn_tx_pending(struct athn_softc *, int);
+extern void	athn_stop_tx_dma(struct athn_softc *, int);
+extern void	athn_get_delta_slope(uint32_t, uint32_t *, uint32_t *);
+extern void	athn_config_pcie(struct athn_softc *);
+extern void	athn_config_nonpcie(struct athn_softc *);
+extern uint8_t	athn_chan2fbin(struct ieee80211_channel *);
+// extern uint8_t	ar5416_get_rf_rev(struct athn_softc *);
 void	ar5416_reset_addac(struct athn_softc *, struct ieee80211_channel *);
 void	ar5416_rf_reset(struct athn_softc *, struct ieee80211_channel *);
 void	ar5416_reset_bb_gain(struct athn_softc *, struct ieee80211_channel *);
-void	ar9280_reset_rx_gain(struct athn_softc *, struct ieee80211_channel *);
-void	ar9280_reset_tx_gain(struct athn_softc *, struct ieee80211_channel *);
+extern void	ar9280_reset_rx_gain(struct athn_softc *, struct ieee80211_channel *);
+extern void	ar9280_reset_tx_gain(struct athn_softc *, struct ieee80211_channel *);
+
+uint8_t
+ar5416_reverse_bits(uint8_t v, int nbits)
+{
+	KASSERT(nbits <= 8, "ar5416_reverse_bits");
+	v = ((v >> 1) & 0x55) | ((v & 0x55) << 1);
+	v = ((v >> 2) & 0x33) | ((v & 0x33) << 2);
+	v = ((v >> 4) & 0x0f) | ((v & 0x0f) << 4);
+	return (v >> (8 - nbits));
+}
+
+uint8_t
+ar5416_get_rf_rev(struct athn_softc *sc)
+{
+	uint8_t rev, reg;
+	int i;
+
+	/* Allow access to analog chips. */
+	AR_WRITE(sc, AR_PHY(0), 0x00000007);
+
+	AR_WRITE(sc, AR_PHY(0x36), 0x00007058);
+	for (i = 0; i < 8; i++)
+		AR_WRITE(sc, AR_PHY(0x20), 0x00010000);
+	reg = (AR_READ(sc, AR_PHY(256)) >> 24) & 0xff;
+	reg = (reg & 0xf0) >> 4 | (reg & 0x0f) << 4;
+
+	rev = ar5416_reverse_bits(reg, 8);
+	if ((rev & AR_RADIO_SREV_MAJOR) == 0)
+		rev = AR_RAD5133_SREV_MAJOR;
+	return (rev);
+}
 
 
 int
@@ -167,11 +199,12 @@ ar5008_attach(struct athn_softc *sc)
 	ops->gpio_config_output = ar5008_gpio_config_output;
 	ops->rfsilent_init = ar5008_rfsilent_init;
 
-	ops->dma_alloc = ar5008_dma_alloc;
-	ops->dma_free = ar5008_dma_free;
-	ops->rx_enable = ar5008_rx_enable;
-	ops->intr = ar5008_intr;
-	ops->tx = ar5008_tx;
+	// Not needed
+	// ops->dma_alloc = ar5008_dma_alloc;
+	// ops->dma_free = ar5008_dma_free;
+	// ops->rx_enable = ar5008_rx_enable;
+	// ops->intr = ar5008_intr;
+	// ops->tx = ar5008_tx;
 
 	ops->set_rf_mode = ar5008_set_rf_mode;
 	ops->rf_bus_request = ar5008_rf_bus_request;
@@ -201,10 +234,8 @@ ar5008_attach(struct athn_softc *sc)
 	sc->obs_off = AR_OBS;
 	sc->gpio_input_en_off = AR_GPIO_INPUT_EN_VAL;
 
-	if (!(sc->flags & ATHN_FLAG_PCIE))
-		athn_config_nonpcie(sc);
-	else
-		athn_config_pcie(sc);
+	athn_config_nonpcie(sc);
+
 
 	/* Read entire ROM content in memory. */
 	if ((error = ar5008_read_rom(sc)) != 0) {
@@ -243,7 +274,7 @@ ar5008_attach(struct athn_softc *sc)
 #endif
 	}
 
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, base->macAddr);
+	IEEE80211_ADDR_COPY(ic->ic_macaddr, base->macAddr);
 
 	/* Check if we have a hardware radio switch. */
 	if (base->rfSilent & AR_EEP_RFSILENT_ENABLED) {
@@ -284,6 +315,7 @@ ar5008_read_eep_word(struct athn_softc *sc, uint32_t addr, uint16_t *val)
 	uint32_t reg;
 	int ntries;
 
+	DELAY(1000);
 	reg = AR_READ(sc, AR_EEPROM_OFFSET(addr));
 	for (ntries = 0; ntries < 1000; ntries++) {
 		reg = AR_READ(sc, AR_EEPROM_STATUS_DATA);
@@ -292,7 +324,7 @@ ar5008_read_eep_word(struct athn_softc *sc, uint32_t addr, uint16_t *val)
 			*val = MS(reg, AR_EEPROM_STATUS_DATA_VAL);
 			return (0);
 		}
-		DELAY(10);
+		DELAY(1000);
 	}
 	*val = 0xffff;
 	return (ETIMEDOUT);
@@ -311,7 +343,7 @@ ar5008_read_rom(struct athn_softc *sc)
 	if (error != 0)
 		return (error);
 	if (magic != AR_EEPROM_MAGIC) {
-		if (magic != swap16(AR_EEPROM_MAGIC)) {
+		if (magic != __bswap16(AR_EEPROM_MAGIC)) {
 			DPRINTF(("invalid ROM magic 0x%x != 0x%x\n",
 			    magic, AR_EEPROM_MAGIC));
 			return (EIO);
@@ -335,12 +367,12 @@ ar5008_read_rom(struct athn_softc *sc)
 			return (error);
 		}
 		if (need_swap)
-			*eep = swap16(*eep);
+			*eep = __bswap16(*eep);
 		sum ^= *eep;
 	}
 	if (sum != 0xffff) {
-		printf("%s: bad ROM checksum 0x%04x\n",
-		    sc->sc_dev.dv_xname, sum);
+		// printf("%s: bad ROM checksum 0x%04x\n",
+		//     sc->sc_dev.dv_xname, sum);
 		return (EIO);
 	}
 	if (need_swap)
@@ -355,13 +387,13 @@ ar5008_swap_rom(struct athn_softc *sc)
 	struct ar_base_eep_header *base = sc->eep;
 
 	/* Swap common fields first. */
-	base->length = swap16(base->length);
-	base->version = swap16(base->version);
-	base->regDmn[0] = swap16(base->regDmn[0]);
-	base->regDmn[1] = swap16(base->regDmn[1]);
-	base->rfSilent = swap16(base->rfSilent);
-	base->blueToothOptions = swap16(base->blueToothOptions);
-	base->deviceCap = swap16(base->deviceCap);
+	base->length = __bswap16(base->length);
+	base->version = __bswap16(base->version);
+	base->regDmn[0] = __bswap16(base->regDmn[0]);
+	base->regDmn[1] = __bswap16(base->regDmn[1]);
+	base->rfSilent = __bswap16(base->rfSilent);
+	base->blueToothOptions = __bswap16(base->blueToothOptions);
+	base->deviceCap = __bswap16(base->deviceCap);
 
 	/* Swap device-dependent fields. */
 	sc->ops.swap_rom(sc);
@@ -373,7 +405,7 @@ ar5008_swap_rom(struct athn_softc *sc)
 int
 ar5008_gpio_read(struct athn_softc *sc, int pin)
 {
-	KASSERT(pin < sc->ngpiopins);
+	KASSERT(pin < sc->ngpiopins, "Panic in ar5008_gpio_read");
 	if ((sc->flags & ATHN_FLAG_USB) && !AR_SREV_9271(sc))
 		return (!((AR_READ(sc, AR7010_GPIO_IN) >> pin) & 1));
 	return ((AR_READ(sc, AR_GPIO_IN_OUT) >> (sc->ngpiopins + pin)) & 1);
@@ -384,7 +416,7 @@ ar5008_gpio_write(struct athn_softc *sc, int pin, int set)
 {
 	uint32_t reg;
 
-	KASSERT(pin < sc->ngpiopins);
+	KASSERT(pin < sc->ngpiopins, "Panic in ar5008_gpio_write");
 
 	if (sc->flags & ATHN_FLAG_USB)
 		set = !set;	/* AR9271/AR7010 is reversed. */
@@ -472,1360 +504,1360 @@ ar5008_rfsilent_init(struct athn_softc *sc)
 	}
 	AR_WRITE_BARRIER(sc);
 }
+// Not needed
+// int
+// ar5008_dma_alloc(struct athn_softc *sc)
+// {
+// 	int error;
 
-int
-ar5008_dma_alloc(struct athn_softc *sc)
-{
-	int error;
+// 	error = ar5008_tx_alloc(sc);
+// 	if (error != 0)
+// 		return (error);
 
-	error = ar5008_tx_alloc(sc);
-	if (error != 0)
-		return (error);
+// 	error = ar5008_rx_alloc(sc);
+// 	if (error != 0)
+// 		return (error);
 
-	error = ar5008_rx_alloc(sc);
-	if (error != 0)
-		return (error);
+// 	return (0);
+// }
 
-	return (0);
-}
+// void
+// ar5008_dma_free(struct athn_softc *sc)
+// {
+// 	ar5008_tx_free(sc);
+// 	ar5008_rx_free(sc);
+// }
 
-void
-ar5008_dma_free(struct athn_softc *sc)
-{
-	ar5008_tx_free(sc);
-	ar5008_rx_free(sc);
-}
+// int
+// ar5008_tx_alloc(struct athn_softc *sc)
+// {
+// 	struct athn_tx_buf *bf;
+// 	bus_size_t size;
+// 	int error, nsegs, i;
 
-int
-ar5008_tx_alloc(struct athn_softc *sc)
-{
-	struct athn_tx_buf *bf;
-	bus_size_t size;
-	int error, nsegs, i;
+// 	/*
+// 	 * Allocate a pool of Tx descriptors shared between all Tx queues.
+// 	 */
+// 	size = ATHN_NTXBUFS * AR5008_MAX_SCATTER * sizeof(struct ar_tx_desc);
 
-	/*
-	 * Allocate a pool of Tx descriptors shared between all Tx queues.
-	 */
-	size = ATHN_NTXBUFS * AR5008_MAX_SCATTER * sizeof(struct ar_tx_desc);
+// 	error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
+// 	    BUS_DMA_NOWAIT, &sc->map);
+// 	if (error != 0)
+// 		goto fail;
 
-	error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
-	    BUS_DMA_NOWAIT, &sc->map);
-	if (error != 0)
-		goto fail;
+// 	error = bus_dmamem_alloc(sc->sc_dmat, size, 4, 0, &sc->seg, 1,
+// 	    &nsegs, BUS_DMA_NOWAIT | BUS_DMA_ZERO);
+// 	if (error != 0)
+// 		goto fail;
 
-	error = bus_dmamem_alloc(sc->sc_dmat, size, 4, 0, &sc->seg, 1,
-	    &nsegs, BUS_DMA_NOWAIT | BUS_DMA_ZERO);
-	if (error != 0)
-		goto fail;
+// 	error = bus_dmamem_map(sc->sc_dmat, &sc->seg, 1, size,
+// 	    (caddr_t *)&sc->descs, BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
+// 	if (error != 0)
+// 		goto fail;
 
-	error = bus_dmamem_map(sc->sc_dmat, &sc->seg, 1, size,
-	    (caddr_t *)&sc->descs, BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
-	if (error != 0)
-		goto fail;
+// 	error = bus_dmamap_load_raw(sc->sc_dmat, sc->map, &sc->seg, 1, size,
+// 	    BUS_DMA_NOWAIT);
+// 	if (error != 0)
+// 		goto fail;
 
-	error = bus_dmamap_load_raw(sc->sc_dmat, sc->map, &sc->seg, 1, size,
-	    BUS_DMA_NOWAIT);
-	if (error != 0)
-		goto fail;
+// 	SIMPLEQ_INIT(&sc->txbufs);
+// 	for (i = 0; i < ATHN_NTXBUFS; i++) {
+// 		bf = &sc->txpool[i];
 
-	SIMPLEQ_INIT(&sc->txbufs);
-	for (i = 0; i < ATHN_NTXBUFS; i++) {
-		bf = &sc->txpool[i];
+// 		error = bus_dmamap_create(sc->sc_dmat, ATHN_TXBUFSZ,
+// 		    AR5008_MAX_SCATTER, ATHN_TXBUFSZ, 0, BUS_DMA_NOWAIT,
+// 		    &bf->bf_map);
+// 		if (error != 0) {
+// 			printf("%s: could not create Tx buf DMA map\n",
+// 			    sc->sc_dev.dv_xname);
+// 			goto fail;
+// 		}
 
-		error = bus_dmamap_create(sc->sc_dmat, ATHN_TXBUFSZ,
-		    AR5008_MAX_SCATTER, ATHN_TXBUFSZ, 0, BUS_DMA_NOWAIT,
-		    &bf->bf_map);
-		if (error != 0) {
-			printf("%s: could not create Tx buf DMA map\n",
-			    sc->sc_dev.dv_xname);
-			goto fail;
-		}
+// 		bf->bf_descs =
+// 		    &((struct ar_tx_desc *)sc->descs)[i * AR5008_MAX_SCATTER];
+// 		bf->bf_daddr = sc->map->dm_segs[0].ds_addr +
+// 		    i * AR5008_MAX_SCATTER * sizeof(struct ar_tx_desc);
 
-		bf->bf_descs =
-		    &((struct ar_tx_desc *)sc->descs)[i * AR5008_MAX_SCATTER];
-		bf->bf_daddr = sc->map->dm_segs[0].ds_addr +
-		    i * AR5008_MAX_SCATTER * sizeof(struct ar_tx_desc);
+// 		SIMPLEQ_INSERT_TAIL(&sc->txbufs, bf, bf_list);
+// 	}
+// 	return (0);
+//  fail:
+// 	ar5008_tx_free(sc);
+// 	return (error);
+// }
 
-		SIMPLEQ_INSERT_TAIL(&sc->txbufs, bf, bf_list);
-	}
-	return (0);
- fail:
-	ar5008_tx_free(sc);
-	return (error);
-}
+// void
+// ar5008_tx_free(struct athn_softc *sc)
+// {
+// 	struct athn_tx_buf *bf;
+// 	int i;
 
-void
-ar5008_tx_free(struct athn_softc *sc)
-{
-	struct athn_tx_buf *bf;
-	int i;
+// 	for (i = 0; i < ATHN_NTXBUFS; i++) {
+// 		bf = &sc->txpool[i];
 
-	for (i = 0; i < ATHN_NTXBUFS; i++) {
-		bf = &sc->txpool[i];
+// 		if (bf->bf_map != NULL)
+// 			bus_dmamap_destroy(sc->sc_dmat, bf->bf_map);
+// 	}
+// 	/* Free Tx descriptors. */
+// 	if (sc->map != NULL) {
+// 		if (sc->descs != NULL) {
+// 			bus_dmamap_unload(sc->sc_dmat, sc->map);
+// 			bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->descs,
+// 			    ATHN_NTXBUFS * AR5008_MAX_SCATTER *
+// 			    sizeof(struct ar_tx_desc));
+// 			bus_dmamem_free(sc->sc_dmat, &sc->seg, 1);
+// 		}
+// 		bus_dmamap_destroy(sc->sc_dmat, sc->map);
+// 	}
+// }
 
-		if (bf->bf_map != NULL)
-			bus_dmamap_destroy(sc->sc_dmat, bf->bf_map);
-	}
-	/* Free Tx descriptors. */
-	if (sc->map != NULL) {
-		if (sc->descs != NULL) {
-			bus_dmamap_unload(sc->sc_dmat, sc->map);
-			bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->descs,
-			    ATHN_NTXBUFS * AR5008_MAX_SCATTER *
-			    sizeof(struct ar_tx_desc));
-			bus_dmamem_free(sc->sc_dmat, &sc->seg, 1);
-		}
-		bus_dmamap_destroy(sc->sc_dmat, sc->map);
-	}
-}
+// int
+// ar5008_rx_alloc(struct athn_softc *sc)
+// {
+// 	struct athn_rxq *rxq = &sc->rxq[0];
+// 	struct athn_rx_buf *bf;
+// 	struct ar_rx_desc *ds;
+// 	bus_size_t size;
+// 	int error, nsegs, i;
 
-int
-ar5008_rx_alloc(struct athn_softc *sc)
-{
-	struct athn_rxq *rxq = &sc->rxq[0];
-	struct athn_rx_buf *bf;
-	struct ar_rx_desc *ds;
-	bus_size_t size;
-	int error, nsegs, i;
+// 	rxq->bf = mallocarray(ATHN_NRXBUFS, sizeof(*bf), M_DEVBUF,
+// 	    M_NOWAIT | M_ZERO);
+// 	if (rxq->bf == NULL)
+// 		return (ENOMEM);
 
-	rxq->bf = mallocarray(ATHN_NRXBUFS, sizeof(*bf), M_DEVBUF,
-	    M_NOWAIT | M_ZERO);
-	if (rxq->bf == NULL)
-		return (ENOMEM);
+// 	size = ATHN_NRXBUFS * sizeof(struct ar_rx_desc);
 
-	size = ATHN_NRXBUFS * sizeof(struct ar_rx_desc);
+// 	error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
+// 	    BUS_DMA_NOWAIT, &rxq->map);
+// 	if (error != 0)
+// 		goto fail;
 
-	error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
-	    BUS_DMA_NOWAIT, &rxq->map);
-	if (error != 0)
-		goto fail;
+// 	error = bus_dmamem_alloc(sc->sc_dmat, size, 0, 0, &rxq->seg, 1,
+// 	    &nsegs, BUS_DMA_NOWAIT | BUS_DMA_ZERO);
+// 	if (error != 0)
+// 		goto fail;
 
-	error = bus_dmamem_alloc(sc->sc_dmat, size, 0, 0, &rxq->seg, 1,
-	    &nsegs, BUS_DMA_NOWAIT | BUS_DMA_ZERO);
-	if (error != 0)
-		goto fail;
+// 	error = bus_dmamem_map(sc->sc_dmat, &rxq->seg, 1, size,
+// 	    (caddr_t *)&rxq->descs, BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
+// 	if (error != 0)
+// 		goto fail;
 
-	error = bus_dmamem_map(sc->sc_dmat, &rxq->seg, 1, size,
-	    (caddr_t *)&rxq->descs, BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
-	if (error != 0)
-		goto fail;
+// 	error = bus_dmamap_load_raw(sc->sc_dmat, rxq->map, &rxq->seg, 1,
+// 	    size, BUS_DMA_NOWAIT);
+// 	if (error != 0)
+// 		goto fail;
 
-	error = bus_dmamap_load_raw(sc->sc_dmat, rxq->map, &rxq->seg, 1,
-	    size, BUS_DMA_NOWAIT);
-	if (error != 0)
-		goto fail;
+// 	for (i = 0; i < ATHN_NRXBUFS; i++) {
+// 		bf = &rxq->bf[i];
+// 		ds = &((struct ar_rx_desc *)rxq->descs)[i];
 
-	for (i = 0; i < ATHN_NRXBUFS; i++) {
-		bf = &rxq->bf[i];
-		ds = &((struct ar_rx_desc *)rxq->descs)[i];
+// 		error = bus_dmamap_create(sc->sc_dmat, ATHN_RXBUFSZ, 1,
+// 		    ATHN_RXBUFSZ, 0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW,
+// 		    &bf->bf_map);
+// 		if (error != 0) {
+// 			printf("%s: could not create Rx buf DMA map\n",
+// 			    sc->sc_dev.dv_xname);
+// 			goto fail;
+// 		}
+// 		/*
+// 		 * Assumes MCLGETL returns cache-line-size aligned buffers.
+// 		 */
+// 		bf->bf_m = MCLGETL(NULL, M_DONTWAIT, ATHN_RXBUFSZ);
+// 		if (bf->bf_m == NULL) {
+// 			printf("%s: could not allocate Rx mbuf\n",
+// 			    sc->sc_dev.dv_xname);
+// 			error = ENOBUFS;
+// 			goto fail;
+// 		}
 
-		error = bus_dmamap_create(sc->sc_dmat, ATHN_RXBUFSZ, 1,
-		    ATHN_RXBUFSZ, 0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW,
-		    &bf->bf_map);
-		if (error != 0) {
-			printf("%s: could not create Rx buf DMA map\n",
-			    sc->sc_dev.dv_xname);
-			goto fail;
-		}
-		/*
-		 * Assumes MCLGETL returns cache-line-size aligned buffers.
-		 */
-		bf->bf_m = MCLGETL(NULL, M_DONTWAIT, ATHN_RXBUFSZ);
-		if (bf->bf_m == NULL) {
-			printf("%s: could not allocate Rx mbuf\n",
-			    sc->sc_dev.dv_xname);
-			error = ENOBUFS;
-			goto fail;
-		}
+// 		error = bus_dmamap_load(sc->sc_dmat, bf->bf_map,
+// 		    mtod(bf->bf_m, void *), ATHN_RXBUFSZ, NULL,
+// 		    BUS_DMA_NOWAIT | BUS_DMA_READ);
+// 		if (error != 0) {
+// 			printf("%s: could not DMA map Rx buffer\n",
+// 			    sc->sc_dev.dv_xname);
+// 			goto fail;
+// 		}
 
-		error = bus_dmamap_load(sc->sc_dmat, bf->bf_map,
-		    mtod(bf->bf_m, void *), ATHN_RXBUFSZ, NULL,
-		    BUS_DMA_NOWAIT | BUS_DMA_READ);
-		if (error != 0) {
-			printf("%s: could not DMA map Rx buffer\n",
-			    sc->sc_dev.dv_xname);
-			goto fail;
-		}
+// 		bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, ATHN_RXBUFSZ,
+// 		    BUS_DMASYNC_PREREAD);
 
-		bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, ATHN_RXBUFSZ,
-		    BUS_DMASYNC_PREREAD);
+// 		bf->bf_desc = ds;
+// 		bf->bf_daddr = rxq->map->dm_segs[0].ds_addr +
+// 		    i * sizeof(struct ar_rx_desc);
+// 	}
+// 	return (0);
+//  fail:
+// 	ar5008_rx_free(sc);
+// 	return (error);
+// }
 
-		bf->bf_desc = ds;
-		bf->bf_daddr = rxq->map->dm_segs[0].ds_addr +
-		    i * sizeof(struct ar_rx_desc);
-	}
-	return (0);
- fail:
-	ar5008_rx_free(sc);
-	return (error);
-}
+// void
+// ar5008_rx_free(struct athn_softc *sc)
+// {
+// 	struct athn_rxq *rxq = &sc->rxq[0];
+// 	struct athn_rx_buf *bf;
+// 	int i;
 
-void
-ar5008_rx_free(struct athn_softc *sc)
-{
-	struct athn_rxq *rxq = &sc->rxq[0];
-	struct athn_rx_buf *bf;
-	int i;
+// 	if (rxq->bf == NULL)
+// 		return;
+// 	for (i = 0; i < ATHN_NRXBUFS; i++) {
+// 		bf = &rxq->bf[i];
 
-	if (rxq->bf == NULL)
-		return;
-	for (i = 0; i < ATHN_NRXBUFS; i++) {
-		bf = &rxq->bf[i];
+// 		if (bf->bf_map != NULL)
+// 			bus_dmamap_destroy(sc->sc_dmat, bf->bf_map);
+// 		m_freem(bf->bf_m);
+// 	}
+// 	free(rxq->bf, M_DEVBUF, 0);
 
-		if (bf->bf_map != NULL)
-			bus_dmamap_destroy(sc->sc_dmat, bf->bf_map);
-		m_freem(bf->bf_m);
-	}
-	free(rxq->bf, M_DEVBUF, 0);
+// 	/* Free Rx descriptors. */
+// 	if (rxq->map != NULL) {
+// 		if (rxq->descs != NULL) {
+// 			bus_dmamap_unload(sc->sc_dmat, rxq->map);
+// 			bus_dmamem_unmap(sc->sc_dmat, (caddr_t)rxq->descs,
+// 			    ATHN_NRXBUFS * sizeof(struct ar_rx_desc));
+// 			bus_dmamem_free(sc->sc_dmat, &rxq->seg, 1);
+// 		}
+// 		bus_dmamap_destroy(sc->sc_dmat, rxq->map);
+// 	}
+// }
 
-	/* Free Rx descriptors. */
-	if (rxq->map != NULL) {
-		if (rxq->descs != NULL) {
-			bus_dmamap_unload(sc->sc_dmat, rxq->map);
-			bus_dmamem_unmap(sc->sc_dmat, (caddr_t)rxq->descs,
-			    ATHN_NRXBUFS * sizeof(struct ar_rx_desc));
-			bus_dmamem_free(sc->sc_dmat, &rxq->seg, 1);
-		}
-		bus_dmamap_destroy(sc->sc_dmat, rxq->map);
-	}
-}
+// void
+// ar5008_rx_enable(struct athn_softc *sc)
+// {
+// 	struct athn_rxq *rxq = &sc->rxq[0];
+// 	struct athn_rx_buf *bf;
+// 	struct ar_rx_desc *ds;
+// 	int i;
 
-void
-ar5008_rx_enable(struct athn_softc *sc)
-{
-	struct athn_rxq *rxq = &sc->rxq[0];
-	struct athn_rx_buf *bf;
-	struct ar_rx_desc *ds;
-	int i;
+// 	/* Setup and link Rx descriptors. */
+// 	SIMPLEQ_INIT(&rxq->head);
+// 	rxq->lastds = NULL;
+// 	for (i = 0; i < ATHN_NRXBUFS; i++) {
+// 		bf = &rxq->bf[i];
+// 		ds = bf->bf_desc;
 
-	/* Setup and link Rx descriptors. */
-	SIMPLEQ_INIT(&rxq->head);
-	rxq->lastds = NULL;
-	for (i = 0; i < ATHN_NRXBUFS; i++) {
-		bf = &rxq->bf[i];
-		ds = bf->bf_desc;
+// 		memset(ds, 0, sizeof(*ds));
+// 		ds->ds_data = bf->bf_map->dm_segs[0].ds_addr;
+// 		ds->ds_ctl1 = SM(AR_RXC1_BUF_LEN, ATHN_RXBUFSZ);
 
-		memset(ds, 0, sizeof(*ds));
-		ds->ds_data = bf->bf_map->dm_segs[0].ds_addr;
-		ds->ds_ctl1 = SM(AR_RXC1_BUF_LEN, ATHN_RXBUFSZ);
+// 		if (rxq->lastds != NULL) {
+// 			((struct ar_rx_desc *)rxq->lastds)->ds_link =
+// 			    bf->bf_daddr;
+// 		}
+// 		SIMPLEQ_INSERT_TAIL(&rxq->head, bf, bf_list);
+// 		rxq->lastds = ds;
+// 	}
+// 	bus_dmamap_sync(sc->sc_dmat, rxq->map, 0, rxq->map->dm_mapsize,
+// 	    BUS_DMASYNC_PREREAD);
 
-		if (rxq->lastds != NULL) {
-			((struct ar_rx_desc *)rxq->lastds)->ds_link =
-			    bf->bf_daddr;
-		}
-		SIMPLEQ_INSERT_TAIL(&rxq->head, bf, bf_list);
-		rxq->lastds = ds;
-	}
-	bus_dmamap_sync(sc->sc_dmat, rxq->map, 0, rxq->map->dm_mapsize,
-	    BUS_DMASYNC_PREREAD);
-
-	/* Enable Rx. */
-	AR_WRITE(sc, AR_RXDP, SIMPLEQ_FIRST(&rxq->head)->bf_daddr);
-	AR_WRITE(sc, AR_CR, AR_CR_RXE);
-	AR_WRITE_BARRIER(sc);
-}
+// 	/* Enable Rx. */
+// 	AR_WRITE(sc, AR_RXDP, SIMPLEQ_FIRST(&rxq->head)->bf_daddr);
+// 	AR_WRITE(sc, AR_CR, AR_CR_RXE);
+// 	AR_WRITE_BARRIER(sc);
+// }
 
 #if NBPFILTER > 0
-void
-ar5008_rx_radiotap(struct athn_softc *sc, struct mbuf *m,
-    struct ar_rx_desc *ds)
-{
-#define IEEE80211_RADIOTAP_F_SHORTGI	0x80	/* XXX from FBSD */
+// void
+// ar5008_rx_radiotap(struct athn_softc *sc, struct mbuf *m,
+//     struct ar_rx_desc *ds)
+// {
+// #define IEEE80211_RADIOTAP_F_SHORTGI	0x80	/* XXX from FBSD */
 
-	struct athn_rx_radiotap_header *tap = &sc->sc_rxtap;
-	struct ieee80211com *ic = &sc->sc_ic;
-	uint64_t tsf;
-	uint32_t tstamp;
-	uint8_t rate;
+// 	struct athn_rx_radiotap_header *tap = &sc->sc_rxtap;
+// 	struct ieee80211com *ic = &sc->sc_ic;
+// 	uint64_t tsf;
+// 	uint32_t tstamp;
+// 	uint8_t rate;
 
-	/* Extend the 15-bit timestamp from Rx descriptor to 64-bit TSF. */
-	tstamp = ds->ds_status2;
-	tsf = AR_READ(sc, AR_TSF_U32);
-	tsf = tsf << 32 | AR_READ(sc, AR_TSF_L32);
-	if ((tsf & 0x7fff) < tstamp)
-		tsf -= 0x8000;
-	tsf = (tsf & ~0x7fff) | tstamp;
+// 	/* Extend the 15-bit timestamp from Rx descriptor to 64-bit TSF. */
+// 	tstamp = ds->ds_status2;
+// 	tsf = AR_READ(sc, AR_TSF_U32);
+// 	tsf = tsf << 32 | AR_READ(sc, AR_TSF_L32);
+// 	if ((tsf & 0x7fff) < tstamp)
+// 		tsf -= 0x8000;
+// 	tsf = (tsf & ~0x7fff) | tstamp;
 
-	tap->wr_flags = IEEE80211_RADIOTAP_F_FCS;
-	tap->wr_tsft = htole64(tsf);
-	tap->wr_chan_freq = htole16(ic->ic_bss->ni_chan->ic_freq);
-	tap->wr_chan_flags = htole16(ic->ic_bss->ni_chan->ic_flags);
-	tap->wr_dbm_antsignal = MS(ds->ds_status4, AR_RXS4_RSSI_COMBINED);
-	/* XXX noise. */
-	tap->wr_antenna = MS(ds->ds_status3, AR_RXS3_ANTENNA);
-	tap->wr_rate = 0;	/* In case it can't be found below. */
-	if (AR_SREV_5416_20_OR_LATER(sc))
-		rate = MS(ds->ds_status0, AR_RXS0_RATE);
-	else
-		rate = MS(ds->ds_status3, AR_RXS3_RATE);
-	if (rate & 0x80) {		/* HT. */
-		/* Bit 7 set means HT MCS instead of rate. */
-		tap->wr_rate = rate;
-		if (!(ds->ds_status3 & AR_RXS3_GI))
-			tap->wr_flags |= IEEE80211_RADIOTAP_F_SHORTGI;
+// 	tap->wr_flags = IEEE80211_RADIOTAP_F_FCS;
+// 	tap->wr_tsft = htole64(tsf);
+// 	tap->wr_chan_freq = htole16(ic->ic_bss->ni_chan->ic_freq);
+// 	tap->wr_chan_flags = htole16(ic->ic_bss->ni_chan->ic_flags);
+// 	tap->wr_dbm_antsignal = MS(ds->ds_status4, AR_RXS4_RSSI_COMBINED);
+// 	/* XXX noise. */
+// 	tap->wr_antenna = MS(ds->ds_status3, AR_RXS3_ANTENNA);
+// 	tap->wr_rate = 0;	/* In case it can't be found below. */
+// 	if (AR_SREV_5416_20_OR_LATER(sc))
+// 		rate = MS(ds->ds_status0, AR_RXS0_RATE);
+// 	else
+// 		rate = MS(ds->ds_status3, AR_RXS3_RATE);
+// 	if (rate & 0x80) {		/* HT. */
+// 		/* Bit 7 set means HT MCS instead of rate. */
+// 		tap->wr_rate = rate;
+// 		if (!(ds->ds_status3 & AR_RXS3_GI))
+// 			tap->wr_flags |= IEEE80211_RADIOTAP_F_SHORTGI;
 
-	} else if (rate & 0x10) {	/* CCK. */
-		if (rate & 0x04)
-			tap->wr_flags |= IEEE80211_RADIOTAP_F_SHORTPRE;
-		switch (rate & ~0x14) {
-		case 0xb: tap->wr_rate =   2; break;
-		case 0xa: tap->wr_rate =   4; break;
-		case 0x9: tap->wr_rate =  11; break;
-		case 0x8: tap->wr_rate =  22; break;
-		}
-	} else {			/* OFDM. */
-		switch (rate) {
-		case 0xb: tap->wr_rate =  12; break;
-		case 0xf: tap->wr_rate =  18; break;
-		case 0xa: tap->wr_rate =  24; break;
-		case 0xe: tap->wr_rate =  36; break;
-		case 0x9: tap->wr_rate =  48; break;
-		case 0xd: tap->wr_rate =  72; break;
-		case 0x8: tap->wr_rate =  96; break;
-		case 0xc: tap->wr_rate = 108; break;
-		}
-	}
-	bpf_mtap_hdr(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m, BPF_DIRECTION_IN);
-}
+// 	} else if (rate & 0x10) {	/* CCK. */
+// 		if (rate & 0x04)
+// 			tap->wr_flags |= IEEE80211_RADIOTAP_F_SHORTPRE;
+// 		switch (rate & ~0x14) {
+// 		case 0xb: tap->wr_rate =   2; break;
+// 		case 0xa: tap->wr_rate =   4; break;
+// 		case 0x9: tap->wr_rate =  11; break;
+// 		case 0x8: tap->wr_rate =  22; break;
+// 		}
+// 	} else {			/* OFDM. */
+// 		switch (rate) {
+// 		case 0xb: tap->wr_rate =  12; break;
+// 		case 0xf: tap->wr_rate =  18; break;
+// 		case 0xa: tap->wr_rate =  24; break;
+// 		case 0xe: tap->wr_rate =  36; break;
+// 		case 0x9: tap->wr_rate =  48; break;
+// 		case 0xd: tap->wr_rate =  72; break;
+// 		case 0x8: tap->wr_rate =  96; break;
+// 		case 0xc: tap->wr_rate = 108; break;
+// 		}
+// 	}
+// 	bpf_mtap_hdr(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m, BPF_DIRECTION_IN);
+// }
 #endif
 
-int
-ar5008_ccmp_decap(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
-{
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ieee80211_key *k;
-	struct ieee80211_frame *wh;
-	struct ieee80211_rx_ba *ba;
-	uint64_t pn, *prsc;
-	u_int8_t *ivp;
-	uint8_t tid;
-	int hdrlen, hasqos;
-	uintptr_t entry;
+// int
+// ar5008_ccmp_decap(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
+// {
+// 	struct ieee80211com *ic = &sc->sc_ic;
+// 	struct ieee80211_key *k;
+// 	struct ieee80211_frame *wh;
+// 	struct ieee80211_rx_ba *ba;
+// 	uint64_t pn, *prsc;
+// 	u_int8_t *ivp;
+// 	uint8_t tid;
+// 	int hdrlen, hasqos;
+// 	uintptr_t entry;
 
-	wh = mtod(m, struct ieee80211_frame *);
-	hdrlen = ieee80211_get_hdrlen(wh);
-	ivp = mtod(m, u_int8_t *) + hdrlen;
+// 	wh = mtod(m, struct ieee80211_frame *);
+// 	hdrlen = ieee80211_get_hdrlen(wh);
+// 	ivp = mtod(m, u_int8_t *) + hdrlen;
 
-	/* find key for decryption */
-	k = ieee80211_get_rxkey(ic, m, ni);
-	if (k == NULL || k->k_cipher != IEEE80211_CIPHER_CCMP)
-		return 1;
+// 	/* find key for decryption */
+// 	k = ieee80211_get_rxkey(ic, m, ni);
+// 	if (k == NULL || k->k_cipher != IEEE80211_CIPHER_CCMP)
+// 		return 1;
 
-	/* Sanity checks to ensure this is really a key we installed. */
-	entry = (uintptr_t)k->k_priv;
-	if (k->k_flags & IEEE80211_KEY_GROUP) {
-		if (k->k_id >= IEEE80211_WEP_NKID ||
-		    entry != k->k_id)
-			return 1;
-	} else {
-#ifndef IEEE80211_STA_ONLY
-		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
-			if (entry != IEEE80211_WEP_NKID +
-			    IEEE80211_AID(ni->ni_associd))
-				return 1;
-		} else
-#endif
-			if (entry != IEEE80211_WEP_NKID)
-				return 1;
-	}
+// 	/* Sanity checks to ensure this is really a key we installed. */
+// 	entry = (uintptr_t)k->k_priv;
+// 	if (k->k_flags & IEEE80211_KEY_GROUP) {
+// 		if (k->k_id >= IEEE80211_WEP_NKID ||
+// 		    entry != k->k_id)
+// 			return 1;
+// 	} else {
+// #ifndef IEEE80211_STA_ONLY
+// 		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
+// 			if (entry != IEEE80211_WEP_NKID +
+// 			    IEEE80211_AID(ni->ni_associd))
+// 				return 1;
+// 		} else
+// #endif
+// 			if (entry != IEEE80211_WEP_NKID)
+// 				return 1;
+// 	}
 
-	/* Check that ExtIV bit is set. */
-	if (!(ivp[3] & IEEE80211_WEP_EXTIV))
-		return 1;
+// 	/* Check that ExtIV bit is set. */
+// 	if (!(ivp[3] & IEEE80211_WEP_EXTIV))
+// 		return 1;
 
-	hasqos = ieee80211_has_qos(wh);
-	tid = hasqos ? ieee80211_get_qos(wh) & IEEE80211_QOS_TID : 0;
-	ba = hasqos ? &ni->ni_rx_ba[tid] : NULL;
-	prsc = &k->k_rsc[tid];
+// 	hasqos = ieee80211_has_qos(wh);
+// 	tid = hasqos ? ieee80211_get_qos(wh) & IEEE80211_QOS_TID : 0;
+// 	ba = hasqos ? &ni->ni_rx_ba[tid] : NULL;
+// 	prsc = &k->k_rsc[tid];
 
-	/* Extract the 48-bit PN from the CCMP header. */
-	pn = (uint64_t)ivp[0]       |
-	     (uint64_t)ivp[1] <<  8 |
-	     (uint64_t)ivp[4] << 16 |
-	     (uint64_t)ivp[5] << 24 |
-	     (uint64_t)ivp[6] << 32 |
-	     (uint64_t)ivp[7] << 40;
-	if (pn <= *prsc) {
-		ic->ic_stats.is_ccmp_replays++;
-		return 1;
-	}
-	/* Last seen packet number is updated in ieee80211_inputm(). */
+// 	/* Extract the 48-bit PN from the CCMP header. */
+// 	pn = (uint64_t)ivp[0]       |
+// 	     (uint64_t)ivp[1] <<  8 |
+// 	     (uint64_t)ivp[4] << 16 |
+// 	     (uint64_t)ivp[5] << 24 |
+// 	     (uint64_t)ivp[6] << 32 |
+// 	     (uint64_t)ivp[7] << 40;
+// 	if (pn <= *prsc) {
+// 		ic->ic_stats.is_ccmp_replays++;
+// 		return 1;
+// 	}
+// 	/* Last seen packet number is updated in ieee80211_inputm(). */
 
-	/* Strip MIC. IV will be stripped by ieee80211_inputm(). */
-	m_adj(m, -IEEE80211_CCMP_MICLEN);
-	return 0;
-}
+// 	/* Strip MIC. IV will be stripped by ieee80211_inputm(). */
+// 	m_adj(m, -IEEE80211_CCMP_MICLEN);
+// 	return 0;
+// }
 
-static __inline int
-ar5008_rx_process(struct athn_softc *sc, struct mbuf_list *ml)
-{
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = &ic->ic_if;
-	struct athn_rxq *rxq = &sc->rxq[0];
-	struct athn_rx_buf *bf, *nbf;
-	struct ar_rx_desc *ds;
-	struct ieee80211_frame *wh;
-	struct ieee80211_rxinfo rxi;
-	struct ieee80211_node *ni;
-	struct mbuf *m, *m1;
-	int error, len, michael_mic_failure = 0;
+// static __inline int
+// ar5008_rx_process(struct athn_softc *sc, struct mbuf_list *ml)
+// {
+// 	struct ieee80211com *ic = &sc->sc_ic;
+// 	struct ifnet *ifp = &ic->ic_if;
+// 	struct athn_rxq *rxq = &sc->rxq[0];
+// 	struct athn_rx_buf *bf, *nbf;
+// 	struct ar_rx_desc *ds;
+// 	struct ieee80211_frame *wh;
+// 	struct ieee80211_rxinfo rxi;
+// 	struct ieee80211_node *ni;
+// 	struct mbuf *m, *m1;
+// 	int error, len, michael_mic_failure = 0;
 
-	bf = SIMPLEQ_FIRST(&rxq->head);
-	if (__predict_false(bf == NULL)) {	/* Should not happen. */
-		printf("%s: Rx queue is empty!\n", sc->sc_dev.dv_xname);
-		return (ENOENT);
-	}
-	ds = bf->bf_desc;
+// 	bf = SIMPLEQ_FIRST(&rxq->head);
+// 	if (__predict_false(bf == NULL)) {	/* Should not happen. */
+// 		printf("%s: Rx queue is empty!\n", sc->sc_dev.dv_xname);
+// 		return (ENOENT);
+// 	}
+// 	ds = bf->bf_desc;
 
-	if (!(ds->ds_status8 & AR_RXS8_DONE)) {
-		/*
-		 * On some parts, the status words can get corrupted
-		 * (including the "done" bit), so we check the next
-		 * descriptor "done" bit.  If it is set, it is a good
-		 * indication that the status words are corrupted, so
-		 * we skip this descriptor and drop the frame.
-		 */
-		nbf = SIMPLEQ_NEXT(bf, bf_list);
-		if (nbf != NULL &&
-		    (((struct ar_rx_desc *)nbf->bf_desc)->ds_status8 &
-		     AR_RXS8_DONE)) {
-			DPRINTF(("corrupted descriptor status=0x%x\n",
-			    ds->ds_status8));
-			/* HW will not "move" RXDP in this case, so do it. */
-			AR_WRITE(sc, AR_RXDP, nbf->bf_daddr);
-			AR_WRITE_BARRIER(sc);
-			ifp->if_ierrors++;
-			goto skip;
-		}
-		return (EBUSY);
-	}
+// 	if (!(ds->ds_status8 & AR_RXS8_DONE)) {
+// 		/*
+// 		 * On some parts, the status words can get corrupted
+// 		 * (including the "done" bit), so we check the next
+// 		 * descriptor "done" bit.  If it is set, it is a good
+// 		 * indication that the status words are corrupted, so
+// 		 * we skip this descriptor and drop the frame.
+// 		 */
+// 		nbf = SIMPLEQ_NEXT(bf, bf_list);
+// 		if (nbf != NULL &&
+// 		    (((struct ar_rx_desc *)nbf->bf_desc)->ds_status8 &
+// 		     AR_RXS8_DONE)) {
+// 			DPRINTF(("corrupted descriptor status=0x%x\n",
+// 			    ds->ds_status8));
+// 			/* HW will not "move" RXDP in this case, so do it. */
+// 			AR_WRITE(sc, AR_RXDP, nbf->bf_daddr);
+// 			AR_WRITE_BARRIER(sc);
+// 			ifp->if_ierrors++;
+// 			goto skip;
+// 		}
+// 		return (EBUSY);
+// 	}
 
-	if (__predict_false(ds->ds_status1 & AR_RXS1_MORE)) {
-		/* Drop frames that span multiple Rx descriptors. */
-		DPRINTF(("dropping split frame\n"));
-		ifp->if_ierrors++;
-		goto skip;
-	}
-	if (!(ds->ds_status8 & AR_RXS8_FRAME_OK)) {
-		if (ds->ds_status8 & AR_RXS8_CRC_ERR)
-			DPRINTFN(6, ("CRC error\n"));
-		else if (ds->ds_status8 & AR_RXS8_PHY_ERR)
-			DPRINTFN(6, ("PHY error=0x%x\n",
-			    MS(ds->ds_status8, AR_RXS8_PHY_ERR_CODE)));
-		else if (ds->ds_status8 & (AR_RXS8_DECRYPT_CRC_ERR |
-		    AR_RXS8_KEY_MISS | AR_RXS8_DECRYPT_BUSY_ERR)) {
-			DPRINTFN(6, ("Decryption CRC error\n"));
-			ic->ic_stats.is_ccmp_dec_errs++;
-		} else if (ds->ds_status8 & AR_RXS8_MICHAEL_ERR) {
-			DPRINTFN(2, ("Michael MIC failure\n"));
-			michael_mic_failure = 1;
-		}
-		if (!michael_mic_failure) {
-			ifp->if_ierrors++;
-			goto skip;
-		}
-	} else {
-		if (ds->ds_status8 & (AR_RXS8_CRC_ERR | AR_RXS8_PHY_ERR |
-		    AR_RXS8_DECRYPT_CRC_ERR | AR_RXS8_MICHAEL_ERR)) {
-			ifp->if_ierrors++;
-			goto skip;
-		}
-	}
+// 	if (__predict_false(ds->ds_status1 & AR_RXS1_MORE)) {
+// 		/* Drop frames that span multiple Rx descriptors. */
+// 		DPRINTF(("dropping split frame\n"));
+// 		ifp->if_ierrors++;
+// 		goto skip;
+// 	}
+// 	if (!(ds->ds_status8 & AR_RXS8_FRAME_OK)) {
+// 		if (ds->ds_status8 & AR_RXS8_CRC_ERR)
+// 			DPRINTFN(6, ("CRC error\n"));
+// 		else if (ds->ds_status8 & AR_RXS8_PHY_ERR)
+// 			DPRINTFN(6, ("PHY error=0x%x\n",
+// 			    MS(ds->ds_status8, AR_RXS8_PHY_ERR_CODE)));
+// 		else if (ds->ds_status8 & (AR_RXS8_DECRYPT_CRC_ERR |
+// 		    AR_RXS8_KEY_MISS | AR_RXS8_DECRYPT_BUSY_ERR)) {
+// 			DPRINTFN(6, ("Decryption CRC error\n"));
+// 			ic->ic_stats.is_ccmp_dec_errs++;
+// 		} else if (ds->ds_status8 & AR_RXS8_MICHAEL_ERR) {
+// 			DPRINTFN(2, ("Michael MIC failure\n"));
+// 			michael_mic_failure = 1;
+// 		}
+// 		if (!michael_mic_failure) {
+// 			ifp->if_ierrors++;
+// 			goto skip;
+// 		}
+// 	} else {
+// 		if (ds->ds_status8 & (AR_RXS8_CRC_ERR | AR_RXS8_PHY_ERR |
+// 		    AR_RXS8_DECRYPT_CRC_ERR | AR_RXS8_MICHAEL_ERR)) {
+// 			ifp->if_ierrors++;
+// 			goto skip;
+// 		}
+// 	}
 
-	len = MS(ds->ds_status1, AR_RXS1_DATA_LEN);
-	if (__predict_false(len < IEEE80211_MIN_LEN || len > ATHN_RXBUFSZ)) {
-		DPRINTF(("corrupted descriptor length=%d\n", len));
-		ifp->if_ierrors++;
-		goto skip;
-	}
+// 	len = MS(ds->ds_status1, AR_RXS1_DATA_LEN);
+// 	if (__predict_false(len < IEEE80211_MIN_LEN || len > ATHN_RXBUFSZ)) {
+// 		DPRINTF(("corrupted descriptor length=%d\n", len));
+// 		ifp->if_ierrors++;
+// 		goto skip;
+// 	}
 
-	/* Allocate a new Rx buffer. */
-	m1 = MCLGETL(NULL, M_DONTWAIT, ATHN_RXBUFSZ);
-	if (__predict_false(m1 == NULL)) {
-		ic->ic_stats.is_rx_nombuf++;
-		ifp->if_ierrors++;
-		goto skip;
-	}
+// 	/* Allocate a new Rx buffer. */
+// 	m1 = MCLGETL(NULL, M_DONTWAIT, ATHN_RXBUFSZ);
+// 	if (__predict_false(m1 == NULL)) {
+// 		ic->ic_stats.is_rx_nombuf++;
+// 		ifp->if_ierrors++;
+// 		goto skip;
+// 	}
 
-	/* Sync and unmap the old Rx buffer. */
-	bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, ATHN_RXBUFSZ,
-	    BUS_DMASYNC_POSTREAD);
-	bus_dmamap_unload(sc->sc_dmat, bf->bf_map);
+// 	/* Sync and unmap the old Rx buffer. */
+// 	bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, ATHN_RXBUFSZ,
+// 	    BUS_DMASYNC_POSTREAD);
+// 	bus_dmamap_unload(sc->sc_dmat, bf->bf_map);
 
-	/* Map the new Rx buffer. */
-	error = bus_dmamap_load(sc->sc_dmat, bf->bf_map, mtod(m1, void *),
-	    ATHN_RXBUFSZ, NULL, BUS_DMA_NOWAIT | BUS_DMA_READ);
-	if (__predict_false(error != 0)) {
-		m_freem(m1);
+// 	/* Map the new Rx buffer. */
+// 	error = bus_dmamap_load(sc->sc_dmat, bf->bf_map, mtod(m1, void *),
+// 	    ATHN_RXBUFSZ, NULL, BUS_DMA_NOWAIT | BUS_DMA_READ);
+// 	if (__predict_false(error != 0)) {
+// 		m_freem(m1);
 
-		/* Remap the old Rx buffer or panic. */
-		error = bus_dmamap_load(sc->sc_dmat, bf->bf_map,
-		    mtod(bf->bf_m, void *), ATHN_RXBUFSZ, NULL,
-		    BUS_DMA_NOWAIT | BUS_DMA_READ);
-		KASSERT(error != 0);
-		ifp->if_ierrors++;
-		goto skip;
-	}
+// 		/* Remap the old Rx buffer or panic. */
+// 		error = bus_dmamap_load(sc->sc_dmat, bf->bf_map,
+// 		    mtod(bf->bf_m, void *), ATHN_RXBUFSZ, NULL,
+// 		    BUS_DMA_NOWAIT | BUS_DMA_READ);
+// 		KASSERT(error != 0, "Panic in ar5008_rx_process");
+// 		ifp->if_ierrors++;
+// 		goto skip;
+// 	}
 
-	bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, ATHN_RXBUFSZ,
-	    BUS_DMASYNC_PREREAD);
+// 	bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, ATHN_RXBUFSZ,
+// 	    BUS_DMASYNC_PREREAD);
 
-	/* Write physical address of new Rx buffer. */
-	ds->ds_data = bf->bf_map->dm_segs[0].ds_addr;
+// 	/* Write physical address of new Rx buffer. */
+// 	ds->ds_data = bf->bf_map->dm_segs[0].ds_addr;
 
-	m = bf->bf_m;
-	bf->bf_m = m1;
+// 	m = bf->bf_m;
+// 	bf->bf_m = m1;
 
-	/* Finalize mbuf. */
-	m->m_pkthdr.len = m->m_len = len;
+// 	/* Finalize mbuf. */
+// 	m->m_pkthdr.len = m->m_len = len;
 
-	wh = mtod(m, struct ieee80211_frame *);
+// 	wh = mtod(m, struct ieee80211_frame *);
 
-	if (michael_mic_failure) {
-		/*
-		 * Check that it is not a control frame
-		 * (invalid MIC failures on valid ctl frames).
-		 * Validate the transmitter's address to avoid passing
-		 * corrupt frames with bogus addresses to net80211.
-		 */
-		if ((wh->i_fc[0] & IEEE80211_FC0_TYPE_CTL)) {
-			switch (ic->ic_opmode) {
-#ifndef IEEE80211_STA_ONLY
-			case IEEE80211_M_HOSTAP:
-				if (ieee80211_find_node(ic, wh->i_addr2))
-					michael_mic_failure = 0;
-				break;
-#endif
-			case IEEE80211_M_STA:
-				if (IEEE80211_ADDR_EQ(wh->i_addr2,
-				    ic->ic_bss->ni_macaddr))
-					michael_mic_failure = 0;
-				break;
-			case IEEE80211_M_MONITOR:
-				michael_mic_failure = 0;
-				break;
-			default:
-				break;
-			}
-		}
+// 	if (michael_mic_failure) {
+// 		/*
+// 		 * Check that it is not a control frame
+// 		 * (invalid MIC failures on valid ctl frames).
+// 		 * Validate the transmitter's address to avoid passing
+// 		 * corrupt frames with bogus addresses to net80211.
+// 		 */
+// 		if ((wh->i_fc[0] & IEEE80211_FC0_TYPE_CTL)) {
+// 			switch (ic->ic_opmode) {
+// #ifndef IEEE80211_STA_ONLY
+// 			case IEEE80211_M_HOSTAP:
+// 				if (ieee80211_find_node(ic, wh->i_addr2))
+// 					michael_mic_failure = 0;
+// 				break;
+// #endif
+// 			case IEEE80211_M_STA:
+// 				if (IEEE80211_ADDR_EQ(wh->i_addr2,
+// 				    ic->ic_bss->ni_macaddr))
+// 					michael_mic_failure = 0;
+// 				break;
+// 			case IEEE80211_M_MONITOR:
+// 				michael_mic_failure = 0;
+// 				break;
+// 			default:
+// 				break;
+// 			}
+// 		}
 
-		if (michael_mic_failure) {
- 			/* Report Michael MIC failures to net80211. */
-			if ((ic->ic_rsnciphers & IEEE80211_CIPHER_TKIP) ||
-			    ic->ic_rsngroupcipher == IEEE80211_CIPHER_TKIP) {
-				ic->ic_stats.is_rx_locmicfail++;
-				ieee80211_michael_mic_failure(ic, 0);
-			}
-			ifp->if_ierrors++;
-			m_freem(m);
-			goto skip;
-		}
-	}
+// 		if (michael_mic_failure) {
+//  			/* Report Michael MIC failures to net80211. */
+// 			if ((ic->ic_rsnciphers & IEEE80211_CIPHER_TKIP) ||
+// 			    ic->ic_rsngroupcipher == IEEE80211_CIPHER_TKIP) {
+// 				ic->ic_stats.is_rx_locmicfail++;
+// 				ieee80211_michael_mic_failure(ic, 0);
+// 			}
+// 			ifp->if_ierrors++;
+// 			m_freem(m);
+// 			goto skip;
+// 		}
+// 	}
 
-	/* Grab a reference to the source node. */
-	ni = ieee80211_find_rxnode(ic, wh);
+// 	/* Grab a reference to the source node. */
+// 	ni = ieee80211_find_rxnode(ic, wh);
 
-	/* Remove any HW padding after the 802.11 header. */
-	if (!(wh->i_fc[0] & IEEE80211_FC0_TYPE_CTL)) {
-		u_int hdrlen = ieee80211_get_hdrlen(wh);
-		if (hdrlen & 3) {
-			memmove((caddr_t)wh + 2, wh, hdrlen);
-			m_adj(m, 2);
-		}
-		wh = mtod(m, struct ieee80211_frame *);
-	}
-#if NBPFILTER > 0
-	if (__predict_false(sc->sc_drvbpf != NULL))
-		ar5008_rx_radiotap(sc, m, ds);
-#endif
-	/* Trim 802.11 FCS after radiotap. */
-	m_adj(m, -IEEE80211_CRC_LEN);
+// 	/* Remove any HW padding after the 802.11 header. */
+// 	if (!(wh->i_fc[0] & IEEE80211_FC0_TYPE_CTL)) {
+// 		u_int hdrlen = ieee80211_get_hdrlen(wh);
+// 		if (hdrlen & 3) {
+// 			memmove((caddr_t)wh + 2, wh, hdrlen);
+// 			m_adj(m, 2);
+// 		}
+// 		wh = mtod(m, struct ieee80211_frame *);
+// 	}
+// #if NBPFILTER > 0
+// 	if (__predict_false(sc->sc_drvbpf != NULL))
+// 		ar5008_rx_radiotap(sc, m, ds);
+// #endif
+// 	/* Trim 802.11 FCS after radiotap. */
+// 	m_adj(m, -IEEE80211_CRC_LEN);
 
-	/* Send the frame to the 802.11 layer. */
-	memset(&rxi, 0, sizeof(rxi));
-	rxi.rxi_rssi = MS(ds->ds_status4, AR_RXS4_RSSI_COMBINED);
-	rxi.rxi_rssi += AR_DEFAULT_NOISE_FLOOR;
-	rxi.rxi_tstamp = ds->ds_status2;
-	if (!(wh->i_fc[0] & IEEE80211_FC0_TYPE_CTL) &&
-	    (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) &&
-	    (ic->ic_flags & IEEE80211_F_RSNON) &&
-	    (ni->ni_flags & IEEE80211_NODE_RXPROT) &&
-	    ((!IEEE80211_IS_MULTICAST(wh->i_addr1) &&
-	    ni->ni_rsncipher == IEEE80211_CIPHER_CCMP) ||
-	    (IEEE80211_IS_MULTICAST(wh->i_addr1) &&
-	    ni->ni_rsngroupcipher == IEEE80211_CIPHER_CCMP))) {
-		if (ar5008_ccmp_decap(sc, m, ni) != 0) {
-			ifp->if_ierrors++;
-			ieee80211_release_node(ic, ni);
-			m_freem(m);
-			goto skip;
-		}
-		rxi.rxi_flags |= IEEE80211_RXI_HWDEC;
-	}
-	ieee80211_inputm(ifp, m, ni, &rxi, ml);
+// 	/* Send the frame to the 802.11 layer. */
+// 	memset(&rxi, 0, sizeof(rxi));
+// 	rxi.rxi_rssi = MS(ds->ds_status4, AR_RXS4_RSSI_COMBINED);
+// 	rxi.rxi_rssi += AR_DEFAULT_NOISE_FLOOR;
+// 	rxi.rxi_tstamp = ds->ds_status2;
+// 	if (!(wh->i_fc[0] & IEEE80211_FC0_TYPE_CTL) &&
+// 	    (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) &&
+// 	    (ic->ic_flags & IEEE80211_F_RSNON) &&
+// 	    (ni->ni_flags & IEEE80211_NODE_RXPROT) &&
+// 	    ((!IEEE80211_IS_MULTICAST(wh->i_addr1) &&
+// 	    ni->ni_rsncipher == IEEE80211_CIPHER_CCMP) ||
+// 	    (IEEE80211_IS_MULTICAST(wh->i_addr1) &&
+// 	    ni->ni_rsngroupcipher == IEEE80211_CIPHER_CCMP))) {
+// 		if (ar5008_ccmp_decap(sc, m, ni) != 0) {
+// 			ifp->if_ierrors++;
+// 			ieee80211_release_node(ic, ni);
+// 			m_freem(m);
+// 			goto skip;
+// 		}
+// 		rxi.rxi_flags |= IEEE80211_RXI_HWDEC;
+// 	}
+// 	ieee80211_inputm(ifp, m, ni, &rxi, ml);
 
-	/* Node is no longer needed. */
-	ieee80211_release_node(ic, ni);
+// 	/* Node is no longer needed. */
+// 	ieee80211_release_node(ic, ni);
 
- skip:
-	/* Unlink this descriptor from head. */
-	SIMPLEQ_REMOVE_HEAD(&rxq->head, bf_list);
-	memset(&ds->ds_status0, 0, 36);	/* XXX Really needed? */
-	ds->ds_status8 &= ~AR_RXS8_DONE;
-	ds->ds_link = 0;
+//  skip:
+// 	/* Unlink this descriptor from head. */
+// 	SIMPLEQ_REMOVE_HEAD(&rxq->head, bf_list);
+// 	memset(&ds->ds_status0, 0, 36);	/* XXX Really needed? */
+// 	ds->ds_status8 &= ~AR_RXS8_DONE;
+// 	ds->ds_link = 0;
 
-	/* Re-use this descriptor and link it to tail. */
-	if (__predict_true(!SIMPLEQ_EMPTY(&rxq->head)))
-		((struct ar_rx_desc *)rxq->lastds)->ds_link = bf->bf_daddr;
-	else
-		AR_WRITE(sc, AR_RXDP, bf->bf_daddr);
-	SIMPLEQ_INSERT_TAIL(&rxq->head, bf, bf_list);
-	rxq->lastds = ds;
+// 	/* Re-use this descriptor and link it to tail. */
+// 	if (__predict_true(!SIMPLEQ_EMPTY(&rxq->head)))
+// 		((struct ar_rx_desc *)rxq->lastds)->ds_link = bf->bf_daddr;
+// 	else
+// 		AR_WRITE(sc, AR_RXDP, bf->bf_daddr);
+// 	SIMPLEQ_INSERT_TAIL(&rxq->head, bf, bf_list);
+// 	rxq->lastds = ds;
 
-	/* Re-enable Rx. */
-	AR_WRITE(sc, AR_CR, AR_CR_RXE);
-	AR_WRITE_BARRIER(sc);
-	return (0);
-}
+// 	/* Re-enable Rx. */
+// 	AR_WRITE(sc, AR_CR, AR_CR_RXE);
+// 	AR_WRITE_BARRIER(sc);
+// 	return (0);
+// }
 
-void
-ar5008_rx_intr(struct athn_softc *sc)
-{
-	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = &ic->ic_if;
+// void
+// ar5008_rx_intr(struct athn_softc *sc)
+// {
+// 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
+// 	struct ieee80211com *ic = &sc->sc_ic;
+// 	struct ifnet *ifp = &ic->ic_if;
 
-	while (ar5008_rx_process(sc, &ml) == 0);
+// 	while (ar5008_rx_process(sc, &ml) == 0);
 
-	if_input(ifp, &ml);
-}
+// 	if_input(ifp, &ml);
+// }
 
-int
-ar5008_tx_process(struct athn_softc *sc, int qid)
-{
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = &ic->ic_if;
-	struct athn_txq *txq = &sc->txq[qid];
-	struct athn_node *an;
-	struct ieee80211_node *ni;
-	struct athn_tx_buf *bf;
-	struct ar_tx_desc *ds;
-	uint8_t failcnt;
-	int txfail = 0, rtscts;
+// int
+// ar5008_tx_process(struct athn_softc *sc, int qid)
+// {
+// 	struct ieee80211com *ic = &sc->sc_ic;
+// 	struct ifnet *ifp = &ic->ic_if;
+// 	struct athn_txq *txq = &sc->txq[qid];
+// 	struct athn_node *an;
+// 	struct ieee80211_node *ni;
+// 	struct athn_tx_buf *bf;
+// 	struct ar_tx_desc *ds;
+// 	uint8_t failcnt;
+// 	int txfail = 0, rtscts;
 
-	bf = SIMPLEQ_FIRST(&txq->head);
-	if (bf == NULL)
-		return (ENOENT);
-	/* Get descriptor of last DMA segment. */
-	ds = &((struct ar_tx_desc *)bf->bf_descs)[bf->bf_map->dm_nsegs - 1];
+// 	bf = SIMPLEQ_FIRST(&txq->head);
+// 	if (bf == NULL)
+// 		return (ENOENT);
+// 	/* Get descriptor of last DMA segment. */
+// 	ds = &((struct ar_tx_desc *)bf->bf_descs)[bf->bf_map->dm_nsegs - 1];
 
-	if (!(ds->ds_status9 & AR_TXS9_DONE))
-		return (EBUSY);
+// 	if (!(ds->ds_status9 & AR_TXS9_DONE))
+// 		return (EBUSY);
 
-	SIMPLEQ_REMOVE_HEAD(&txq->head, bf_list);
+// 	SIMPLEQ_REMOVE_HEAD(&txq->head, bf_list);
 
-	sc->sc_tx_timer = 0;
+// 	sc->sc_tx_timer = 0;
 
-	/* These status bits are valid if “FRM_XMIT_OK” is clear. */
-	if ((ds->ds_status1 & AR_TXS1_FRM_XMIT_OK) == 0) {
-		txfail = (ds->ds_status1 & AR_TXS1_EXCESSIVE_RETRIES);
-		if (txfail)
-			ifp->if_oerrors++;
-		if (ds->ds_status1 & AR_TXS1_UNDERRUN)
-			athn_inc_tx_trigger_level(sc);
-	}
+// 	/* These status bits are valid if “FRM_XMIT_OK” is clear. */
+// 	if ((ds->ds_status1 & AR_TXS1_FRM_XMIT_OK) == 0) {
+// 		txfail = (ds->ds_status1 & AR_TXS1_EXCESSIVE_RETRIES);
+// 		if (txfail)
+// 			ifp->if_oerrors++;
+// 		if (ds->ds_status1 & AR_TXS1_UNDERRUN)
+// 			athn_inc_tx_trigger_level(sc);
+// 	}
 
-	an = (struct athn_node *)bf->bf_ni;
-	ni = (struct ieee80211_node *)bf->bf_ni;
+// 	an = (struct athn_node *)bf->bf_ni;
+// 	ni = (struct ieee80211_node *)bf->bf_ni;
 
-	/*
-	 * NB: the data fail count contains the number of un-acked tries
-	 * for the final series used.  We must add the number of tries for
-	 * each series that was fully processed to punish transmit rates in
-	 * the earlier series which did not perform well.
-	 */
-	failcnt  = MS(ds->ds_status1, AR_TXS1_DATA_FAIL_CNT);
-	/* Assume two tries per series, as per AR_TXC2_XMIT_DATA_TRIESx. */
-	failcnt += MS(ds->ds_status9, AR_TXS9_FINAL_IDX) * 2;
+// 	/*
+// 	 * NB: the data fail count contains the number of un-acked tries
+// 	 * for the final series used.  We must add the number of tries for
+// 	 * each series that was fully processed to punish transmit rates in
+// 	 * the earlier series which did not perform well.
+// 	 */
+// 	failcnt  = MS(ds->ds_status1, AR_TXS1_DATA_FAIL_CNT);
+// 	/* Assume two tries per series, as per AR_TXC2_XMIT_DATA_TRIESx. */
+// 	failcnt += MS(ds->ds_status9, AR_TXS9_FINAL_IDX) * 2;
 
-	rtscts = (ds->ds_ctl0 & (AR_TXC0_RTS_ENABLE | AR_TXC0_CTS_ENABLE));
+// 	rtscts = (ds->ds_ctl0 & (AR_TXC0_RTS_ENABLE | AR_TXC0_CTS_ENABLE));
 
-	/* Update rate control statistics. */
-	if ((ni->ni_flags & IEEE80211_NODE_HT) && ic->ic_fixed_mcs == -1) {
-		const struct ieee80211_ht_rateset *rs =
-		    ieee80211_ra_get_ht_rateset(bf->bf_txmcs, 0 /* chan40 */,
-		    ieee80211_node_supports_ht_sgi20(ni));
-		unsigned int retries = 0, i;
-		int mcs = bf->bf_txmcs;
+// 	/* Update rate control statistics. */
+// 	if ((ni->ni_flags & IEEE80211_NODE_HT) && ic->ic_fixed_mcs == -1) {
+// 		const struct ieee80211_ht_rateset *rs =
+// 		    ieee80211_ra_get_ht_rateset(bf->bf_txmcs, 0 /* chan40 */,
+// 		    ieee80211_node_supports_ht_sgi20(ni));
+// 		unsigned int retries = 0, i;
+// 		int mcs = bf->bf_txmcs;
 
-		/* With RTS/CTS each Tx series used the same MCS. */
-		if (rtscts) {
-			retries = failcnt;
-		} else {
-			for (i = 0; i < failcnt; i++) {
-				if (mcs > rs->min_mcs) {
-					ieee80211_ra_add_stats_ht(&an->rn,
-					    ic, ni, mcs, 1, 1);
-					if (i % 2) /* two tries per series */
-						mcs--;
-				} else
-					retries++;
-			}
-		}
+// 		/* With RTS/CTS each Tx series used the same MCS. */
+// 		if (rtscts) {
+// 			retries = failcnt;
+// 		} else {
+// 			for (i = 0; i < failcnt; i++) {
+// 				if (mcs > rs->min_mcs) {
+// 					ieee80211_ra_add_stats_ht(&an->rn,
+// 					    ic, ni, mcs, 1, 1);
+// 					if (i % 2) /* two tries per series */
+// 						mcs--;
+// 				} else
+// 					retries++;
+// 			}
+// 		}
 
-		if (txfail && retries == 0) {
-			ieee80211_ra_add_stats_ht(&an->rn, ic, ni,
-			    mcs, 1, 1);
-		} else {
-			ieee80211_ra_add_stats_ht(&an->rn, ic, ni,
-			    mcs, retries + 1, retries);
-		}
-		if (ic->ic_state == IEEE80211_S_RUN) {
-#ifndef IEEE80211_STA_ONLY
-			if (ic->ic_opmode != IEEE80211_M_HOSTAP ||
-			    ni->ni_state == IEEE80211_STA_ASSOC)
-#endif
-				ieee80211_ra_choose(&an->rn, ic, ni);
-		}
-	} else if (ic->ic_fixed_rate == -1) {
-		an->amn.amn_txcnt++;
-		if (failcnt > 0)
-			an->amn.amn_retrycnt++;
-	}
-	DPRINTFN(5, ("Tx done qid=%d status1=%d fail count=%d\n",
-	    qid, ds->ds_status1, failcnt));
+// 		if (txfail && retries == 0) {
+// 			ieee80211_ra_add_stats_ht(&an->rn, ic, ni,
+// 			    mcs, 1, 1);
+// 		} else {
+// 			ieee80211_ra_add_stats_ht(&an->rn, ic, ni,
+// 			    mcs, retries + 1, retries);
+// 		}
+// 		if (ic->ic_state == IEEE80211_S_RUN) {
+// #ifndef IEEE80211_STA_ONLY
+// 			if (ic->ic_opmode != IEEE80211_M_HOSTAP ||
+// 			    ni->ni_state == IEEE80211_STA_ASSOC)
+// #endif
+// 				ieee80211_ra_choose(&an->rn, ic, ni);
+// 		}
+// 	} else if (ic->ic_fixed_rate == -1) {
+// 		an->amn.amn_txcnt++;
+// 		if (failcnt > 0)
+// 			an->amn.amn_retrycnt++;
+// 	}
+// 	DPRINTFN(5, ("Tx done qid=%d status1=%d fail count=%d\n",
+// 	    qid, ds->ds_status1, failcnt));
 
-	bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, bf->bf_map->dm_mapsize,
-	    BUS_DMASYNC_POSTWRITE);
-	bus_dmamap_unload(sc->sc_dmat, bf->bf_map);
+// 	bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, bf->bf_map->dm_mapsize,
+// 	    BUS_DMASYNC_POSTWRITE);
+// 	bus_dmamap_unload(sc->sc_dmat, bf->bf_map);
 
-	m_freem(bf->bf_m);
-	bf->bf_m = NULL;
-	ieee80211_release_node(ic, bf->bf_ni);
-	bf->bf_ni = NULL;
+// 	m_freem(bf->bf_m);
+// 	bf->bf_m = NULL;
+// 	ieee80211_release_node(ic, bf->bf_ni);
+// 	bf->bf_ni = NULL;
 
-	/* Link Tx buffer back to global free list. */
-	SIMPLEQ_INSERT_TAIL(&sc->txbufs, bf, bf_list);
-	return (0);
-}
+// 	/* Link Tx buffer back to global free list. */
+// 	SIMPLEQ_INSERT_TAIL(&sc->txbufs, bf, bf_list);
+// 	return (0);
+// }
 
-void
-ar5008_tx_intr(struct athn_softc *sc)
-{
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = &ic->ic_if;
-	uint16_t mask = 0;
-	uint32_t reg;
-	int qid;
+// void
+// ar5008_tx_intr(struct athn_softc *sc)
+// {
+// 	struct ieee80211com *ic = &sc->sc_ic;
+// 	struct ifnet *ifp = &ic->ic_if;
+// 	uint16_t mask = 0;
+// 	uint32_t reg;
+// 	int qid;
 
-	reg = AR_READ(sc, AR_ISR_S0_S);
-	mask |= MS(reg, AR_ISR_S0_QCU_TXOK);
-	mask |= MS(reg, AR_ISR_S0_QCU_TXDESC);
+// 	reg = AR_READ(sc, AR_ISR_S0_S);
+// 	mask |= MS(reg, AR_ISR_S0_QCU_TXOK);
+// 	mask |= MS(reg, AR_ISR_S0_QCU_TXDESC);
 
-	reg = AR_READ(sc, AR_ISR_S1_S);
-	mask |= MS(reg, AR_ISR_S1_QCU_TXERR);
-	mask |= MS(reg, AR_ISR_S1_QCU_TXEOL);
+// 	reg = AR_READ(sc, AR_ISR_S1_S);
+// 	mask |= MS(reg, AR_ISR_S1_QCU_TXERR);
+// 	mask |= MS(reg, AR_ISR_S1_QCU_TXEOL);
 
-	DPRINTFN(4, ("Tx interrupt mask=0x%x\n", mask));
-	for (qid = 0; mask != 0; mask >>= 1, qid++) {
-		if (mask & 1)
-			while (ar5008_tx_process(sc, qid) == 0);
-	}
-	if (!SIMPLEQ_EMPTY(&sc->txbufs)) {
-		ifq_clr_oactive(&ifp->if_snd);
-		ifp->if_start(ifp);
-	}
-}
+// 	DPRINTFN(4, ("Tx interrupt mask=0x%x\n", mask));
+// 	for (qid = 0; mask != 0; mask >>= 1, qid++) {
+// 		if (mask & 1)
+// 			while (ar5008_tx_process(sc, qid) == 0);
+// 	}
+// 	if (!SIMPLEQ_EMPTY(&sc->txbufs)) {
+// 		ifq_clr_oactive(&ifp->if_snd);
+// 		ifp->if_start(ifp);
+// 	}
+// }
 
 #ifndef IEEE80211_STA_ONLY
 /*
  * Process Software Beacon Alert interrupts.
  */
-int
-ar5008_swba_intr(struct athn_softc *sc)
-{
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = &ic->ic_if;
-	struct ieee80211_node *ni = ic->ic_bss;
-	struct athn_tx_buf *bf = sc->bcnbuf;
-	struct ieee80211_frame *wh;
-	struct ar_tx_desc *ds;
-	struct mbuf *m;
-	uint8_t ridx, hwrate;
-	int error, totlen;
+// int
+// ar5008_swba_intr(struct athn_softc *sc)
+// {
+// 	struct ieee80211com *ic = &sc->sc_ic;
+// 	struct ifnet *ifp = &ic->ic_if;
+// 	struct ieee80211_node *ni = ic->ic_bss;
+// 	struct athn_tx_buf *bf = sc->bcnbuf;
+// 	struct ieee80211_frame *wh;
+// 	struct ar_tx_desc *ds;
+// 	struct mbuf *m;
+// 	uint8_t ridx, hwrate;
+// 	int error, totlen;
 
-	if (ic->ic_tim_mcast_pending &&
-	    mq_empty(&ni->ni_savedq) &&
-	    SIMPLEQ_EMPTY(&sc->txq[ATHN_QID_CAB].head))
-		ic->ic_tim_mcast_pending = 0;
+// 	if (ic->ic_tim_mcast_pending &&
+// 	    mq_empty(&ni->ni_savedq) &&
+// 	    SIMPLEQ_EMPTY(&sc->txq[ATHN_QID_CAB].head))
+// 		ic->ic_tim_mcast_pending = 0;
 
-	if (ic->ic_dtim_count == 0)
-		ic->ic_dtim_count = ic->ic_dtim_period - 1;
-	else
-		ic->ic_dtim_count--;
+// 	if (ic->ic_dtim_count == 0)
+// 		ic->ic_dtim_count = ic->ic_dtim_period - 1;
+// 	else
+// 		ic->ic_dtim_count--;
 
-	/* Make sure previous beacon has been sent. */
-	if (athn_tx_pending(sc, ATHN_QID_BEACON)) {
-		DPRINTF(("beacon stuck\n"));
-		return (EBUSY);
-	}
-	/* Get new beacon. */
-	m = ieee80211_beacon_alloc(ic, ic->ic_bss);
-	if (__predict_false(m == NULL))
-		return (ENOBUFS);
-	/* Assign sequence number. */
-	wh = mtod(m, struct ieee80211_frame *);
-	*(uint16_t *)&wh->i_seq[0] =
-	    htole16(ic->ic_bss->ni_txseq << IEEE80211_SEQ_SEQ_SHIFT);
-	ic->ic_bss->ni_txseq++;
+// 	/* Make sure previous beacon has been sent. */
+// 	if (athn_tx_pending(sc, ATHN_QID_BEACON)) {
+// 		DPRINTF(("beacon stuck\n"));
+// 		return (EBUSY);
+// 	}
+// 	/* Get new beacon. */
+// 	m = ieee80211_beacon_alloc(ic, ic->ic_bss);
+// 	if (__predict_false(m == NULL))
+// 		return (ENOBUFS);
+// 	/* Assign sequence number. */
+// 	wh = mtod(m, struct ieee80211_frame *);
+// 	*(uint16_t *)&wh->i_seq[0] =
+// 	    htole16(ic->ic_bss->ni_txseq << IEEE80211_SEQ_SEQ_SHIFT);
+// 	ic->ic_bss->ni_txseq++;
 
-	/* Unmap and free old beacon if any. */
-	if (__predict_true(bf->bf_m != NULL)) {
-		bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0,
-		    bf->bf_map->dm_mapsize, BUS_DMASYNC_POSTWRITE);
-		bus_dmamap_unload(sc->sc_dmat, bf->bf_map);
-		m_freem(bf->bf_m);
-		bf->bf_m = NULL;
-	}
-	/* DMA map new beacon. */
-	error = bus_dmamap_load_mbuf(sc->sc_dmat, bf->bf_map, m,
-	    BUS_DMA_NOWAIT | BUS_DMA_WRITE);
-	if (__predict_false(error != 0)) {
-		m_freem(m);
-		return (error);
-	}
-	bf->bf_m = m;
+// 	/* Unmap and free old beacon if any. */
+// 	if (__predict_true(bf->bf_m != NULL)) {
+// 		bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0,
+// 		    bf->bf_map->dm_mapsize, BUS_DMASYNC_POSTWRITE);
+// 		bus_dmamap_unload(sc->sc_dmat, bf->bf_map);
+// 		m_freem(bf->bf_m);
+// 		bf->bf_m = NULL;
+// 	}
+// 	/* DMA map new beacon. */
+// 	error = bus_dmamap_load_mbuf(sc->sc_dmat, bf->bf_map, m,
+// 	    BUS_DMA_NOWAIT | BUS_DMA_WRITE);
+// 	if (__predict_false(error != 0)) {
+// 		m_freem(m);
+// 		return (error);
+// 	}
+// 	bf->bf_m = m;
 
-	/* Setup Tx descriptor (simplified ar5008_tx()). */
-	ds = bf->bf_descs;
-	memset(ds, 0, sizeof(*ds));
+// 	/* Setup Tx descriptor (simplified ar5008_tx()). */
+// 	ds = bf->bf_descs;
+// 	memset(ds, 0, sizeof(*ds));
 
-	totlen = m->m_pkthdr.len + IEEE80211_CRC_LEN;
-	ds->ds_ctl0 = SM(AR_TXC0_FRAME_LEN, totlen);
-	ds->ds_ctl0 |= SM(AR_TXC0_XMIT_POWER, AR_MAX_RATE_POWER);
-	ds->ds_ctl1 = SM(AR_TXC1_FRAME_TYPE, AR_FRAME_TYPE_BEACON);
-	ds->ds_ctl1 |= AR_TXC1_NO_ACK;
-	ds->ds_ctl6 = SM(AR_TXC6_ENCR_TYPE, AR_ENCR_TYPE_CLEAR);
+// 	totlen = m->m_pkthdr.len + IEEE80211_CRC_LEN;
+// 	ds->ds_ctl0 = SM(AR_TXC0_FRAME_LEN, totlen);
+// 	ds->ds_ctl0 |= SM(AR_TXC0_XMIT_POWER, AR_MAX_RATE_POWER);
+// 	ds->ds_ctl1 = SM(AR_TXC1_FRAME_TYPE, AR_FRAME_TYPE_BEACON);
+// 	ds->ds_ctl1 |= AR_TXC1_NO_ACK;
+// 	ds->ds_ctl6 = SM(AR_TXC6_ENCR_TYPE, AR_ENCR_TYPE_CLEAR);
 
-	/* Write number of tries. */
-	ds->ds_ctl2 = SM(AR_TXC2_XMIT_DATA_TRIES0, 1);
+// 	/* Write number of tries. */
+// 	ds->ds_ctl2 = SM(AR_TXC2_XMIT_DATA_TRIES0, 1);
 
-	/* Write Tx rate. */
-	ridx = IEEE80211_IS_CHAN_5GHZ(ni->ni_chan) ?
-	    ATHN_RIDX_OFDM6 : ATHN_RIDX_CCK1;
-	hwrate = athn_rates[ridx].hwrate;
-	ds->ds_ctl3 = SM(AR_TXC3_XMIT_RATE0, hwrate);
+// 	/* Write Tx rate. */
+// 	ridx = IEEE80211_IS_CHAN_5GHZ(ni->ni_chan) ?
+// 	    ATHN_RIDX_OFDM6 : ATHN_RIDX_CCK1;
+// 	hwrate = athn_rates[ridx].hwrate;
+// 	ds->ds_ctl3 = SM(AR_TXC3_XMIT_RATE0, hwrate);
 
-	/* Write Tx chains. */
-	ds->ds_ctl7 = SM(AR_TXC7_CHAIN_SEL0, sc->txchainmask);
+// 	/* Write Tx chains. */
+// 	ds->ds_ctl7 = SM(AR_TXC7_CHAIN_SEL0, sc->txchainmask);
 
-	ds->ds_data = bf->bf_map->dm_segs[0].ds_addr;
-	/* Segment length must be a multiple of 4. */
-	ds->ds_ctl1 |= SM(AR_TXC1_BUF_LEN,
-	    (bf->bf_map->dm_segs[0].ds_len + 3) & ~3);
+// 	ds->ds_data = bf->bf_map->dm_segs[0].ds_addr;
+// 	/* Segment length must be a multiple of 4. */
+// 	ds->ds_ctl1 |= SM(AR_TXC1_BUF_LEN,
+// 	    (bf->bf_map->dm_segs[0].ds_len + 3) & ~3);
 
-	bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, bf->bf_map->dm_mapsize,
-	    BUS_DMASYNC_PREWRITE);
+// 	bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, bf->bf_map->dm_mapsize,
+// 	    BUS_DMASYNC_PREWRITE);
 
-	/* Stop Tx DMA before putting the new beacon on the queue. */
-	athn_stop_tx_dma(sc, ATHN_QID_BEACON);
+// 	/* Stop Tx DMA before putting the new beacon on the queue. */
+// 	athn_stop_tx_dma(sc, ATHN_QID_BEACON);
 
-	AR_WRITE(sc, AR_QTXDP(ATHN_QID_BEACON), bf->bf_daddr);
+// 	AR_WRITE(sc, AR_QTXDP(ATHN_QID_BEACON), bf->bf_daddr);
 
-	for(;;) {
-		if (SIMPLEQ_EMPTY(&sc->txbufs))
-			break;
+// 	for(;;) {
+// 		if (SIMPLEQ_EMPTY(&sc->txbufs))
+// 			break;
 
-		m = mq_dequeue(&ni->ni_savedq);
-		if (m == NULL)
-			break;
-		if (!mq_empty(&ni->ni_savedq)) {
-			/* more queued frames, set the more data bit */
-			wh = mtod(m, struct ieee80211_frame *);
-			wh->i_fc[1] |= IEEE80211_FC1_MORE_DATA;
-		}
+// 		m = mq_dequeue(&ni->ni_savedq);
+// 		if (m == NULL)
+// 			break;
+// 		if (!mq_empty(&ni->ni_savedq)) {
+// 			/* more queued frames, set the more data bit */
+// 			wh = mtod(m, struct ieee80211_frame *);
+// 			wh->i_fc[1] |= IEEE80211_FC1_MORE_DATA;
+// 		}
 		
-		if (sc->ops.tx(sc, m, ni, ATHN_TXFLAG_CAB) != 0) {
-			ieee80211_release_node(ic, ni);
-			ifp->if_oerrors++;
-			break;
-		}
-	}
+// 		if (sc->ops.tx(sc, m, ni, ATHN_TXFLAG_CAB) != 0) {
+// 			ieee80211_release_node(ic, ni);
+// 			ifp->if_oerrors++;
+// 			break;
+// 		}
+// 	}
 
-	/* Kick Tx. */
-	AR_WRITE(sc, AR_Q_TXE, 1 << ATHN_QID_BEACON);
-	AR_WRITE_BARRIER(sc);
-	return (0);
-}
+// 	/* Kick Tx. */
+// 	AR_WRITE(sc, AR_Q_TXE, 1 << ATHN_QID_BEACON);
+// 	AR_WRITE_BARRIER(sc);
+// 	return (0);
+// }
 #endif
 
-int
-ar5008_intr(struct athn_softc *sc)
-{
-	uint32_t intr, intr2, intr5, sync;
+// int
+// ar5008_intr(struct athn_softc *sc)
+// {
+// 	uint32_t intr, intr2, intr5, sync;
 
-	/* Get pending interrupts. */
-	intr = AR_READ(sc, AR_INTR_ASYNC_CAUSE);
-	if (!(intr & AR_INTR_MAC_IRQ) || intr == AR_INTR_SPURIOUS) {
-		intr = AR_READ(sc, AR_INTR_SYNC_CAUSE);
-		if (intr == AR_INTR_SPURIOUS || (intr & sc->isync) == 0)
-			return (0);	/* Not for us. */
-	}
+// 	/* Get pending interrupts. */
+// 	intr = AR_READ(sc, AR_INTR_ASYNC_CAUSE);
+// 	if (!(intr & AR_INTR_MAC_IRQ) || intr == AR_INTR_SPURIOUS) {
+// 		intr = AR_READ(sc, AR_INTR_SYNC_CAUSE);
+// 		if (intr == AR_INTR_SPURIOUS || (intr & sc->isync) == 0)
+// 			return (0);	/* Not for us. */
+// 	}
 
-	if ((AR_READ(sc, AR_INTR_ASYNC_CAUSE) & AR_INTR_MAC_IRQ) &&
-	    (AR_READ(sc, AR_RTC_STATUS) & AR_RTC_STATUS_M) == AR_RTC_STATUS_ON)
-		intr = AR_READ(sc, AR_ISR);
-	else
-		intr = 0;
-	sync = AR_READ(sc, AR_INTR_SYNC_CAUSE) & sc->isync;
-	if (intr == 0 && sync == 0)
-		return (0);	/* Not for us. */
+// 	if ((AR_READ(sc, AR_INTR_ASYNC_CAUSE) & AR_INTR_MAC_IRQ) &&
+// 	    (AR_READ(sc, AR_RTC_STATUS) & AR_RTC_STATUS_M) == AR_RTC_STATUS_ON)
+// 		intr = AR_READ(sc, AR_ISR);
+// 	else
+// 		intr = 0;
+// 	sync = AR_READ(sc, AR_INTR_SYNC_CAUSE) & sc->isync;
+// 	if (intr == 0 && sync == 0)
+// 		return (0);	/* Not for us. */
 
-	if (intr != 0) {
-		if (intr & AR_ISR_BCNMISC) {
-			intr2 = AR_READ(sc, AR_ISR_S2);
-			if (intr2 & AR_ISR_S2_TIM)
-				/* TBD */;
-			if (intr2 & AR_ISR_S2_TSFOOR)
-				/* TBD */;
-		}
-		intr = AR_READ(sc, AR_ISR_RAC);
-		if (intr == AR_INTR_SPURIOUS)
-			return (1);
+// 	if (intr != 0) {
+// 		if (intr & AR_ISR_BCNMISC) {
+// 			intr2 = AR_READ(sc, AR_ISR_S2);
+// 			if (intr2 & AR_ISR_S2_TIM)
+// 				/* TBD */;
+// 			if (intr2 & AR_ISR_S2_TSFOOR)
+// 				/* TBD */;
+// 		}
+// 		intr = AR_READ(sc, AR_ISR_RAC);
+// 		if (intr == AR_INTR_SPURIOUS)
+// 			return (1);
 
-#ifndef IEEE80211_STA_ONLY
-		if (intr & AR_ISR_SWBA)
-			ar5008_swba_intr(sc);
-#endif
-		if (intr & (AR_ISR_RXMINTR | AR_ISR_RXINTM))
-			ar5008_rx_intr(sc);
-		if (intr & (AR_ISR_RXOK | AR_ISR_RXERR | AR_ISR_RXORN))
-			ar5008_rx_intr(sc);
+// #ifndef IEEE80211_STA_ONLY
+// 		if (intr & AR_ISR_SWBA)
+// 			ar5008_swba_intr(sc);
+// #endif
+// 		if (intr & (AR_ISR_RXMINTR | AR_ISR_RXINTM))
+// 			ar5008_rx_intr(sc);
+// 		if (intr & (AR_ISR_RXOK | AR_ISR_RXERR | AR_ISR_RXORN))
+// 			ar5008_rx_intr(sc);
 
-		if (intr & (AR_ISR_TXOK | AR_ISR_TXDESC |
-		    AR_ISR_TXERR | AR_ISR_TXEOL))
-			ar5008_tx_intr(sc);
+// 		if (intr & (AR_ISR_TXOK | AR_ISR_TXDESC |
+// 		    AR_ISR_TXERR | AR_ISR_TXEOL))
+// 			ar5008_tx_intr(sc);
 
-		intr5 = AR_READ(sc, AR_ISR_S5_S);
-		if (intr & AR_ISR_GENTMR) {
-			if (intr5 & AR_ISR_GENTMR) {
-				DPRINTF(("GENTMR trigger=%d thresh=%d\n",
-				    MS(intr5, AR_ISR_S5_GENTIMER_TRIG),
-				    MS(intr5, AR_ISR_S5_GENTIMER_THRESH)));
-			}
-		}
+// 		intr5 = AR_READ(sc, AR_ISR_S5_S);
+// 		if (intr & AR_ISR_GENTMR) {
+// 			if (intr5 & AR_ISR_GENTMR) {
+// 				DPRINTF(("GENTMR trigger=%d thresh=%d\n",
+// 				    MS(intr5, AR_ISR_S5_GENTIMER_TRIG),
+// 				    MS(intr5, AR_ISR_S5_GENTIMER_THRESH)));
+// 			}
+// 		}
 
-		if (intr5 & AR_ISR_S5_TIM_TIMER)
-			/* TBD */;
-	}
-	if (sync != 0) {
-		if (sync & (AR_INTR_SYNC_HOST1_FATAL |
-		    AR_INTR_SYNC_HOST1_PERR))
-			/* TBD */;
+// 		if (intr5 & AR_ISR_S5_TIM_TIMER)
+// 			/* TBD */;
+// 	}
+// 	if (sync != 0) {
+// 		if (sync & (AR_INTR_SYNC_HOST1_FATAL |
+// 		    AR_INTR_SYNC_HOST1_PERR))
+// 			/* TBD */;
 
-		if (sync & AR_INTR_SYNC_RADM_CPL_TIMEOUT) {
-			AR_WRITE(sc, AR_RC, AR_RC_HOSTIF);
-			AR_WRITE(sc, AR_RC, 0);
-		}
+// 		if (sync & AR_INTR_SYNC_RADM_CPL_TIMEOUT) {
+// 			AR_WRITE(sc, AR_RC, AR_RC_HOSTIF);
+// 			AR_WRITE(sc, AR_RC, 0);
+// 		}
 
-		if ((sc->flags & ATHN_FLAG_RFSILENT) &&
-		    (sync & AR_INTR_SYNC_GPIO_PIN(sc->rfsilent_pin))) {
-			struct ifnet *ifp = &sc->sc_ic.ic_if;
+// 		if ((sc->flags & ATHN_FLAG_RFSILENT) &&
+// 		    (sync & AR_INTR_SYNC_GPIO_PIN(sc->rfsilent_pin))) {
+// 			struct ifnet *ifp = &sc->sc_ic.ic_if;
 
-			printf("%s: radio switch turned off\n",
-			    sc->sc_dev.dv_xname);
-			/* Turn the interface down. */
-			athn_stop(ifp, 1);
-			return (1);
-		}
+// 			printf("%s: radio switch turned off\n",
+// 			    sc->sc_dev.dv_xname);
+// 			/* Turn the interface down. */
+// 			athn_stop(ifp, 1);
+// 			return (1);
+// 		}
 
-		AR_WRITE(sc, AR_INTR_SYNC_CAUSE, sync);
-		(void)AR_READ(sc, AR_INTR_SYNC_CAUSE);
-	}
-	return (1);
-}
+// 		AR_WRITE(sc, AR_INTR_SYNC_CAUSE, sync);
+// 		(void)AR_READ(sc, AR_INTR_SYNC_CAUSE);
+// 	}
+// 	return (1);
+// }
 
-int
-ar5008_ccmp_encap(struct mbuf *m, u_int hdrlen, struct ieee80211_key *k)
-{
-	struct mbuf *n;
-	uint8_t *ivp;
-	int off;
+// int
+// ar5008_ccmp_encap(struct mbuf *m, u_int hdrlen, struct ieee80211_key *k)
+// {
+// 	struct mbuf *n;
+// 	uint8_t *ivp;
+// 	int off;
 
-	/* Insert IV for CCMP hardware encryption. */
-	n = m_makespace(m, hdrlen, IEEE80211_CCMP_HDRLEN, &off);
-	if (n == NULL) {
-		m_freem(m);
-		return (ENOBUFS);
-	}
-	ivp = mtod(n, uint8_t *) + off;
-	k->k_tsc++;
-	ivp[0] = k->k_tsc;
-	ivp[1] = k->k_tsc >> 8;
-	ivp[2] = 0;
-	ivp[3] = k->k_id << 6 | IEEE80211_WEP_EXTIV;
-	ivp[4] = k->k_tsc >> 16;
-	ivp[5] = k->k_tsc >> 24;
-	ivp[6] = k->k_tsc >> 32;
-	ivp[7] = k->k_tsc >> 40;
+// 	/* Insert IV for CCMP hardware encryption. */
+// 	n = m_makespace(m, hdrlen, IEEE80211_CCMP_HDRLEN, &off);
+// 	if (n == NULL) {
+// 		m_freem(m);
+// 		return (ENOBUFS);
+// 	}
+// 	ivp = mtod(n, uint8_t *) + off;
+// 	k->k_tsc++;
+// 	ivp[0] = k->k_tsc;
+// 	ivp[1] = k->k_tsc >> 8;
+// 	ivp[2] = 0;
+// 	ivp[3] = k->k_id << 6 | IEEE80211_WEP_EXTIV;
+// 	ivp[4] = k->k_tsc >> 16;
+// 	ivp[5] = k->k_tsc >> 24;
+// 	ivp[6] = k->k_tsc >> 32;
+// 	ivp[7] = k->k_tsc >> 40;
 
-	return 0;
-}
+// 	return 0;
+// }
 
-int
-ar5008_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni,
-    int txflags)
-{
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ieee80211_key *k = NULL;
-	struct ieee80211_frame *wh;
-	struct athn_series series[4];
-	struct ar_tx_desc *ds, *lastds;
-	struct athn_txq *txq;
-	struct athn_tx_buf *bf;
-	struct athn_node *an = (void *)ni;
-	uintptr_t entry;
-	uint16_t qos;
-	uint8_t txpower, type, encrtype, tid, ridx[4];
-	int i, error, totlen, hasqos, qid;
+// int
+// ar5008_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni,
+//     int txflags)
+// {
+// 	struct ieee80211com *ic = &sc->sc_ic;
+// 	struct ieee80211_key *k = NULL;
+// 	struct ieee80211_frame *wh;
+// 	struct athn_series series[4];
+// 	struct ar_tx_desc *ds, *lastds;
+// 	struct athn_txq *txq;
+// 	struct athn_tx_buf *bf;
+// 	struct athn_node *an = (void *)ni;
+// 	uintptr_t entry;
+// 	uint16_t qos;
+// 	uint8_t txpower, type, encrtype, tid, ridx[4];
+// 	int i, error, totlen, hasqos, qid;
 
-	/* Grab a Tx buffer from our global free list. */
-	bf = SIMPLEQ_FIRST(&sc->txbufs);
-	KASSERT(bf != NULL);
+// 	/* Grab a Tx buffer from our global free list. */
+// 	bf = SIMPLEQ_FIRST(&sc->txbufs);
+// 	KASSERT(bf != NULL, "Panic in ar5008tx");
 
-	/* Map 802.11 frame type to hardware frame type. */
-	wh = mtod(m, struct ieee80211_frame *);
-	if ((wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) ==
-	    IEEE80211_FC0_TYPE_MGT) {
-		/* NB: Beacons do not use ar5008_tx(). */
-		if ((wh->i_fc[0] & IEEE80211_FC0_SUBTYPE_MASK) ==
-		    IEEE80211_FC0_SUBTYPE_PROBE_RESP)
-			type = AR_FRAME_TYPE_PROBE_RESP;
-		else if ((wh->i_fc[0] & IEEE80211_FC0_SUBTYPE_MASK) ==
-		    IEEE80211_FC0_SUBTYPE_ATIM)
-			type = AR_FRAME_TYPE_ATIM;
-		else
-			type = AR_FRAME_TYPE_NORMAL;
-	} else if ((wh->i_fc[0] &
-	    (IEEE80211_FC0_TYPE_MASK | IEEE80211_FC0_SUBTYPE_MASK)) ==
-	    (IEEE80211_FC0_TYPE_CTL  | IEEE80211_FC0_SUBTYPE_PS_POLL)) {
-		type = AR_FRAME_TYPE_PSPOLL;
-	} else
-		type = AR_FRAME_TYPE_NORMAL;
+// 	/* Map 802.11 frame type to hardware frame type. */
+// 	wh = mtod(m, struct ieee80211_frame *);
+// 	if ((wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) ==
+// 	    IEEE80211_FC0_TYPE_MGT) {
+// 		/* NB: Beacons do not use ar5008_tx(). */
+// 		if ((wh->i_fc[0] & IEEE80211_FC0_SUBTYPE_MASK) ==
+// 		    IEEE80211_FC0_SUBTYPE_PROBE_RESP)
+// 			type = AR_FRAME_TYPE_PROBE_RESP;
+// 		else if ((wh->i_fc[0] & IEEE80211_FC0_SUBTYPE_MASK) ==
+// 		    IEEE80211_FC0_SUBTYPE_ATIM)
+// 			type = AR_FRAME_TYPE_ATIM;
+// 		else
+// 			type = AR_FRAME_TYPE_NORMAL;
+// 	} else if ((wh->i_fc[0] &
+// 	    (IEEE80211_FC0_TYPE_MASK | IEEE80211_FC0_SUBTYPE_MASK)) ==
+// 	    (IEEE80211_FC0_TYPE_CTL  | IEEE80211_FC0_SUBTYPE_PS_POLL)) {
+// 		type = AR_FRAME_TYPE_PSPOLL;
+// 	} else
+// 		type = AR_FRAME_TYPE_NORMAL;
 
-	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
-		k = ieee80211_get_txkey(ic, wh, ni);
-		if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
-			u_int hdrlen = ieee80211_get_hdrlen(wh);
-			if (ar5008_ccmp_encap(m, hdrlen, k) != 0)
-				return (ENOBUFS);
-		} else {
-			if ((m = ieee80211_encrypt(ic, m, k)) == NULL)
-				return (ENOBUFS);
-			k = NULL; /* skip hardware crypto further below */
-		}
-		wh = mtod(m, struct ieee80211_frame *);
-	}
+// 	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
+// 		k = ieee80211_get_txkey(ic, wh, ni);
+// 		if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
+// 			u_int hdrlen = ieee80211_get_hdrlen(wh);
+// 			if (ar5008_ccmp_encap(m, hdrlen, k) != 0)
+// 				return (ENOBUFS);
+// 		} else {
+// 			if ((m = ieee80211_encrypt(ic, m, k)) == NULL)
+// 				return (ENOBUFS);
+// 			k = NULL; /* skip hardware crypto further below */
+// 		}
+// 		wh = mtod(m, struct ieee80211_frame *);
+// 	}
 
-	/* XXX 2-byte padding for QoS and 4-addr headers. */
+// 	/* XXX 2-byte padding for QoS and 4-addr headers. */
 
-	/* Select the HW Tx queue to use for this frame. */
-	if ((hasqos = ieee80211_has_qos(wh))) {
-		qos = ieee80211_get_qos(wh);
-		tid = qos & IEEE80211_QOS_TID;
-		qid = athn_ac2qid[ieee80211_up_to_ac(ic, tid)];
-	} else if (type == AR_FRAME_TYPE_PSPOLL) {
-		qid = ATHN_QID_PSPOLL;
-	} else if (txflags & ATHN_TXFLAG_CAB) {
-		qid = ATHN_QID_CAB;
-	} else
-		qid = ATHN_QID_AC_BE;
-	txq = &sc->txq[qid];
+// 	/* Select the HW Tx queue to use for this frame. */
+// 	if ((hasqos = ieee80211_has_qos(wh))) {
+// 		qos = ieee80211_get_qos(wh);
+// 		tid = qos & IEEE80211_QOS_TID;
+// 		qid = athn_ac2qid[ieee80211_up_to_ac(ic, tid)];
+// 	} else if (type == AR_FRAME_TYPE_PSPOLL) {
+// 		qid = ATHN_QID_PSPOLL;
+// 	} else if (txflags & ATHN_TXFLAG_CAB) {
+// 		qid = ATHN_QID_CAB;
+// 	} else
+// 		qid = ATHN_QID_AC_BE;
+// 	txq = &sc->txq[qid];
 
-	/* Select the transmit rates to use for this frame. */
-	if (IEEE80211_IS_MULTICAST(wh->i_addr1) ||
-	    (wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) !=
-	    IEEE80211_FC0_TYPE_DATA) {
-		/* Use lowest rate for all tries. */
-		ridx[0] = ridx[1] = ridx[2] = ridx[3] =
-		    (IEEE80211_IS_CHAN_5GHZ(ni->ni_chan) ?
-			ATHN_RIDX_OFDM6 : ATHN_RIDX_CCK1);
-	} else if ((ni->ni_flags & IEEE80211_NODE_HT) &&
-	    ic->ic_fixed_mcs != -1) {
-		/* Use same fixed rate for all tries. */
-		ridx[0] = ridx[1] = ridx[2] = ridx[3] =
-		    ATHN_RIDX_MCS0 + ic->ic_fixed_mcs;
-	} else if (ic->ic_fixed_rate != -1) {
-		/* Use same fixed rate for all tries. */
-		ridx[0] = ridx[1] = ridx[2] = ridx[3] =
-		    sc->fixed_ridx;
-	} else {
-		/* Use fallback table of the node. */
-		int txrate;
+// 	/* Select the transmit rates to use for this frame. */
+// 	if (IEEE80211_IS_MULTICAST(wh->i_addr1) ||
+// 	    (wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) !=
+// 	    IEEE80211_FC0_TYPE_DATA) {
+// 		/* Use lowest rate for all tries. */
+// 		ridx[0] = ridx[1] = ridx[2] = ridx[3] =
+// 		    (IEEE80211_IS_CHAN_5GHZ(ni->ni_chan) ?
+// 			ATHN_RIDX_OFDM6 : ATHN_RIDX_CCK1);
+// 	} else if ((ni->ni_flags & IEEE80211_NODE_HT) &&
+// 	    ic->ic_fixed_mcs != -1) {
+// 		/* Use same fixed rate for all tries. */
+// 		ridx[0] = ridx[1] = ridx[2] = ridx[3] =
+// 		    ATHN_RIDX_MCS0 + ic->ic_fixed_mcs;
+// 	} else if (ic->ic_fixed_rate != -1) {
+// 		/* Use same fixed rate for all tries. */
+// 		ridx[0] = ridx[1] = ridx[2] = ridx[3] =
+// 		    sc->fixed_ridx;
+// 	} else {
+// 		/* Use fallback table of the node. */
+// 		int txrate;
 		
-		if (ni->ni_flags & IEEE80211_NODE_HT)
-			txrate = ATHN_NUM_LEGACY_RATES + ni->ni_txmcs;
-		else
-			txrate = ni->ni_txrate;
-		for (i = 0; i < 4; i++) {
-			ridx[i] = an->ridx[txrate];
-			txrate = an->fallback[txrate];
-		}
-	}
+// 		if (ni->ni_flags & IEEE80211_NODE_HT)
+// 			txrate = ATHN_NUM_LEGACY_RATES + ni->ni_txmcs;
+// 		else
+// 			txrate = ni->ni_txrate;
+// 		for (i = 0; i < 4; i++) {
+// 			ridx[i] = an->ridx[txrate];
+// 			txrate = an->fallback[txrate];
+// 		}
+// 	}
 
-#if NBPFILTER > 0
-	if (__predict_false(sc->sc_drvbpf != NULL)) {
-		struct athn_tx_radiotap_header *tap = &sc->sc_txtap;
+// #if NBPFILTER > 0
+// 	if (__predict_false(sc->sc_drvbpf != NULL)) {
+// 		struct athn_tx_radiotap_header *tap = &sc->sc_txtap;
 
-		tap->wt_flags = 0;
-		/* Use initial transmit rate. */
-		if (athn_rates[ridx[0]].hwrate & 0x80) /* MCS */
-			tap->wt_rate = athn_rates[ridx[0]].hwrate;
-		else
-			tap->wt_rate = athn_rates[ridx[0]].rate;
-		tap->wt_chan_freq = htole16(ic->ic_bss->ni_chan->ic_freq);
-		tap->wt_chan_flags = htole16(ic->ic_bss->ni_chan->ic_flags);
-		if (athn_rates[ridx[0]].phy == IEEE80211_T_DS &&
-		    ridx[0] != ATHN_RIDX_CCK1 &&
-		    (ic->ic_flags & IEEE80211_F_SHPREAMBLE))
-			tap->wt_flags |= IEEE80211_RADIOTAP_F_SHORTPRE;
-		bpf_mtap_hdr(sc->sc_drvbpf, tap, sc->sc_txtap_len, m,
-		    BPF_DIRECTION_OUT);
-	}
-#endif
+// 		tap->wt_flags = 0;
+// 		/* Use initial transmit rate. */
+// 		if (athn_rates[ridx[0]].hwrate & 0x80) /* MCS */
+// 			tap->wt_rate = athn_rates[ridx[0]].hwrate;
+// 		else
+// 			tap->wt_rate = athn_rates[ridx[0]].rate;
+// 		tap->wt_chan_freq = htole16(ic->ic_bss->ni_chan->ic_freq);
+// 		tap->wt_chan_flags = htole16(ic->ic_bss->ni_chan->ic_flags);
+// 		if (athn_rates[ridx[0]].phy == IEEE80211_T_DS &&
+// 		    ridx[0] != ATHN_RIDX_CCK1 &&
+// 		    (ic->ic_flags & IEEE80211_F_SHPREAMBLE))
+// 			tap->wt_flags |= IEEE80211_RADIOTAP_F_SHORTPRE;
+// 		bpf_mtap_hdr(sc->sc_drvbpf, tap, sc->sc_txtap_len, m,
+// 		    BPF_DIRECTION_OUT);
+// 	}
+// #endif
 
-	/* DMA map mbuf. */
-	error = bus_dmamap_load_mbuf(sc->sc_dmat, bf->bf_map, m,
-	    BUS_DMA_NOWAIT | BUS_DMA_WRITE);
-	if (__predict_false(error != 0)) {
-		if (error != EFBIG) {
-			printf("%s: can't map mbuf (error %d)\n",
-			    sc->sc_dev.dv_xname, error);
-			m_freem(m);
-			return (error);
-		}
-		/*
-		 * DMA mapping requires too many DMA segments; linearize
-		 * mbuf in kernel virtual address space and retry.
-		 */
-		if (m_defrag(m, M_DONTWAIT) != 0) {
-			m_freem(m);
-			return (ENOBUFS);
-		}
+// 	/* DMA map mbuf. */
+// 	error = bus_dmamap_load_mbuf(sc->sc_dmat, bf->bf_map, m,
+// 	    BUS_DMA_NOWAIT | BUS_DMA_WRITE);
+// 	if (__predict_false(error != 0)) {
+// 		if (error != EFBIG) {
+// 			printf("%s: can't map mbuf (error %d)\n",
+// 			    sc->sc_dev.dv_xname, error);
+// 			m_freem(m);
+// 			return (error);
+// 		}
+// 		/*
+// 		 * DMA mapping requires too many DMA segments; linearize
+// 		 * mbuf in kernel virtual address space and retry.
+// 		 */
+// 		if (m_defrag(m, M_DONTWAIT) != 0) {
+// 			m_freem(m);
+// 			return (ENOBUFS);
+// 		}
 
-		error = bus_dmamap_load_mbuf(sc->sc_dmat, bf->bf_map, m,
-		    BUS_DMA_NOWAIT | BUS_DMA_WRITE);
-		if (error != 0) {
-			printf("%s: can't map mbuf (error %d)\n",
-			    sc->sc_dev.dv_xname, error);
-			m_freem(m);
-			return (error);
-		}
-	}
-	bf->bf_m = m;
-	bf->bf_ni = ni;
-	bf->bf_txmcs = ni->ni_txmcs;
-	bf->bf_txflags = txflags;
+// 		error = bus_dmamap_load_mbuf(sc->sc_dmat, bf->bf_map, m,
+// 		    BUS_DMA_NOWAIT | BUS_DMA_WRITE);
+// 		if (error != 0) {
+// 			printf("%s: can't map mbuf (error %d)\n",
+// 			    sc->sc_dev.dv_xname, error);
+// 			m_freem(m);
+// 			return (error);
+// 		}
+// 	}
+// 	bf->bf_m = m;
+// 	bf->bf_ni = ni;
+// 	bf->bf_txmcs = ni->ni_txmcs;
+// 	bf->bf_txflags = txflags;
 
-	wh = mtod(m, struct ieee80211_frame *);
+// 	wh = mtod(m, struct ieee80211_frame *);
 
-	totlen = m->m_pkthdr.len + IEEE80211_CRC_LEN;
+// 	totlen = m->m_pkthdr.len + IEEE80211_CRC_LEN;
 
-	/* Clear all Tx descriptors that we will use. */
-	memset(bf->bf_descs, 0, bf->bf_map->dm_nsegs * sizeof(*ds));
+// 	/* Clear all Tx descriptors that we will use. */
+// 	memset(bf->bf_descs, 0, bf->bf_map->dm_nsegs * sizeof(*ds));
 
-	/* Setup first Tx descriptor. */
-	ds = bf->bf_descs;
+// 	/* Setup first Tx descriptor. */
+// 	ds = bf->bf_descs;
 
-	ds->ds_ctl0 = AR_TXC0_INTR_REQ | AR_TXC0_CLR_DEST_MASK;
-	txpower = AR_MAX_RATE_POWER;	/* Get from per-rate registers. */
-	ds->ds_ctl0 |= SM(AR_TXC0_XMIT_POWER, txpower);
+// 	ds->ds_ctl0 = AR_TXC0_INTR_REQ | AR_TXC0_CLR_DEST_MASK;
+// 	txpower = AR_MAX_RATE_POWER;	/* Get from per-rate registers. */
+// 	ds->ds_ctl0 |= SM(AR_TXC0_XMIT_POWER, txpower);
 
-	ds->ds_ctl1 = SM(AR_TXC1_FRAME_TYPE, type);
+// 	ds->ds_ctl1 = SM(AR_TXC1_FRAME_TYPE, type);
 
-	if (IEEE80211_IS_MULTICAST(wh->i_addr1) ||
-	    (hasqos && (qos & IEEE80211_QOS_ACK_POLICY_MASK) ==
-	     IEEE80211_QOS_ACK_POLICY_NOACK))
-		ds->ds_ctl1 |= AR_TXC1_NO_ACK;
+// 	if (IEEE80211_IS_MULTICAST(wh->i_addr1) ||
+// 	    (hasqos && (qos & IEEE80211_QOS_ACK_POLICY_MASK) ==
+// 	     IEEE80211_QOS_ACK_POLICY_NOACK))
+// 		ds->ds_ctl1 |= AR_TXC1_NO_ACK;
 
-	if (k != NULL) {
-		/* Map 802.11 cipher to hardware encryption type. */
-		if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
-			encrtype = AR_ENCR_TYPE_AES;
-			totlen += IEEE80211_CCMP_MICLEN;
-		} else
-			panic("unsupported cipher");
-		/*
-		 * NB: The key cache entry index is stored in the key
-		 * private field when the key is installed.
-		 */
-		entry = (uintptr_t)k->k_priv;
-		ds->ds_ctl1 |= SM(AR_TXC1_DEST_IDX, entry);
-		ds->ds_ctl0 |= AR_TXC0_DEST_IDX_VALID;
-	} else
-		encrtype = AR_ENCR_TYPE_CLEAR;
-	ds->ds_ctl6 = SM(AR_TXC6_ENCR_TYPE, encrtype);
+// 	if (k != NULL) {
+// 		/* Map 802.11 cipher to hardware encryption type. */
+// 		if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
+// 			encrtype = AR_ENCR_TYPE_AES;
+// 			totlen += IEEE80211_CCMP_MICLEN;
+// 		} else
+// 			panic("unsupported cipher");
+// 		/*
+// 		 * NB: The key cache entry index is stored in the key
+// 		 * private field when the key is installed.
+// 		 */
+// 		entry = (uintptr_t)k->k_priv;
+// 		ds->ds_ctl1 |= SM(AR_TXC1_DEST_IDX, entry);
+// 		ds->ds_ctl0 |= AR_TXC0_DEST_IDX_VALID;
+// 	} else
+// 		encrtype = AR_ENCR_TYPE_CLEAR;
+// 	ds->ds_ctl6 = SM(AR_TXC6_ENCR_TYPE, encrtype);
 
-	/* Check if frame must be protected using RTS/CTS or CTS-to-self. */
-	if (!IEEE80211_IS_MULTICAST(wh->i_addr1) &&
-	    (wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) ==
-	    IEEE80211_FC0_TYPE_DATA) {
-		enum ieee80211_htprot htprot;
+// 	/* Check if frame must be protected using RTS/CTS or CTS-to-self. */
+// 	if (!IEEE80211_IS_MULTICAST(wh->i_addr1) &&
+// 	    (wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) ==
+// 	    IEEE80211_FC0_TYPE_DATA) {
+// 		enum ieee80211_htprot htprot;
 
-		htprot = (ic->ic_bss->ni_htop1 & IEEE80211_HTOP1_PROT_MASK);
+// 		htprot = (ic->ic_bss->ni_htop1 & IEEE80211_HTOP1_PROT_MASK);
 
-		/* NB: Group frames are sent using CCK in 802.11b/g. */
-		if (totlen > ic->ic_rtsthreshold) {
-			ds->ds_ctl0 |= AR_TXC0_RTS_ENABLE;
-		} else if (((ic->ic_flags & IEEE80211_F_USEPROT) &&
-		    athn_rates[ridx[0]].phy == IEEE80211_T_OFDM) ||
-		    ((ni->ni_flags & IEEE80211_NODE_HT) &&
-		    htprot != IEEE80211_HTPROT_NONE)) {
-			if (ic->ic_protmode == IEEE80211_PROT_RTSCTS)
-				ds->ds_ctl0 |= AR_TXC0_RTS_ENABLE;
-			else if (ic->ic_protmode == IEEE80211_PROT_CTSONLY)
-				ds->ds_ctl0 |= AR_TXC0_CTS_ENABLE;
-		}
-	}
-	/* 
-	 * Disable multi-rate retries when protection is used.
-	 * The RTS/CTS frame's duration field is fixed and won't be
-	 * updated by hardware when the data rate changes.
-	 */
-	if (ds->ds_ctl0 & (AR_TXC0_RTS_ENABLE | AR_TXC0_CTS_ENABLE)) {
-		ridx[1] = ridx[2] = ridx[3] = ridx[0];
-	}
-	/* Setup multi-rate retries. */
-	for (i = 0; i < 4; i++) {
-		series[i].hwrate = athn_rates[ridx[i]].hwrate;
-		if (athn_rates[ridx[i]].phy == IEEE80211_T_DS &&
-		    ridx[i] != ATHN_RIDX_CCK1 &&
-		    (ic->ic_flags & IEEE80211_F_SHPREAMBLE))
-			series[i].hwrate |= 0x04;
-		/* Compute duration for each series. */
-		series[i].dur = athn_txtime(sc, totlen, ridx[i], ic->ic_flags);
-		if (!(ds->ds_ctl1 & AR_TXC1_NO_ACK)) {
-			/* Account for ACK duration. */
-			series[i].dur += athn_txtime(sc, IEEE80211_ACK_LEN,
-			    athn_rates[ridx[i]].rspridx, ic->ic_flags);
-		}
-	}
+// 		/* NB: Group frames are sent using CCK in 802.11b/g. */
+// 		if (totlen > ic->ic_rtsthreshold) {
+// 			ds->ds_ctl0 |= AR_TXC0_RTS_ENABLE;
+// 		} else if (((ic->ic_flags & IEEE80211_F_USEPROT) &&
+// 		    athn_rates[ridx[0]].phy == IEEE80211_T_OFDM) ||
+// 		    ((ni->ni_flags & IEEE80211_NODE_HT) &&
+// 		    htprot != IEEE80211_HTPROT_NONE)) {
+// 			if (ic->ic_protmode == IEEE80211_PROT_RTSCTS)
+// 				ds->ds_ctl0 |= AR_TXC0_RTS_ENABLE;
+// 			else if (ic->ic_protmode == IEEE80211_PROT_CTSONLY)
+// 				ds->ds_ctl0 |= AR_TXC0_CTS_ENABLE;
+// 		}
+// 	}
+// 	/* 
+// 	 * Disable multi-rate retries when protection is used.
+// 	 * The RTS/CTS frame's duration field is fixed and won't be
+// 	 * updated by hardware when the data rate changes.
+// 	 */
+// 	if (ds->ds_ctl0 & (AR_TXC0_RTS_ENABLE | AR_TXC0_CTS_ENABLE)) {
+// 		ridx[1] = ridx[2] = ridx[3] = ridx[0];
+// 	}
+// 	/* Setup multi-rate retries. */
+// 	for (i = 0; i < 4; i++) {
+// 		series[i].hwrate = athn_rates[ridx[i]].hwrate;
+// 		if (athn_rates[ridx[i]].phy == IEEE80211_T_DS &&
+// 		    ridx[i] != ATHN_RIDX_CCK1 &&
+// 		    (ic->ic_flags & IEEE80211_F_SHPREAMBLE))
+// 			series[i].hwrate |= 0x04;
+// 		/* Compute duration for each series. */
+// 		series[i].dur = athn_txtime(sc, totlen, ridx[i], ic->ic_flags);
+// 		if (!(ds->ds_ctl1 & AR_TXC1_NO_ACK)) {
+// 			/* Account for ACK duration. */
+// 			series[i].dur += athn_txtime(sc, IEEE80211_ACK_LEN,
+// 			    athn_rates[ridx[i]].rspridx, ic->ic_flags);
+// 		}
+// 	}
 
-	/* Write number of tries for each series. */
-	ds->ds_ctl2 =
-	    SM(AR_TXC2_XMIT_DATA_TRIES0, 2) |
-	    SM(AR_TXC2_XMIT_DATA_TRIES1, 2) |
-	    SM(AR_TXC2_XMIT_DATA_TRIES2, 2) |
-	    SM(AR_TXC2_XMIT_DATA_TRIES3, 4);
+// 	/* Write number of tries for each series. */
+// 	ds->ds_ctl2 =
+// 	    SM(AR_TXC2_XMIT_DATA_TRIES0, 2) |
+// 	    SM(AR_TXC2_XMIT_DATA_TRIES1, 2) |
+// 	    SM(AR_TXC2_XMIT_DATA_TRIES2, 2) |
+// 	    SM(AR_TXC2_XMIT_DATA_TRIES3, 4);
 
-	/* Tell HW to update duration field in 802.11 header. */
-	if (type != AR_FRAME_TYPE_PSPOLL)
-		ds->ds_ctl2 |= AR_TXC2_DUR_UPDATE_ENA;
+// 	/* Tell HW to update duration field in 802.11 header. */
+// 	if (type != AR_FRAME_TYPE_PSPOLL)
+// 		ds->ds_ctl2 |= AR_TXC2_DUR_UPDATE_ENA;
 
-	/* Write Tx rate for each series. */
-	ds->ds_ctl3 =
-	    SM(AR_TXC3_XMIT_RATE0, series[0].hwrate) |
-	    SM(AR_TXC3_XMIT_RATE1, series[1].hwrate) |
-	    SM(AR_TXC3_XMIT_RATE2, series[2].hwrate) |
-	    SM(AR_TXC3_XMIT_RATE3, series[3].hwrate);
+// 	/* Write Tx rate for each series. */
+// 	ds->ds_ctl3 =
+// 	    SM(AR_TXC3_XMIT_RATE0, series[0].hwrate) |
+// 	    SM(AR_TXC3_XMIT_RATE1, series[1].hwrate) |
+// 	    SM(AR_TXC3_XMIT_RATE2, series[2].hwrate) |
+// 	    SM(AR_TXC3_XMIT_RATE3, series[3].hwrate);
 
-	/* Write duration for each series. */
-	ds->ds_ctl4 =
-	    SM(AR_TXC4_PACKET_DUR0, series[0].dur) |
-	    SM(AR_TXC4_PACKET_DUR1, series[1].dur);
-	ds->ds_ctl5 =
-	    SM(AR_TXC5_PACKET_DUR2, series[2].dur) |
-	    SM(AR_TXC5_PACKET_DUR3, series[3].dur);
+// 	/* Write duration for each series. */
+// 	ds->ds_ctl4 =
+// 	    SM(AR_TXC4_PACKET_DUR0, series[0].dur) |
+// 	    SM(AR_TXC4_PACKET_DUR1, series[1].dur);
+// 	ds->ds_ctl5 =
+// 	    SM(AR_TXC5_PACKET_DUR2, series[2].dur) |
+// 	    SM(AR_TXC5_PACKET_DUR3, series[3].dur);
 
-	/* Use the same Tx chains for all tries. */
-	ds->ds_ctl7 =
-	    SM(AR_TXC7_CHAIN_SEL0, sc->txchainmask) |
-	    SM(AR_TXC7_CHAIN_SEL1, sc->txchainmask) |
-	    SM(AR_TXC7_CHAIN_SEL2, sc->txchainmask) |
-	    SM(AR_TXC7_CHAIN_SEL3, sc->txchainmask);
-#ifdef notyet
-	/* Use the same short GI setting for all tries. */
-	if (ni->ni_htcaps & IEEE80211_HTCAP_SGI20)
-		ds->ds_ctl7 |= AR_TXC7_GI0123;
-	/* Use the same channel width for all tries. */
-	if (ic->ic_flags & IEEE80211_F_CBW40)
-		ds->ds_ctl7 |= AR_TXC7_2040_0123;
-#endif
+// 	/* Use the same Tx chains for all tries. */
+// 	ds->ds_ctl7 =
+// 	    SM(AR_TXC7_CHAIN_SEL0, sc->txchainmask) |
+// 	    SM(AR_TXC7_CHAIN_SEL1, sc->txchainmask) |
+// 	    SM(AR_TXC7_CHAIN_SEL2, sc->txchainmask) |
+// 	    SM(AR_TXC7_CHAIN_SEL3, sc->txchainmask);
+// #ifdef notyet
+// 	/* Use the same short GI setting for all tries. */
+// 	if (ni->ni_htcaps & IEEE80211_HTCAP_SGI20)
+// 		ds->ds_ctl7 |= AR_TXC7_GI0123;
+// 	/* Use the same channel width for all tries. */
+// 	if (ic->ic_flags & IEEE80211_F_CBW40)
+// 		ds->ds_ctl7 |= AR_TXC7_2040_0123;
+// #endif
 
-	/* Set Tx power for series 1 - 3 */
-	ds->ds_ctl9 = SM(AR_TXC9_XMIT_POWER1, txpower);
-	ds->ds_ctl10 = SM(AR_TXC10_XMIT_POWER2, txpower);
-	ds->ds_ctl11 = SM(AR_TXC11_XMIT_POWER3, txpower);
+// 	/* Set Tx power for series 1 - 3 */
+// 	ds->ds_ctl9 = SM(AR_TXC9_XMIT_POWER1, txpower);
+// 	ds->ds_ctl10 = SM(AR_TXC10_XMIT_POWER2, txpower);
+// 	ds->ds_ctl11 = SM(AR_TXC11_XMIT_POWER3, txpower);
 
-	if (ds->ds_ctl0 & (AR_TXC0_RTS_ENABLE | AR_TXC0_CTS_ENABLE)) {
-		uint8_t protridx, hwrate;
-		uint16_t dur = 0;
+// 	if (ds->ds_ctl0 & (AR_TXC0_RTS_ENABLE | AR_TXC0_CTS_ENABLE)) {
+// 		uint8_t protridx, hwrate;
+// 		uint16_t dur = 0;
 
-		/* Use the same protection mode for all tries. */
-		if (ds->ds_ctl0 & AR_TXC0_RTS_ENABLE) {
-			ds->ds_ctl4 |= AR_TXC4_RTSCTS_QUAL01;
-			ds->ds_ctl5 |= AR_TXC5_RTSCTS_QUAL23;
-		}
-		/* Select protection rate (suboptimal but ok). */
-		protridx = IEEE80211_IS_CHAN_5GHZ(ni->ni_chan) ?
-		    ATHN_RIDX_OFDM6 : ATHN_RIDX_CCK2;
-		if (ds->ds_ctl0 & AR_TXC0_RTS_ENABLE) {
-			/* Account for CTS duration. */
-			dur += athn_txtime(sc, IEEE80211_ACK_LEN,
-			    athn_rates[protridx].rspridx, ic->ic_flags);
-		}
-		dur += athn_txtime(sc, totlen, ridx[0], ic->ic_flags);
-		if (!(ds->ds_ctl1 & AR_TXC1_NO_ACK)) {
-			/* Account for ACK duration. */
-			dur += athn_txtime(sc, IEEE80211_ACK_LEN,
-			    athn_rates[ridx[0]].rspridx, ic->ic_flags);
-		}
-		/* Write protection frame duration and rate. */
-		ds->ds_ctl2 |= SM(AR_TXC2_BURST_DUR, dur);
-		hwrate = athn_rates[protridx].hwrate;
-		if (protridx == ATHN_RIDX_CCK2 &&
-		    (ic->ic_flags & IEEE80211_F_SHPREAMBLE))
-			hwrate |= 0x04;
-		ds->ds_ctl7 |= SM(AR_TXC7_RTSCTS_RATE, hwrate);
-	}
+// 		/* Use the same protection mode for all tries. */
+// 		if (ds->ds_ctl0 & AR_TXC0_RTS_ENABLE) {
+// 			ds->ds_ctl4 |= AR_TXC4_RTSCTS_QUAL01;
+// 			ds->ds_ctl5 |= AR_TXC5_RTSCTS_QUAL23;
+// 		}
+// 		/* Select protection rate (suboptimal but ok). */
+// 		protridx = IEEE80211_IS_CHAN_5GHZ(ni->ni_chan) ?
+// 		    ATHN_RIDX_OFDM6 : ATHN_RIDX_CCK2;
+// 		if (ds->ds_ctl0 & AR_TXC0_RTS_ENABLE) {
+// 			/* Account for CTS duration. */
+// 			dur += athn_txtime(sc, IEEE80211_ACK_LEN,
+// 			    athn_rates[protridx].rspridx, ic->ic_flags);
+// 		}
+// 		dur += athn_txtime(sc, totlen, ridx[0], ic->ic_flags);
+// 		if (!(ds->ds_ctl1 & AR_TXC1_NO_ACK)) {
+// 			/* Account for ACK duration. */
+// 			dur += athn_txtime(sc, IEEE80211_ACK_LEN,
+// 			    athn_rates[ridx[0]].rspridx, ic->ic_flags);
+// 		}
+// 		/* Write protection frame duration and rate. */
+// 		ds->ds_ctl2 |= SM(AR_TXC2_BURST_DUR, dur);
+// 		hwrate = athn_rates[protridx].hwrate;
+// 		if (protridx == ATHN_RIDX_CCK2 &&
+// 		    (ic->ic_flags & IEEE80211_F_SHPREAMBLE))
+// 			hwrate |= 0x04;
+// 		ds->ds_ctl7 |= SM(AR_TXC7_RTSCTS_RATE, hwrate);
+// 	}
 
-	/* Finalize first Tx descriptor and fill others (if any). */
-	ds->ds_ctl0 |= SM(AR_TXC0_FRAME_LEN, totlen);
+// 	/* Finalize first Tx descriptor and fill others (if any). */
+// 	ds->ds_ctl0 |= SM(AR_TXC0_FRAME_LEN, totlen);
 
-	for (i = 0; i < bf->bf_map->dm_nsegs; i++, ds++) {
-		ds->ds_data = bf->bf_map->dm_segs[i].ds_addr;
-		ds->ds_ctl1 |= SM(AR_TXC1_BUF_LEN,
-		    bf->bf_map->dm_segs[i].ds_len);
+// 	for (i = 0; i < bf->bf_map->dm_nsegs; i++, ds++) {
+// 		ds->ds_data = bf->bf_map->dm_segs[i].ds_addr;
+// 		ds->ds_ctl1 |= SM(AR_TXC1_BUF_LEN,
+// 		    bf->bf_map->dm_segs[i].ds_len);
 
-		if (i != bf->bf_map->dm_nsegs - 1)
-			ds->ds_ctl1 |= AR_TXC1_MORE;
-		ds->ds_link = 0;
+// 		if (i != bf->bf_map->dm_nsegs - 1)
+// 			ds->ds_ctl1 |= AR_TXC1_MORE;
+// 		ds->ds_link = 0;
 
-		/* Chain Tx descriptor. */
-		if (i != 0)
-			lastds->ds_link = bf->bf_daddr + i * sizeof(*ds);
-		lastds = ds;
-	}
-	bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, bf->bf_map->dm_mapsize,
-	    BUS_DMASYNC_PREWRITE);
+// 		/* Chain Tx descriptor. */
+// 		if (i != 0)
+// 			lastds->ds_link = bf->bf_daddr + i * sizeof(*ds);
+// 		lastds = ds;
+// 	}
+// 	bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0, bf->bf_map->dm_mapsize,
+// 	    BUS_DMASYNC_PREWRITE);
 
-	if (!SIMPLEQ_EMPTY(&txq->head))
-		((struct ar_tx_desc *)txq->lastds)->ds_link = bf->bf_daddr;
-	else
-		AR_WRITE(sc, AR_QTXDP(qid), bf->bf_daddr);
-	txq->lastds = lastds;
-	SIMPLEQ_REMOVE_HEAD(&sc->txbufs, bf_list);
-	SIMPLEQ_INSERT_TAIL(&txq->head, bf, bf_list);
+// 	if (!SIMPLEQ_EMPTY(&txq->head))
+// 		((struct ar_tx_desc *)txq->lastds)->ds_link = bf->bf_daddr;
+// 	else
+// 		AR_WRITE(sc, AR_QTXDP(qid), bf->bf_daddr);
+// 	txq->lastds = lastds;
+// 	SIMPLEQ_REMOVE_HEAD(&sc->txbufs, bf_list);
+// 	SIMPLEQ_INSERT_TAIL(&txq->head, bf, bf_list);
 
-	ds = bf->bf_descs;
-	DPRINTFN(6, ("Tx qid=%d nsegs=%d ctl0=0x%x ctl1=0x%x ctl3=0x%x\n",
-	    qid, bf->bf_map->dm_nsegs, ds->ds_ctl0, ds->ds_ctl1, ds->ds_ctl3));
+// 	ds = bf->bf_descs;
+// 	DPRINTFN(6, ("Tx qid=%d nsegs=%d ctl0=0x%x ctl1=0x%x ctl3=0x%x\n",
+// 	    qid, bf->bf_map->dm_nsegs, ds->ds_ctl0, ds->ds_ctl1, ds->ds_ctl3));
 
-	/* Kick Tx. */
-	AR_WRITE(sc, AR_Q_TXE, 1 << qid);
-	AR_WRITE_BARRIER(sc);
-	return (0);
-}
+// 	/* Kick Tx. */
+// 	AR_WRITE(sc, AR_Q_TXE, 1 << qid);
+// 	AR_WRITE_BARRIER(sc);
+// 	return (0);
+// }
 
 void
 ar5008_set_rf_mode(struct athn_softc *sc, struct ieee80211_channel *c)
@@ -2513,6 +2545,131 @@ ar5008_set_viterbi_mask(struct athn_softc *sc, int bin)
 }
 
 void
+ar5416_rw_rfbits(uint32_t *buf, int col, int off, uint32_t val, int nbits)
+{
+	int idx, bit;
+
+	KASSERT(off >= 1 && col < 4 && nbits <= 32, "ar5416_rw_rfbits");
+
+	off--;	/* Starts at 1. */
+	while (nbits-- > 0) {
+		idx = off / 8;
+		bit = off % 8;
+		buf[idx] &= ~(1 << (bit + col * 8));
+		buf[idx] |= ((val >> nbits) & 1) << (bit + col * 8);
+		off++;
+	}
+}
+
+void
+ar5416_rw_bank6tpc(struct athn_softc *sc, struct ieee80211_channel *c,
+    uint32_t *rwbank6tpc)
+{
+	const struct ar5416_eeprom *eep = sc->eep;
+	const struct ar5416_modal_eep_header *modal;
+
+	if (IEEE80211_IS_CHAN_5GHZ(c)) {
+		modal = &eep->modalHeader[0];
+		/* 5GHz db in column 0, bits [200-202]. */
+		ar5416_rw_rfbits(rwbank6tpc, 0, 200, modal->db, 3);
+		/* 5GHz ob in column 0, bits [203-205]. */
+		ar5416_rw_rfbits(rwbank6tpc, 0, 203, modal->ob, 3);
+	} else {
+		modal = &eep->modalHeader[1];
+		/* 2GHz db in column 0, bits [194-196]. */
+		ar5416_rw_rfbits(rwbank6tpc, 0, 194, modal->db, 3);
+		/* 2GHz ob in column 0, bits [197-199]. */
+		ar5416_rw_rfbits(rwbank6tpc, 0, 197, modal->ob, 3);
+	}
+}
+
+void
+ar5416_reset_bb_gain(struct athn_softc *sc, struct ieee80211_channel *c)
+{
+	const uint32_t *pvals;
+	int i;
+
+	if (IEEE80211_IS_CHAN_2GHZ(c))
+		pvals = ar5416_bb_rfgain_vals_2g;
+	else
+		pvals = ar5416_bb_rfgain_vals_5g;
+	for (i = 0; i < 64; i++)
+		AR_WRITE(sc, AR_PHY_BB_RFGAIN(i), pvals[i]);
+}
+
+void
+ar5416_rf_reset(struct athn_softc *sc, struct ieee80211_channel *c)
+{
+	const uint32_t *bank6tpc;
+	int i;
+
+	/* Bank 0. */
+	AR_WRITE(sc, 0x98b0, 0x1e5795e5);
+	AR_WRITE(sc, 0x98e0, 0x02008020);
+
+	/* Bank 1. */
+	AR_WRITE(sc, 0x98b0, 0x02108421);
+	AR_WRITE(sc, 0x98ec, 0x00000008);
+
+	/* Bank 2. */
+	AR_WRITE(sc, 0x98b0, 0x0e73ff17);
+	AR_WRITE(sc, 0x98e0, 0x00000420);
+
+	/* Bank 3. */
+	if (IEEE80211_IS_CHAN_5GHZ(c))
+		AR_WRITE(sc, 0x98f0, 0x01400018);
+	else
+		AR_WRITE(sc, 0x98f0, 0x01c00018);
+
+	/* Select the Bank 6 TPC values to use. */
+	if (AR_SREV_9160_10_OR_LATER(sc))
+		bank6tpc = ar9160_bank6tpc_vals;
+	else
+		bank6tpc = ar5416_bank6tpc_vals;
+	if (sc->eep_rev >= AR_EEP_MINOR_VER_2) {
+		uint32_t *rwbank6tpc = sc->rwbuf;
+
+		/* Copy values from .rodata to writable buffer. */
+		memcpy(rwbank6tpc, bank6tpc, 32 * sizeof(uint32_t));
+		ar5416_rw_bank6tpc(sc, c, rwbank6tpc);
+		bank6tpc = rwbank6tpc;
+	}
+	/* Bank 6 TPC. */
+	for (i = 0; i < 32; i++)
+		AR_WRITE(sc, 0x989c, bank6tpc[i]);
+	if (IEEE80211_IS_CHAN_5GHZ(c))
+		AR_WRITE(sc, 0x98d0, 0x0000000f);
+	else
+		AR_WRITE(sc, 0x98d0, 0x0010000f);
+
+	/* Bank 7. */
+	AR_WRITE(sc, 0x989c, 0x00000500);
+	AR_WRITE(sc, 0x989c, 0x00000800);
+	AR_WRITE(sc, 0x98cc, 0x0000000e);
+}
+
+void
+ar5416_reset_addac(struct athn_softc *sc, struct ieee80211_channel *c)
+{
+	const struct athn_addac *addac = sc->addac;
+	const uint32_t *pvals;
+	int i;
+
+	// if (AR_SREV_9160(sc) && sc->eep_rev >= AR_EEP_MINOR_VER_7) {
+	// 	uint32_t *rwaddac = sc->rwbuf;
+
+	// 	/* Copy values from .rodata to writable buffer. */
+	// 	memcpy(rwaddac, addac->vals, addac->nvals * sizeof(uint32_t));
+	// 	ar9160_rw_addac(sc, c, rwaddac);
+	// 	pvals = rwaddac;
+	// } else
+		pvals = addac->vals;
+	for (i = 0; i < addac->nvals; i++)
+		AR_WRITE(sc, 0x989c, pvals[i]);
+	AR_WRITE(sc, 0x98cc, 0);	/* Finalize. */
+}
+
+void
 ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
@@ -2637,7 +2794,7 @@ ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
 	ar5008_init_chains(sc);
 
 	if (sc->flags & ATHN_FLAG_OLPC) {
-		extern int ticks;
+		// extern int ticks;
 		sc->olpc_ticks = ticks;
 		ops->olpc_init(sc);
 	}
