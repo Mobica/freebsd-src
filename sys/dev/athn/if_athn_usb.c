@@ -3097,6 +3097,186 @@ athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni, st
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_frame *wh;
 	struct ieee80211_key *k = NULL;
+	struct athn_usb_tx_data *data;
+	struct ar_stream_hdr *hdr;
+	struct ar_htc_frame_hdr *htc;
+	struct ar_tx_frame *txf;
+	struct ar_tx_mgmt *txm;
+	uint8_t *frm;
+	uint16_t qos;
+	uint8_t qid, tid = 0;
+	int hasqos, xferlen, error;
+
+	wh = mtod(m, struct ieee80211_frame *);
+	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
+		k = ieee80211_get_txkey(ic, wh, ni);
+		if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
+			u_int hdrlen = ieee80211_get_hdrlen(wh);
+			if (ar5008_ccmp_encap(m, hdrlen, k) != 0)
+				return (ENOBUFS);
+		} else {
+			if ((m = ieee80211_encrypt(ic, m, k)) == NULL)
+				return (ENOBUFS);
+			k = NULL; /* skip hardware crypto further below */
+		}
+		wh = mtod(m, struct ieee80211_frame *);
+	}
+	if ((hasqos = ieee80211_has_qos(wh))) {
+		qos = ieee80211_get_qos(wh);
+		tid = qos & IEEE80211_QOS_TID;
+		qid = ieee80211_up_to_ac(ic, tid);
+	} else
+		qid = EDCA_AC_BE;
+
+	/* Grab a Tx buffer from our free list. */
+	data = TAILQ_FIRST(&usc->tx_free_list);
+	TAILQ_REMOVE(&usc->tx_free_list, data, next);
+
+#if NBPFILTER > 0
+	/* XXX Change radiotap Tx header for USB (no txrate). */
+	if (__predict_false(sc->sc_drvbpf != NULL)) {
+		struct athn_tx_radiotap_header *tap = &sc->sc_txtap;
+		struct mbuf mb;
+
+		tap->wt_flags = 0;
+		tap->wt_chan_freq = htole16(ic->ic_bss->ni_chan->ic_freq);
+		tap->wt_chan_flags = htole16(ic->ic_bss->ni_chan->ic_flags);
+		mb.m_data = (caddr_t)tap;
+		mb.m_len = sc->sc_txtap_len;
+		mb.m_next = m;
+		mb.m_nextpkt = NULL;
+		mb.m_type = 0;
+		mb.m_flags = 0;
+		bpf_mtap(sc->sc_drvbpf, &mb, BPF_DIRECTION_OUT);
+	}
+#endif
+
+	/* NB: We don't take advantage of USB Tx stream mode for now. */
+	hdr = (struct ar_stream_hdr *)data->buf;
+	hdr->tag = htole16(AR_USB_TX_STREAM_TAG);
+
+	htc = (struct ar_htc_frame_hdr *)&hdr[1];
+	memset(htc, 0, sizeof(*htc));
+	if ((wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) ==
+	    IEEE80211_FC0_TYPE_DATA) {
+		htc->endpoint_id = usc->ep_data[qid];
+
+		txf = (struct ar_tx_frame *)&htc[1];
+		memset(txf, 0, sizeof(*txf));
+		txf->data_type = AR_HTC_NORMAL;
+		txf->node_idx = an->sta_index;
+		txf->vif_idx = 0;
+		txf->tid = tid;
+		if (m->m_pkthdr.len + IEEE80211_CRC_LEN > ic->ic_rtsthreshold)
+			txf->flags |= htobe32(AR_HTC_TX_RTSCTS);
+		else if (ic->ic_flags & IEEE80211_F_USEPROT) {
+			if (ic->ic_protmode == IEEE80211_PROT_CTSONLY)
+				txf->flags |= htobe32(AR_HTC_TX_CTSONLY);
+			else if (ic->ic_protmode == IEEE80211_PROT_RTSCTS)
+				txf->flags |= htobe32(AR_HTC_TX_RTSCTS);
+		}
+
+		if (k != NULL) {
+			/* Map 802.11 cipher to hardware encryption type. */
+			if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
+				txf->key_type = AR_ENCR_TYPE_AES;
+			} else
+				panic("unsupported cipher");
+			/*
+			 * NB: The key cache entry index is stored in the key
+			 * private field when the key is installed.
+			 */
+			txf->key_idx = (uintptr_t)k->k_priv;
+		} else
+			txf->key_idx = 0xff;
+
+		txf->cookie = an->sta_index;
+		frm = (uint8_t *)&txf[1];
+	} else {
+		htc->endpoint_id = usc->ep_mgmt;
+
+		txm = (struct ar_tx_mgmt *)&htc[1];
+		memset(txm, 0, sizeof(*txm));
+		txm->node_idx = an->sta_index;
+		txm->vif_idx = 0;
+		txm->key_idx = 0xff;
+		txm->cookie = an->sta_index;
+		frm = (uint8_t *)&txm[1];
+	}
+	/* Copy payload. */
+	m_copydata(m, 0, m->m_pkthdr.len, frm);
+	frm += m->m_pkthdr.len;
+	m_freem(m);
+
+	/* Finalize headers. */
+	htc->payload_len = htobe16(frm - (uint8_t *)&htc[1]);
+	hdr->len = htole16(frm - (uint8_t *)&hdr[1]);
+	xferlen = frm - data->buf;
+
+	usbd_setup_xfer(data->xfer, usc->tx_data_pipe, data, data->buf,
+	    xferlen, USBD_FORCE_SHORT_XFER | USBD_NO_COPY, ATHN_USB_TX_TIMEOUT,
+	    athn_usb_txeof);
+	error = usbd_transfer(data->xfer);
+	if (__predict_false(error != USBD_IN_PROGRESS && error != 0)) {
+		/* Put this Tx buffer back to our free list. */
+		TAILQ_INSERT_TAIL(&usc->tx_free_list, data, next);
+		return (error);
+	}
+	ieee80211_release_node(ic, ni);
+	return (0);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+	struct athn_node *an = (struct athn_node *)ni;
+	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211_frame *wh;
+	struct ieee80211_key *k = NULL;
 	
 	struct ar_stream_hdr *hdr;
 	struct ar_htc_frame_hdr *htc;
