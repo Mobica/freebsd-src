@@ -415,6 +415,7 @@ struct athn_usb_rx_data {
 	char			*buf;
 };
 
+// TODO: to be removed. Replaced by athn_usb_data
 #if OpenBSD_ONLY
 struct athn_usb_tx_data {
 	struct athn_usb_softc		*sc;
