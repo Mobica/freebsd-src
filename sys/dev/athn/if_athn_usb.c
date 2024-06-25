@@ -112,7 +112,6 @@ static device_detach_t	athn_usb_detach;
 static void
 ar9271_load_ani(struct athn_softc *sc)
 {
-// #if NATHN_USB > 0
 	/* Write ANI registers. */
 	AR_WRITE(sc, AR_PHY_DESIRED_SZ, 0x6d4000e2);
 	AR_WRITE(sc, AR_PHY_AGC_CTL1,   0x3139605e);
@@ -123,7 +122,6 @@ ar9271_load_ani(struct athn_softc *sc)
 	AR_WRITE(sc, AR_PHY_TIMING5,    0xd00a8007);
 	AR_WRITE(sc, AR_PHY_SFCORR_EXT, 0x05eea6d4);
 	AR_WRITE_BARRIER(sc);
-// #endif	/* NATHN_USB */
 }
 
 void		athn_usb_attachhook(device_t self);
@@ -3094,99 +3092,70 @@ athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni, st
 {
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	struct athn_node *an = (struct athn_node *)ni;
+	struct ieee80211vap *vap = ni->ni_vap;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_frame *wh;
 	struct ieee80211_key *k = NULL;
-	
 	struct ar_stream_hdr *hdr;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_tx_frame *txf;
 	struct ar_tx_mgmt *txm;
-	caddr_t frm;
+	uint8_t *frm;
 	uint16_t qos;
 	uint8_t qid, tid = 0;
 	int hasqos, xferlen, error;
 
 	wh = mtod(m, struct ieee80211_frame *);
-
-	//TODO
-	// wh = mtod(m, struct ieee80211_frame *);
-	// if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
-	// 	k = ieee80211_crypto_encap(ni, m);
-	// 	if (k == NULL) {
-	// 		device_printf(sc->sc_dev,
-	// 		    "%s: m=%p: ieee80211_crypto_encap returns NULL\n",
-	// 		    __func__,
-	// 		    m);
-	// 		return (ENOBUFS);
-	// 	}
-	// 	wh = mtod(m, struct ieee80211_frame *);
-	// }
-
-	// xferlen = sizeof (*head) + m->m_pkthdr.len;
-	// if (xferlen > ATHN_USB_TXBUFSZ) {
-	// 	device_printf(sc->sc_dev,
-	// 	    "%s: 802.11 TX frame is %d bytes, max %d bytes\n",
-	// 	    __func__,
-	// 	    xferlen,
-	// 	    ATHN_USB_TXBUFSZ);
-
-	// hasqos = !! IEEE80211_QOS_HAS_SEQ(wh);
-
-	// if (hasqos) {
-	// 	uint8_t tid;
-	// 	qos = ((const struct ieee80211_qosframe *)wh)->i_qos[0];
-	// 	tid = qos & IEEE80211_QOS_TID;
-	// 	qid = TID_TO_WME_AC(tid);
-	// } else {
-	// 	qos = 0;
-	// 	qid = WME_AC_BE;
-	// }
-
-	// type = wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK;
-	// ismcast = IEEE80211_IS_MULTICAST(wh->i_addr1);
-		
-
-	// 	/* Pickup a rate index. */
-	// if (params != NULL)
-	// 	rate = otus_rate_to_hw_rate(sc, params->ibp_rate0);
-	// else if (!!(m->m_flags & M_EAPOL) || type != IEEE80211_FC0_TYPE_DATA)
-	// 	rate = otus_rate_to_hw_rate(sc, tp->mgmtrate);
-	// else if (ismcast)
-	// 	rate = otus_rate_to_hw_rate(sc, tp->mcastrate);
-	// else if (tp->ucastrate != IEEE80211_FIXED_RATE_NONE)
-	// 	rate = otus_rate_to_hw_rate(sc, tp->ucastrate);
-	// else {
-	// 	(void) ieee80211_ratectl_rate(ni, NULL, 0);
-	// 	rate = otus_rate_to_hw_rate(sc, ni->ni_txrate);
-	// }
-	
-#if OpenBSD_IEEE80211_API
 	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
-		k = ieee80211_get_txkey(ic, wh, ni);
-		if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
+		// TODO: consider 'ieee80211_crypto_get_txkey' instead of 'ieee80211_crypto_encap'
+		//	 for proper if-else
+		k = ieee80211_crypto_encap(ni, m);
+		if (k == NULL) {
+			device_printf(sc->sc_dev,
+			    "%s: m=%p: ieee80211_crypto_encap returns NULL\n",
+			    __func__,
+			    m);
+			return (ENOBUFS);
+		}
+// TODO: encryption - see the 'cipher' variable in 'rtwn_tx_data' function and 'rtwn_get_cipher'
+#if OpenBSD_ONLY
+		else if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
 			u_int hdrlen = ieee80211_get_hdrlen(wh);
 			if (ar5008_ccmp_encap(m, hdrlen, k) != 0)
 				return (ENOBUFS);
-		} else {
-			if ((m = ieee80211_encrypt(ic, m, k)) == NULL)
-				return (ENOBUFS);
-			k = NULL; /* skip hardware crypto further below */
 		}
+#else
+		else {
+			device_printf(sc->sc_dev,
+			    "%s:CIPHER_CCMP not ported\n", __func__ );
+			return (ENOTSUP);
+		}
+#endif
 		wh = mtod(m, struct ieee80211_frame *);
 	}
-	if ((hasqos = ieee80211_has_qos(wh))) {
-		qos = ieee80211_get_qos(wh);
+
+	hasqos = !! IEEE80211_QOS_HAS_SEQ(wh);
+
+	if (hasqos) {
+		uint8_t tid;
+		qos = ((const struct ieee80211_qosframe *)wh)->i_qos[0];
 		tid = qos & IEEE80211_QOS_TID;
-		qid = ieee80211_up_to_ac(ic, tid);
-	} else
-		qid = ATHN_QID_AC_BE;
-#endif
+		qid = TID_TO_WME_AC(tid);
+	} else {
+		qos = 0;
+		qid = WME_AC_BE;
+	}
+
+// OpenBSD code
+#if 0
 	/* Grab a Tx buffer from our free list. */
-#if OpenBSD_ONLY
 	data = TAILQ_FIRST(&usc->tx_free_list);
 	TAILQ_REMOVE(&usc->tx_free_list, data, next);
+// Based on otus
+#else
+	// Not needed, data passed as a function parameter with athn_getbuf
 #endif
+
 
 #if NBPFILTER > 0
 	/* XXX Change radiotap Tx header for USB (no txrate). */
@@ -3223,8 +3192,7 @@ athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni, st
 		txf->node_idx = an->sta_index;
 		txf->vif_idx = 0;
 		txf->tid = tid;
-#if OpenBSD_IEEE80211_API
-		if (m->m_pkthdr.len + IEEE80211_CRC_LEN > ic->ic_rtsthreshold)
+		if (m->m_pkthdr.len + IEEE80211_CRC_LEN >= vap->iv_rtsthreshold)
 			txf->flags |= htobe32(AR_HTC_TX_RTSCTS);
 		else if (ic->ic_flags & IEEE80211_F_USEPROT) {
 			if (ic->ic_protmode == IEEE80211_PROT_CTSONLY)
@@ -3234,21 +3202,28 @@ athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni, st
 		}
 
 		if (k != NULL) {
+#if OpenBSD_ONLY
 			/* Map 802.11 cipher to hardware encryption type. */
 			if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
 				txf->key_type = AR_ENCR_TYPE_AES;
 			} else
 				panic("unsupported cipher");
+
 			/*
 			 * NB: The key cache entry index is stored in the key
 			 * private field when the key is installed.
 			 */
 			txf->key_idx = (uintptr_t)k->k_priv;
+#else
+			device_printf(sc->sc_dev,
+			    "%s:CIPHER_CCMP not ported\n", __func__ );
+			txf->key_idx = 0xff;
+			#endif
 		} else
 			txf->key_idx = 0xff;
-#endif
+
 		txf->cookie = an->sta_index;
-		frm = (caddr_t)&txf[1];
+		frm = (uint8_t *)&txf[1];
 	} else {
 		htc->endpoint_id = usc->ep_mgmt;
 
@@ -3258,28 +3233,31 @@ athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni, st
 		txm->vif_idx = 0;
 		txm->key_idx = 0xff;
 		txm->cookie = an->sta_index;
-		frm = (caddr_t)&txm[1];
+		frm = (uint8_t *)&txm[1];
 	}
 	/* Copy payload. */
-	m_copydata(m, 0, m->m_pkthdr.len, frm);
+	m_copydata(m, 0, m->m_pkthdr.len, (caddr_t)frm);
 	frm += m->m_pkthdr.len;
-	m_freem(m);
+	// TODO: In otus OpenBSD this line is present but isn't present in FreeBSD otus
+	// m_freem(m);
 
 	/* Finalize headers. */
-	htc->payload_len = htobe16(frm - (caddr_t)&htc[1]);
-	hdr->len = htole16(frm - (caddr_t)&hdr[1]);
-	xferlen = frm - data->buf;
+	htc->payload_len = htobe16(frm - (uint8_t *)&htc[1]);
+	hdr->len = htole16(frm - (uint8_t *)&hdr[1]);
+	xferlen = frm - (uint8_t *)data->buf;
 
+	// TODO: 3 lines below copied from otus FreeBSD
 	data->buflen = xferlen;
-	data->m = m;
 	data->ni = ni;
+	data->m = m;
+
+	device_printf(sc->sc_dev,
+			"%s:BULK transfer start of data=%p; ni_txrate=%d\n",
+			__func__, data, (int) ni->ni_txrate);
 
 	STAILQ_INSERT_TAIL(&usc->sc_tx_pending[ATHN_BULK_TX], data, next);
 	usbd_transfer_start(usc->sc_xfer[ATHN_BULK_TX]);
 
-#if OpenBSD_IEEE80211_API
-	ieee80211_release_node(ic, ni);
-#endif
 	return (0);
 }
 
