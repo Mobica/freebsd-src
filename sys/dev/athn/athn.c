@@ -109,8 +109,8 @@ void		athn_tx_reclaim(struct athn_softc *, int);
 int		athn_tx_pending(struct athn_softc *, int);
 void		athn_stop_tx_dma(struct athn_softc *, int);
 int		athn_txtime(struct athn_softc *, int, int, u_int);
-void		athn_set_sta_timers(struct athn_softc *);
-void		athn_set_hostap_timers(struct athn_softc *);
+void		athn_set_sta_timers(struct athn_softc *, struct ieee80211_node *);
+void		athn_set_hostap_timers(struct athn_softc *, struct ieee80211_node *);
 void		athn_set_opmode(struct athn_softc *);
 void		athn_set_bss(struct athn_softc *, struct ieee80211_node *);
 void		athn_enable_interrupts(struct athn_softc *);
@@ -2360,7 +2360,7 @@ athn_init_tx_queues(struct athn_softc *sc)
 }
 
 void
-athn_set_sta_timers(struct athn_softc *sc)
+athn_set_sta_timers(struct athn_softc *sc, struct ieee80211_node *ni)
 {
 	__attribute__((unused)) struct ieee80211com *ic = &sc->sc_ic;
 	uint32_t tsfhi, tsflo, tsftu, reg;
@@ -2372,8 +2372,8 @@ athn_set_sta_timers(struct athn_softc *sc)
 	tsftu = AR_TSF_TO_TU(tsfhi, tsflo) + AR_FUDGE;
 
 	/* Beacon interval in TU. */
-	// TODO no member named 'ic_bss' in 'struct ieee80211com'
-	// intval = ic->ic_bss->ni_intval;
+	intval = ni->ni_intval;
+	device_printf(sc->sc_dev, "%s: intval =%u\n", __func__, intval);
 
 	next_tbtt = roundup(tsftu, intval);
 #ifdef notyet
@@ -2430,14 +2430,15 @@ athn_set_sta_timers(struct athn_softc *sc)
 
 #ifndef IEEE80211_STA_ONLY
 void
-athn_set_hostap_timers(struct athn_softc *sc)
+athn_set_hostap_timers(struct athn_softc *sc, struct ieee80211_node *ni)
 {
 	__attribute__((unused)) struct ieee80211com *ic = &sc->sc_ic;
 	uint32_t intval = 0, next_tbtt;
 
 	/* Beacon interval in TU. */
-	// TODO no member named 'ic_bss' in 'struct ieee80211com'
-	// intval = ic->ic_bss->ni_intval;
+	intval = ni->ni_intval;
+	device_printf(sc->sc_dev, "%s: intval =%u\n", __func__, intval);
+
 	next_tbtt = intval;
 
 	AR_WRITE(sc, AR_NEXT_TBTT_TIMER, next_tbtt * IEEE80211_DUR_TU);
