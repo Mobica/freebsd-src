@@ -57,6 +57,7 @@
 int athn_debug = 0;
 #endif
 
+static bool 	athn_is_channel_2ghz(struct athn_softc *);
 void		athn_radiotap_attach(struct athn_softc *);
 void		athn_get_chanlist(struct athn_softc *);
 const char *	athn_get_mac_name(struct athn_softc *);
@@ -123,8 +124,6 @@ void		athn_newassoc(struct ieee80211com *, struct ieee80211_node *,
 		    int);
 int		athn_media_change(struct ifnet *);
 void		athn_next_scan(void *);
-int		athn_newstate(struct ieee80211com *, enum ieee80211_state,
-		    int);
 void		athn_updateedca(struct ieee80211com *);
 int		athn_clock_rate(struct athn_softc *);
 int		athn_chan_sifs(struct ieee80211_channel *);
@@ -235,6 +234,21 @@ athn_config_ht(struct athn_softc *sc)
 #define	AR5416_OPFLAGS_11A		0x01
 #define	AR5416_OPFLAGS_11G		0x02
 #endif
+
+
+static bool 
+athn_is_channel_2ghz(struct athn_softc *sc)
+{
+	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211_channel *c = ic->ic_curchan;
+	bool chan2ghz = IEEE80211_IS_CHAN_2GHZ(c);
+
+	if (!chan2ghz && (c != IEEE80211_CHAN_ANYC)){
+		device_printf(sc->sc_dev, "%s: channel: %u not 2 ghz!\n", __func__, c->ic_ieee);
+	}
+
+	return chan2ghz;
+}
 
 // Naming convention from otus.
 // Function similar to athn_get_chanlist but with other parametrs so it can be used as a callback
@@ -1599,14 +1613,13 @@ athn_cap_noisefloor(struct athn_softc *sc, int nf)
 	if (nf == 0 || nf == -1) /* invalid measurement */
 		return AR_DEFAULT_NOISE_FLOOR;
 
-	// TODO no member named 'ic_bss' in 'struct ieee80211com'
-	// if (IEEE80211_IS_CHAN_2GHZ(sc->sc_ic.ic_bss->ni_chan)) {
-	// 	min = sc->cca_min_2g;
-	// 	max = sc->cca_max_2g;
-	// } else {
-	// 	min = sc->cca_min_5g;
-	// 	max = sc->cca_max_5g;
-	// }
+	if (athn_is_channel_2ghz(sc)) {
+	 	min = sc->cca_min_2g;
+	 	max = sc->cca_max_2g;
+	} else {
+		min = sc->cca_min_5g;
+	 	max = sc->cca_max_5g;
+	}
 
 	if (nf < min)
 		return min;
@@ -1857,22 +1870,21 @@ athn_ani_ofdm_err_trigger(struct athn_softc *sc)
 			ani->firstep_level++;
 			ops->set_firstep_level(sc, ani->firstep_level);
 		}
-	} // TODO no member named 'ic_bss' in 'struct ieee80211com'
-	// } else if (IEEE80211_IS_CHAN_2GHZ(sc->sc_ic.ic_bss->ni_chan)) {
-	// 	/*
-	// 	 * Beacon RSSI is low, if in b/g mode, turn off OFDM weak
-	// 	 * signal detection and zero first step level to maximize
-	// 	 * CCK sensitivity.
-	// 	 */
-	// 	if (ani->ofdm_weak_signal) {
-	// 		ani->ofdm_weak_signal = 0;
-	// 		ops->disable_ofdm_weak_signal(sc);
-	// 	}
-	// 	if (ani->firstep_level > 0) {
-	// 		ani->firstep_level = 0;
-	// 		ops->set_firstep_level(sc, 0);
-	// 	}
-	// }
+	} else if (athn_is_channel_2ghz(sc)) {
+	 	/*
+	 	 * Beacon RSSI is low, if in b/g mode, turn off OFDM weak
+	 	 * signal detection and zero first step level to maximize
+	 	 * CCK sensitivity.
+	 	 */
+	 	if (ani->ofdm_weak_signal) {
+	 		ani->ofdm_weak_signal = 0;
+	 		ops->disable_ofdm_weak_signal(sc);
+	 	}
+	 	if (ani->firstep_level > 0) {
+	 		ani->firstep_level = 0;
+	 		ops->set_firstep_level(sc, 0);
+	 	}
+	 }	
 }
 
 void
@@ -1908,17 +1920,16 @@ athn_ani_cck_err_trigger(struct athn_softc *sc)
 			ani->firstep_level++;
 			ops->set_firstep_level(sc, ani->firstep_level);
 		}
-	} // TODO no member named 'ic_bss' in 'struct ieee80211com'
-	// } else if (IEEE80211_IS_CHAN_2GHZ(sc->sc_ic.ic_bss->ni_chan)) {
-	// 	/*
-	// 	 * Beacon RSSI is low, zero first step level to maximize
-	// 	 * CCK sensitivity.
-	// 	 */
-	// 	if (ani->firstep_level > 0) {
-	// 		ani->firstep_level = 0;
-	// 		ops->set_firstep_level(sc, 0);
-	// 	}
-	// }
+	} else if (athn_is_channel_2ghz(sc)) {
+	 	/*
+	 	 * Beacon RSSI is low, zero first step level to maximize
+	 	 * CCK sensitivity.
+	 	 */
+	 	if (ani->firstep_level > 0) {
+	 		ani->firstep_level = 0;
+	 		ops->set_firstep_level(sc, 0);
+	 	}
+	 }
 }
 
 void
@@ -2277,9 +2288,8 @@ athn_txtime(struct athn_softc *sc, int len, int ridx, u_int flags)
 	 	/* Assumes a 20MHz channel, HT-mixed frame format, no STBC. */
 		txtime = 8 + 8 + 4 + 4 + 4 * 4 + 8 /* HT PLCP */
 		    + 4 * ((8 * len + 16 + 6) / (athn_rates[ridx].rate * 2));
-		// TODO no member named 'ic_bss' in 'struct ieee80211com'
-		// if (IEEE80211_IS_CHAN_2GHZ(ic->ic_bss->ni_chan))
-		// 	txtime += 6; /* aSignalExtension */
+		    if (athn_is_channel_2ghz(sc))
+			txtime += 6; /* aSignalExtension */		
 	} else if (athn_rates[ridx].phy == IEEE80211_T_OFDM) {
 		txtime = divround(8 + 4 * len + 3, athn_rates[ridx].rate);
 		/* SIFS is 10us for 11g but Signal Extension adds 6us. */
@@ -2931,100 +2941,6 @@ athn_next_scan(void *arg)
 	splx(s);
 }
 
-// Not needed
-int
-athn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
-{
-#if OpenBSD_IEEE80211_API
-	struct ifnet *ifp = &ic->ic_if;
-	struct athn_softc *sc = ifp->if_softc;
-	uint32_t reg;
-	int error = 0;
-
-	timeout_del(&sc->calib_to);
-
-	switch (nstate) {
-	case IEEE80211_S_INIT:
-		athn_set_led(sc, 0);
-		break;
-	case IEEE80211_S_SCAN:
-		/* Make the LED blink while scanning. */
-		athn_set_led(sc, !sc->led_state);
-		// TODO no member named 'ic_bss' in 'struct ieee80211com'
-		error = athn_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
-		if (error != 0)
-			return (error);
-		timeout_add_msec(&sc->scan_to, 200);
-		break;
-	case IEEE80211_S_AUTH:
-		athn_set_led(sc, 0);
-		// TODO no member named 'ic_bss' in 'struct ieee80211com'
-		error = athn_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
-		if (error != 0)
-			return (error);
-		break;
-	case IEEE80211_S_ASSOC:
-		break;
-	case IEEE80211_S_RUN:
-		athn_set_led(sc, 1);
-#ifndef IEEE80211_STA_ONLY
-		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
-			 error = athn_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
-			if (error != 0)
-				return (error);
-		} else
-#endif
-		if (ic->ic_opmode == IEEE80211_M_MONITOR) {
-			 error = athn_switch_chan(sc, ic->ic_ibss_chan, NULL);
-			if (error != 0)
-				return (error);
-			break;
-		}
-
-		/* Fake a join to initialize the Tx rate. */
-		// TODO no member named 'ic_bss' in 'struct ieee80211com'
-		 athn_newassoc(ic, ic->ic_bss, 1);
-
-		 athn_set_bss(sc, ic->ic_bss);
-		athn_disable_interrupts(sc);
-#ifndef IEEE80211_STA_ONLY
-		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
-			athn_set_hostap_timers(sc);
-			/* Enable software beacon alert interrupts. */
-			sc->imask |= AR_IMR_SWBA;
-		} else
-#endif
-		{
-			athn_set_sta_timers(sc);
-			/* Enable beacon miss interrupts. */
-			sc->imask |= AR_IMR_BMISS;
-
-			/* Stop receiving beacons from other BSS. */
-			reg = AR_READ(sc, AR_RX_FILTER);
-			reg = (reg & ~AR_RX_FILTER_BEACON) |
-			    AR_RX_FILTER_MYBEACON;
-			AR_WRITE(sc, AR_RX_FILTER, reg);
-			AR_WRITE_BARRIER(sc);
-		}
-		athn_enable_interrupts(sc);
-
-		if (sc->sup_calib_mask != 0) {
-			memset(&sc->calib, 0, sizeof(sc->calib));
-			sc->cur_calib_mask = sc->sup_calib_mask;
-			sc->ops.do_calib(sc);
-		}
-		/* XXX Start ANI. */
-
-		athn_start_noisefloor_calib(sc, 1);
-		timeout_add_msec(&sc->calib_to, 500);
-		break;
-	}
-
-	return (sc->sc_newstate(ic, nstate, arg));
-#endif
-	return 0;
-}
-
 void
 athn_updateedca(struct ieee80211com *ic)
 {
@@ -3066,9 +2982,8 @@ athn_clock_rate(struct athn_softc *sc)
 	 */
 	if (AR_SREV_9287_13_OR_LATER(sc) && !AR_SREV_9380_10_OR_LATER(sc))
 		clockrate = 117;
-	// TODO no member named 'ic_bss' in 'struct ieee80211com'
-	else if (ic->ic_bss->ni_chan != IEEE80211_CHAN_ANYC &&
-	    IEEE80211_IS_CHAN_5GHZ(ic->ic_bss->ni_chan)) {
+	else if (ic->ic_curchan != IEEE80211_CHAN_ANYC &&
+	    IEEE80211_IS_CHAN_5GHZ(ic->ic_curchan)) {
 		if (sc->flags & ATHN_FLAG_FAST_PLL_CLOCK)
 			clockrate = AR_CLOCK_RATE_FAST_5GHZ_OFDM;
 		else
@@ -3094,7 +3009,8 @@ athn_chan_sifs(struct ieee80211_channel *c)
 void
 athn_setsifs(struct athn_softc *sc)
 {
-	int sifs = 0; //athn_chan_sifs(sc->sc_ic.ic_bss->ni_chan); // TODO no member named 'ic_bss' in 'struct ieee80211com'
+	struct ieee80211com *ic = &sc->sc_ic;
+	int sifs = athn_chan_sifs(ic->ic_curchan); 
 	AR_WRITE(sc, AR_D_GBL_IFS_SIFS, (sifs - 2) * athn_clock_rate(sc));
 	AR_WRITE_BARRIER(sc);
 }
@@ -3160,9 +3076,8 @@ athn_updateslot(struct ieee80211com *ic)
 	AR_WRITE(sc, AR_D_GBL_IFS_SLOT, slot * athn_clock_rate(sc));
 	AR_WRITE_BARRIER(sc);
 
-	// TODO no member named 'ic_bss' in 'struct ieee80211com'
-	// athn_setacktimeout(sc, ic->ic_bss->ni_chan, slot);
-	// athn_setctstimeout(sc, ic->ic_bss->ni_chan, slot);
+	athn_setacktimeout(sc, ic->ic_curchan, slot);
+	athn_setctstimeout(sc, ic->ic_curchan, slot);
 #endif
 }
 
@@ -3369,11 +3284,10 @@ athn_init(struct ifnet *ifp)
 	struct athn_softc *sc = ifp->if_softc;
 	struct athn_ops *ops = &sc->ops;
 	__attribute__((unused)) struct ieee80211com *ic = &sc->sc_ic;
-	struct ieee80211_channel *c = NULL, *extc;
+	struct ieee80211_channel *c, *extc;
 	int i, error;
-
-	// TODO no member named 'ic_bss' in 'struct ieee80211com'
-	// c = ic->ic_bss->ni_chan = ic->ic_ibss_chan;
+	
+	c = ic->ic_curchan;
 	extc = NULL;
 
 	/* In case a new MAC address has been configured. */
