@@ -240,8 +240,8 @@ int		athn_set_key(struct ieee80211com *, struct ieee80211_node *,
 void		athn_delete_key(struct ieee80211com *, struct ieee80211_node *,
 		    struct ieee80211_key *);
 void		athn_rx_start(struct athn_softc *);
-void		athn_set_sta_timers(struct athn_softc *);
-void		athn_set_hostap_timers(struct athn_softc *);
+void		athn_set_sta_timers(struct athn_softc *, struct ieee80211_node *);
+void		athn_set_hostap_timers(struct athn_softc *, struct ieee80211_node *ni);
 void		athn_set_opmode(struct athn_softc *);
 void		athn_set_bss(struct athn_softc *, struct ieee80211_node *);
 int		athn_hw_reset(struct athn_softc *, struct ieee80211_channel *,
@@ -1925,13 +1925,13 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 #ifndef IEEE80211_STA_ONLY
 		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
 			athn_usb_switch_chan(sc, ni->ni_chan, NULL);
-			athn_set_hostap_timers(sc);
+			athn_set_hostap_timers(sc, ni);
 			/* Enable software beacon alert interrupts. */
 			imask = htobe32(AR_IMR_SWBA);
 		} else
 #endif
 		{
-			athn_set_sta_timers(sc);
+			athn_set_sta_timers(sc, ni);
 			/* Enable beacon miss interrupts. */
 			imask = htobe32(AR_IMR_BMISS);
 
