@@ -726,8 +726,8 @@ athn_usb_attachhook(device_t self)
 	sc->sc_usc = usc;
 	struct ar_wmi_fw_version img_ver;
 	struct athn_ops *ops = &sc->ops;
-	uint32_t val = 104;
-	uint32_t in, out;
+	uint32_t val_out = 104;
+	uint16_t val_in = 105;
 
 	struct ieee80211com *ic = &sc->sc_ic;
 #ifdef notyet
@@ -743,19 +743,16 @@ athn_usb_attachhook(device_t self)
 		return;
 	}
 	DELAY(1000 *1000);
-	printf("FW loaded\n");
-
+ 	printf("FW loaded\n");
 	// TODO MichalP: this can be used as a starting point for echo command or firmware command
-//	ATHN_LOCK(&usc->sc_sc);
-//	device_printf(sc->sc_dev, " %s:val = %d\n", __func__, val);
-//  NOTE: command below is invalid because athn_usb_read has different arguments but let's keep that note about echo
-//	val = athn_usb_read(sc, AR_WMI_CMD_ECHO);
-//	device_printf(sc->sc_dev, "%s: returned val = %d\n", __func__, val);
-//	val = *(uint32_t*)usc->obuf;
-//	device_printf(sc->sc_dev, "%s: casted val = %d\n", __func__, val);
-//	ATHN_UNLOCK(&usc->sc_sc);
-//
-//	return;
+	// Note AlicjaSM: Moving this block after athn_usb_htc_setup caused kernel panic
+	device_printf(sc->sc_dev, " %s: ECHO on AR_WMI_CMD_ECHO command:\n", __func__);
+	ATHN_LOCK(&usc->sc_sc);
+	device_printf(sc->sc_dev, " %s:val out temporary = %d\n", __func__, val_out);
+	device_printf(sc->sc_dev, "%s: casted val input = %d\n", __func__, val_in);
+	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_ECHO, &val_in, sizeof(val_in) , &val_out);
+	device_printf(sc->sc_dev, "%s: returned val = %d\n", __func__, val_out);
+	ATHN_UNLOCK(&usc->sc_sc);
 
 	device_printf(sc->sc_dev, "%s: before athn_usb_htc_setup\n",	__func__);
 
@@ -1242,17 +1239,19 @@ tr_setup:
 			device_printf(sc->sc_dev, "%s: empty pending queue cmd: %p\n", __func__, cmd);
 			return;
 		}
-	//	device_printf(sc->sc_dev, "%s: continue with USB_ST_SETUP cmd: %p\n", __func__, cmd);
+		device_printf(sc->sc_dev, "%s: continue with USB_ST_SETUP cmd: %p\n", __func__, cmd);
 		STAILQ_REMOVE_HEAD(&usc->sc_cmd_pending, next);
 		STAILQ_INSERT_TAIL(&usc->sc_cmd_active, cmd, next);
+		//Note AlicjaSM: In other implementation of USB_ST_SETUP was used usbd_xfer_set_frame_len function
+		//usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
 		usbd_xfer_set_frame_data(xfer, 0, cmd->buf, cmd->buflen);
-	//	device_printf(sc->sc_dev, "%s: submitting transfer %p; buf=%p, buflen=%d\n",
-	//				  __func__, cmd, cmd->buf, cmd->buflen);
+		device_printf(sc->sc_dev, "%s: submitting transfer %p; buf=%p, buflen=%d\n",
+					  __func__, cmd, cmd->buf, cmd->buflen);
 		usbd_transfer_submit(xfer);
 		break;
 	default:
 		cmd = STAILQ_FIRST(&usc->sc_cmd_active);
-	//	device_printf(sc->sc_dev, "%s: continue with default %p\n", __func__, usc);
+		device_printf(sc->sc_dev, "%s: continue with default %p\n", __func__, usc);
 		if (cmd != NULL) {
 			device_printf(sc->sc_dev, "%s: cmd not NULL %p\n", __func__, usc);
 			STAILQ_REMOVE_HEAD(&usc->sc_cmd_active, next);
